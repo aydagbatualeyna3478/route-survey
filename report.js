@@ -191,7 +191,7 @@
     <p>Moreover, there are some images without any kind of obstacles which is presented in order to identify the road type and no action is required on them. In some cases, to illustrate the bypass road, the satellite view is also added.</p>`);
   flowArea = null;
 
-  const hl = r => window.SurveyRules.highlightOf(r, { minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV });
+  const hl = r => window.SurveyRules.highlightOf(r, { general: !!P.general, minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV });
   const PHOTO_PT = 297; // Excel photo width in pt, used to scale overlay text and lines
   const BOXA = (0.604 * 185) / 82;
   function overlays(r) {

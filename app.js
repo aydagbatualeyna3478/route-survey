@@ -46,7 +46,7 @@
   const urls = new Map();
   async function blobUrl(id) { if (!id) return null; if (!urls.has(id)) urls.set(id, await DB.blobUrl(id)); return urls.get(id); }
   const go = h => { location.hash = h; };
-  const settingsOf = sv => ({ minHeight: pn((sv.project.cargo && sv.project.cargo.height) ?? sv.project.minHeight) ?? 0, refLV: pn(sv.project.refLV), refMV: pn(sv.project.refMV), refHV: pn(sv.project.refHV) });
+  const settingsOf = sv => ({ general: !!sv.project.general, minHeight: pn((sv.project.cargo && sv.project.cargo.height) ?? sv.project.minHeight) ?? 0, refLV: pn(sv.project.refLV), refMV: pn(sv.project.refMV), refHV: pn(sv.project.refHV) });
   const backSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
   const camSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
   const bar = (title, back, extra) => `<div class="bar">${back ? `<button class="back" data-go="${back}" aria-label="Geri">${backSvg}</button>` : ''}<h1>${esc(title)}</h1>${extra || ''}</div>`;
@@ -144,6 +144,7 @@
   const imgSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>';
   const cargoOf = p => p.cargo || { height: p.minHeight };
   const cargoBox = p => {
+    if (p.general) return `<div class="cargo"><b>Taşıma Bilgileri</b><span style="font-size:15px;font-weight:700;color:var(--navy)">Genel Etüt</span><span class="hint">Belirli bir yüke bağlı değil</span></div>`;
     const c = cargoOf(p), m = v => v == null || v === '' ? '–' : fmt(v) + ' m';
     return `<div class="cargo"><b>Taşıma Bilgileri</b><div class="cg"><span>Uzunluk: <b>${m(c.length)}</b></span><span>Genişlik: <b>${m(c.width)}</b></span>
       <span>Yükseklik: <b>${m(c.height)}</b></span><span>Ağırlık: <b>${c.weight == null || c.weight === '' ? '–' : fmt(c.weight) + ' t'}</b></span></div></div>`;
@@ -155,7 +156,7 @@
       const n = sv.records.length, act = sv.status === 'active', c = cargoOf(sv.project);
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
         <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Sahada' : 'Tamamlandı'}</span></div>
-        <div class="hint">${esc(sv.project.date || '')} · ${fmt(sv.odo / 1000, 1)} km · ${n} kayıt${c.height ? ' · yük H ' + fmt(c.height) + ' m' : ''}</div>
+        <div class="hint">${esc(sv.project.date || '')} · ${fmt(sv.odo / 1000, 1)} km · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button></div></div>`;
     };
     $app.innerHTML = `${bar('Etütlerim', null, '<button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>')}
@@ -185,9 +186,14 @@
         <div class="g2"><label class="f">Başlangıç noktası<input name="start" required value="${esc(p.start.name)}" placeholder="Fabrika / saha adı"></label>
           <label class="f">Varış noktası<input name="end" required value="${esc(p.end.name)}" placeholder="Liman / saha adı"></label></div>
         <div class="sec">Taşıma bilgileri</div>
+        <div class="g2" role="radiogroup" aria-label="Etüt türü">
+          <button type="button" class="chip ${p.general ? '' : 'on'}" data-kind="cargo" style="border-radius:12px">Belirli bir yük için</button>
+          <button type="button" class="chip ${p.general ? 'on' : ''}" data-kind="general" style="border-radius:12px">Genel etüt</button></div>
+        <span class="hint" id="kindHint">${p.general ? 'Yük ölçüsü girilmez. Engeller ölçülüp kaydedilir; otomatik yükseklik kontrolü ve renklendirme yapılmaz, renkler elle seçilir.' : ''}</span>
+        <div id="cargoBox" style="display:${p.general ? 'none' : 'flex'};flex-direction:column;gap:12px">
         <div class="g4"><label class="f">Uzunluk (m)<input name="length" inputmode="decimal" value="${esc(fmt(c.length))}"></label>
           <label class="f">Genişlik (m)<input name="width" inputmode="decimal" value="${esc(fmt(c.width))}"></label>
-          <label class="f">Yükseklik (m)<input name="height" inputmode="decimal" required value="${esc(fmt(c.height))}" style="font-weight:600;border:2px solid var(--navy)"></label>
+          <label class="f">Yükseklik (m)<input name="height" inputmode="decimal" ${p.general ? '' : 'required'} value="${esc(fmt(c.height))}" style="font-weight:600;border:2px solid var(--navy)"></label>
           <label class="f">Ağırlık (ton)<input name="weight" inputmode="decimal" value="${esc(fmt(c.weight))}"></label></div>
         <span class="hint">Yükseklik, üst yapı ve enerji hattı kontrollerinde sınır olarak kullanılır.</span>
         <details ${refsOpen ? 'open' : ''} class="card" style="gap:8px"><summary style="font-size:14px;font-weight:600;color:var(--navy);cursor:pointer">Enerji hattı referans yükseklikleri (otomatik)</summary>
@@ -195,6 +201,7 @@
           <div class="g3"><label class="f">AG (m)<input name="refLV" inputmode="decimal" value="${esc(fmt(p.refLV))}" id="rLV"></label>
             <label class="f">OG (m)<input name="refMV" inputmode="decimal" value="${esc(fmt(p.refMV))}" id="rMV"></label>
             <label class="f">YG (m)<input name="refHV" inputmode="decimal" value="${esc(fmt(p.refHV))}" id="rHV"></label></div></details>
+        </div>
         <div class="sec">Kapak bilgileri</div>
         <div class="g2"><label class="f">Müşteri unvanı<input name="client" value="${esc(p.client)}"></label>
           <label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa müşteri unvanı yazılır"></label></div>
@@ -212,6 +219,14 @@
     const f = document.getElementById('pf'), pending = {};
     const showRefs = () => { const h = pn(f.height.value); [['rLV', 1], ['rMV', 3], ['rHV', 4]].forEach(([k, d]) => { document.getElementById(k).placeholder = h == null ? '' : fmt(h + d, 2); }); };
     f.height.addEventListener('input', showRefs); showRefs();
+    let general = !!p.general;
+    f.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
+      general = b.dataset.kind === 'general';
+      f.querySelectorAll('[data-kind]').forEach(x => x.classList.toggle('on', x === b));
+      document.getElementById('cargoBox').style.display = general ? 'none' : 'flex';
+      f.height.required = !general;
+      document.getElementById('kindHint').textContent = general ? 'Yük ölçüsü girilmez. Engeller ölçülüp kaydedilir; otomatik yükseklik kontrolü ve renklendirme yapılmaz, renkler elle seçilir.' : '';
+    });
     f.querySelectorAll('[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return;
       const key = inp.dataset.logo, blob = await shrink(inp.files[0], key === 'drawing' ? 3000 : key === 'cover' ? 1800 : 1200);
@@ -228,7 +243,7 @@
         title: `ROUTE SURVEY REPORT FROM\n${f.start.value.trim().toUpperCase()} TO ${f.end.value.trim().toUpperCase()}`,
         client: f.client.value.trim(), preparedFor: f.preparedFor.value.trim() || f.client.value.trim(), reference: f.reference.value.trim(), rev: f.rev.value.trim(),
         preparedBy: f.preparedBy.value.split('\n').map(x => x.trim()).filter(Boolean), executedBy: s.project.companyShort,
-        cargo, minHeight: cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
+        general, cargo, minHeight: general ? null : cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
       });
       if (!sv) { s.project.date = `${months[now.getMonth()]} ${now.getFullYear()}`; s.project.surveyDate = `${full[now.getMonth()]}, ${now.getFullYear()}`; }
       for (const k of ['partner', 'client', 'cover', 'drawing']) if (pending[k]) { await DB.delBlob(s.logos[k]); s.logos[k] = await DB.putBlob(pending[k]); }
@@ -448,11 +463,11 @@
       const sug = R.suggest(r, st), auto = sug.highlight, cur = r.highlight;
       const lim = limit();
       const hrow = (h, i) => {
-        const v = pn(h.value), cls = v == null ? '' : v < lim ? 'bad' : 'ok';
+        const v = pn(h.value), cls = st.general || v == null ? '' : v < lim ? 'bad' : 'ok';
         const opts = ['H', 'H1', 'H2', 'H3', 'HL', 'HM', 'HR'];
         return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:#fff">
             <option value="" ${h.label ? '' : 'selected'}>Seç</option>${opts.map(o => `<option ${o === h.label ? 'selected' : ''}>${o}</option>`).join('')}</select><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
-          <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
+          <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${st.general || v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
           ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>`;
       };
       const sub = SUB[r.obstacle];
@@ -483,9 +498,9 @@
             <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
           ${isBr ? `<div class="g2"><label class="f">Bridge name<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label><label class="f">Bridge spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label></div>` : ''}
           ${isCu ? `<label class="f">Culvert spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 1x5m"></label>` : ''}
-          ${isOH && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
-          ${isOH ? `<div class="sec">Yükseklikler · sınır ${fmt(lim, 2)} m</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
-          <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
+          ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
+          ${isOH ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
+          <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
           ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].map((p, i) => `<button class="chip" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-ph="${i}">${esc(p)}</button>`).join('')}</div>` : ''}
           <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
           <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px">

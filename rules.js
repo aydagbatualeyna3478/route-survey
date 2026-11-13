@@ -34,6 +34,7 @@
     return hs.length ? Math.min(...hs) : null;
   }
   function suggest(rec, settings) {
+    if (settings && settings.general) return { action: '', highlight: null };   // general survey: no cargo, no automatic checks
     const r = refs(settings), h = minH(rec);
     const ok = { action: TEXT.none, highlight: null };
     if (h == null) return { action: '', highlight: null };
