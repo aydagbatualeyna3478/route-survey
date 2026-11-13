@@ -29,7 +29,22 @@
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 
   const recs = orderedRecords(sv);
-  for (const r of recs) r.photo = await url(r.photoId);
+  /* photos for the report: 1200×900 JPEG (quality 0.72) with Excel's 2.5 pt soft edges baked in.
+     Small, plain JPEGs keep the PDF light; nothing has to be rasterised when printing. */
+  async function reportPhoto(id) {
+    const blob = await DB.getBlob(id); if (!blob) return null;
+    let bmp; try { bmp = await createImageBitmap(blob); } catch (e) { return URL.createObjectURL(blob); }
+    const W = 1200, H = 900, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    const k = Math.max(W / bmp.width, H / bmp.height), dw = bmp.width * k, dh = bmp.height * k;
+    g.drawImage(bmp, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    const f = Math.round(W * 2.5 / 316);   // 2.5 pt on a photo printed ~316 pt wide
+    const fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(rx, ry, rw, rh); };
+    fade(0, 0, f, 0, 0, 0, f, H); fade(W, 0, W - f, 0, W - f, 0, f, H); fade(0, 0, 0, f, 0, 0, W, f); fade(0, H, 0, H - f, 0, H - f, W, f);
+    return new Promise(res => c.toBlob(b => res(URL.createObjectURL(b)), 'image/jpeg', 0.72));
+  }
+  msg.textContent = 'Fotoğraflar hazırlanıyor…';
+  for (const r of recs) { r.photo = await reportPhoto(r.photoId); r.crop = null; }
   window.SURVEY = { project: sv.project, records: recs };
 
   const A = window.ASSETS = {
