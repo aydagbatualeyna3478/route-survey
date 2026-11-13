@@ -131,6 +131,26 @@
     if (k && GPS.sv) k.textContent = fmt(GPS.sv.odo / 1000, 1);
   }
 
+  /* new record from a photo (or none). Camera photos take the current GPS position; INFO images take the parent's. */
+  async function createRecord(sv, o) {
+    toast('Kaydediliyor…');
+    const parent = o.parent || null, name = o.name || '';
+    const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
+    if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
+    if (o.file) { rec.photoId = await DB.putBlob(await to43(o.file)); rec.aspect = 4 / 3; }
+    const pos = o.useGps ? await GPS.current() : null;
+    if (pos) {
+      rec.latDec = pos.lat; rec.lonDec = pos.lon; rec.acc = pos.acc;
+      if (sv.status === 'active') GPS.extend(sv, pos, true);
+      rec.km = Math.round(sv.odo) / 1000;
+    } else if (parent) { rec.latDec = parent.latDec; rec.lonDec = parent.lonDec; rec.km = parent.km; }
+    else { const prevRec = sv.records[sv.records.length - 1]; rec.km = prevRec ? prevRec.km : Math.round(sv.odo) / 1000; }
+    if (rec.latDec != null) { rec.lat = Geo.dms(rec.latDec, true); rec.lon = Geo.dms(rec.lonDec, false); }
+    if (name && PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
+    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv;
+    go(`#/r/${sv.id}/${rec.id}`);
+  }
+
   // ---------- views ----------
   const V = {};
   const imgSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>';
@@ -251,7 +271,7 @@
       const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
       return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : '<span class="ph"></span>'}
-        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${esc(r.obstacle)}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">KM ${fmt(r.km, 1)}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}</button>`;
     };
@@ -274,21 +294,24 @@
           <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun.</div>
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(bp.obstacle)}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
-            ${act ? rb(`data-go="#/add/${sv.id}?mode=nophoto"`, '', '', 'Fotoğrafsız Engel Ekle')
+            ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
               + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
-              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/add/${sv.id}"`, 'red', camSvg, 'Yeni Engel Ekle')
+              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + `<label class="rb red" style="cursor:pointer">${camSvg}<span>Yeni Engel Ekle</span><input class="hid" type="file" accept="image/*" capture="environment" id="camq"></label>`
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor')}
           </div>
         </div>
       </div>`;
     paintGps();
+    const camq = document.getElementById('camq');
+    if (camq) camq.onchange = e => { const f = e.target.files[0]; if (f) createRecord(sv, { file: f, useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' }); };
     const onSel = document.querySelector('.rec.on'); if (onSel) onSel.scrollIntoView({ block: 'nearest' });
     $app.onclick = async e => {
       const rc = e.target.closest('[data-rec]');
       if (rc) return go(`#/r/${sv.id}/${rc.dataset.rec}`);
       const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
       if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } GPS.flush(); sv.status = 'done'; sv.bypassParent = null; }
       if (a.dataset.act === 'resume') sv.status = 'active';
@@ -391,7 +414,7 @@
       };
       const sub = SUB[r.obstacle];
       const sw = (key, name, col, on) => `<button class="sw ${on ? 'on' : ''}" data-col="${key}"><i style="background:${col}"></i>${name}</button>`;
-      $app.innerHTML = `${bar(r.obstacle, `#/s/${sv.id}`, `<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
+      $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split even">
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">` : ''}${annHtml(r.ann || [], -1)}
@@ -402,12 +425,16 @@
             <label class="f">Enlem<input id="la" inputmode="decimal" value="${r.latDec == null ? '' : r.latDec.toFixed(6)}"></label>
             <label class="f">Boylam<input id="lo" inputmode="decimal" value="${r.lonDec == null ? '' : r.lonDec.toFixed(6)}"></label></div>
             <div class="row" style="justify-content:space-between"><span class="hint">${r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum alınamadı, elle girilebilir'}</span><button class="btn sm" id="here">Konumu güncelle</button></div></div>
-          <div class="g2"><button class="btn grn" data-go="#/add/${sv.id}?parent=${r.parentId || r.id}&flag=INFO">+ INFO ekle</button>
-            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<button class="btn grn" id="byp">+ BYPASS başlat</button>`}</div>
+          <div class="g2"><label class="btn grn" style="cursor:pointer">+ INFO ekle<input class="hid" type="file" accept="image/*" id="infq"></label>
+            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<label class="btn grn" style="cursor:pointer">+ BYPASS başlat<input class="hid" type="file" accept="image/*" capture="environment" id="bypq"></label>`}</div>
+          <span class="hint">INFO: kamera ya da galeriden görsel (uydu, drone, simülasyon). BYPASS: alternatif yolun ilk engelinin fotoğrafını çek; sonraki engeller de bypass'a eklenir.</span>
           ${r.parentId ? '' : '<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>'}
         </div>
         <div class="pane">
-          <label class="f">Engel tipi<select id="ty">${[...new Set(TYPES.concat(sv.records.map(x => x.obstacle)))].map(t => `<option ${t === r.obstacle ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="__c">Kendim yazacağım…</option></select></label>
+          <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel tipi' : 'Engel tipini seç'}</div>
+          <div class="chips" id="tys">${[...new Set(TYPES.concat(sv.records.map(x => x.obstacle)).filter(Boolean))].map(t => `<button class="chip ${t === r.obstacle ? 'on' : ''}" data-type="${esc(t)}" style="min-height:40px;padding:8px 13px;font-size:14px">${esc(t)}</button>`).join('')}
+            <button class="chip dash" data-tcustom="1" style="min-height:40px;padding:8px 13px;font-size:14px">+ Kendim yazacağım</button></div>
+          <label class="f" id="cnw" style="display:none">Engel adı (raporda OBSTACLE hücresine yazılır)<input id="cnv" placeholder="ör. Industrial Area Gate"></label>
           ${sub ? `<div class="sec">${isOH ? (r.obstacle === 'Overhead Cable' ? 'Line type' : 'Structure type') : isBr ? 'Bridge type' : 'Culvert type'}</div>
             <div class="chips">${sub.map(t => `<button class="chip ${r.fields.type === t ? 'on' : ''}" data-sub="${esc(t)}">${esc(t.replace(' Powerline', ''))}</button>`).join('')}</div>
             <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
@@ -422,7 +449,7 @@
             ${COLORS.map(c => sw(c[0], c[1], `linear-gradient(180deg,#fff,${c[2]},#fff)`, cur === c[0])).join('')}</div>
         </div>
       </div>
-      <div class="foot"><button class="btn" data-go="#/s/${sv.id}">Vazgeç</button><button class="btn pri" id="ok">Kaydet</button></div>`;
+      <div class="foot"><button class="btn" id="cancel">${r.obstacle ? 'Vazgeç' : 'Kaydı iptal et'}</button><button class="btn pri" id="ok">Kaydet</button></div>`;
       bind();
     };
     const read = () => {
@@ -443,17 +470,17 @@
       const g = i => document.getElementById(i);
       document.querySelectorAll('[data-hv]').forEach(i => i.addEventListener('change', () => { read(); autoAct(); draw(); }));
       if (g('tt')) g('tt').addEventListener('change', () => { read(); autoAct(); draw(); });
-      g('ty').onchange = e => {
-        read(); let t = e.target.value;
-        if (t === '__c') { document.getElementById('ty').insertAdjacentHTML('afterend', '<label class="f" id="cnw">Engel adı<input id="cnv" placeholder="ör. #1 Dock Gate"></label>'); const cnv = document.getElementById('cnv'); cnv.focus(); cnv.onchange = () => { if (cnv.value.trim()) { r.obstacle = cnv.value.trim(); r.fields = {}; r.actionAuto = true; DB.putSurvey(sv).then(() => V.record(id, rid)); } }; return; }
-        r.obstacle = t; r.fields = {}; r.actionAuto = true;
+      const setType = t => { read(); r.obstacle = t; r.fields = {}; r.actionAuto = true;
         if (/Overhead/.test(t) && !r.heights.length) r.heights = [{ label: 'H', value: null }];
-        DB.putSurvey(sv).then(() => V.record(id, rid));
-      };
+        if (!r.remarks && PHRASES[t] && PHRASES[t].length === 1 && !/%/.test(PHRASES[t][0]) && !/Overhead|Bridge|Culvert/.test(t)) r.remarks = PHRASES[t][0];
+        DB.putSurvey(sv).then(() => V.record(id, rid)); };
+      g('cnv').onchange = () => { if (g('cnv').value.trim()) setType(g('cnv').value.trim()); };
+      const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
+      infq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); await DB.putSurvey(sv); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: 'Satellite View' }); };
+      if (bypq) bypq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); createRecord(sv, { file: f, useGps: true, parent: r, flag: 'BYPASS' }); };
       if (g('hadd')) g('hadd').onclick = () => { read(); if (r.heights.length === 1 && r.heights[0].label === 'H') r.heights[0].label = 'H1'; r.heights.push({ label: 'H' + (r.heights.length + 1), value: null }); draw(); };
       g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); await DB.putSurvey(sv); V.record(id, rid); };
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
-      if (g('byp')) g('byp').onclick = async () => { read(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/add/${sv.id}`); };
       g('del').onclick = async e => {
         const b = e.target.closest('button');
         if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Kaydı ve alt kayıtlarını sil'; return; }
@@ -462,10 +489,17 @@
         sv.records = sv.records.filter(x => !gone.includes(x)); if (sv.bypassParent === r.id) sv.bypassParent = null; sv.selected = null;
         await DB.putSurvey(sv); go(`#/s/${sv.id}`);
       };
-      g('ok').onclick = async () => { read(); autoAct(); await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; go(`#/s/${sv.id}`); };
+      g('cancel').onclick = async () => {   // a fresh photo without a type is thrown away; otherwise just leave without saving
+        if (!r.obstacle) { await DB.delBlob(r.photoId); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; }
+        go(`#/s/${sv.id}`);
+      };
+      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; } autoAct(); await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; go(`#/s/${sv.id}`); };
       $app.onclick = async e => {
+        const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
+        if (ty) return setType(ty.dataset.type);
+        if (tc) { document.getElementById('cnw').style.display = ''; document.getElementById('cnv').focus(); return; }
         const s = e.target.closest('[data-sub]'), p = e.target.closest('[data-ph]'), c = e.target.closest('[data-col]'), hd = e.target.closest('[data-hdel]'), nav = e.target.closest('[data-go]');
-        if (nav) { if (nav.dataset.go.startsWith('#/s/') && nav.textContent === 'Vazgeç') return; read(); await DB.putSurvey(sv); return; }
+        if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
         if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = (r[textKey] ? r[textKey].trim() + ' ' : '') + t; if (isOH) r.actionAuto = false; draw(); const tx = document.getElementById('tx'); tx.focus(); const k = tx.value.lastIndexOf('%'); if (k >= 0 && /about %/.test(tx.value)) tx.setSelectionRange(k, k); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
