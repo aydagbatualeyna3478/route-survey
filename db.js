@@ -70,7 +70,10 @@
   const LOGO_POS = { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' };
   function logosOf(sv) {
     const l = sv.logos || {};
-    return { ids: { client1: l.client1 || l.client, client2: l.client2 || l.partner, owner: l.owner }, pos: Object.assign({}, LOGO_POS, sv.logoPos || {}) };
+    const ids = { client1: l.client1 || l.client, client2: l.client2 || l.partner, owner: l.owner };
+    const others = ['client1', 'client2', 'owner'].filter(k => ids[k]);
+    const cover = Object.assign({ tl: ['company'], tr: others.slice(0, 1), mid: ['company'], row: others.slice(0, 2) }, sv.coverLogos || {});
+    return { ids, pos: Object.assign({}, LOGO_POS, sv.logoPos || {}), cover };
   }
   g.DB = DB; g.Geo = Geo; g.orderedRecords = ordered; g.logosOf = logosOf;
 })(window);

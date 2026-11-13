@@ -29,6 +29,9 @@
   const byKey = k => (LOGOS.find(l => l.key === k) || {}).src;
   const company = byKey('company') || A.logoCompany;
   const others = ['client1', 'client2', 'owner'].map(byKey).filter(Boolean);
+  // cover areas: tl / tr / mid stack up to two logos, row puts up to two side by side
+  const CV = A.cover || { tl: [company], tr: others.slice(0, 1), mid: [company], row: others.slice(0, 2) };
+  const stack = (list, h1, h2, mw) => list.map(src => `<img src="${src}" class="fit" style="max-height:${list.length > 1 ? h2 : h1}mm;max-width:${mw || 85}%" alt="">`).join('');
   // ---------- page factory ----------
   let pageNo = 0;
   const pages = [];
@@ -66,14 +69,14 @@
   (function cover() {
     const pg = newPage('cover');
     pg.innerHTML += `
-    <div class="box top"><div><img src="${company}" class="fit" style="max-height:16mm" alt=""></div>
+    <div class="box top"><div class="stack">${stack(CV.tl, 16, 10.5)}</div>
       <div class="ttl">Route Survey Report /<br>Güzergah Etüdü Rapor</div>
-      <div>${(byKey('owner') || others[0]) ? `<img src="${byKey('owner') || others[0]}" class="fit" style="max-height:20mm" alt="">` : ''}</div></div>
+      <div class="stack">${stack(CV.tr, 20, 12)}</div></div>
     <div class="box main">
-      <div class="r logo"><img src="${company}" class="fit" style="max-height:19mm;max-width:70%" alt=""></div>
+      <div class="r logo stack">${stack(CV.mid, 19, 15, 70)}</div>
       <div class="r co">${esc(P.company)}</div>
       <div class="r title">${esc(P.title)}</div>
-      ${others.length ? `<div class="r client" style="gap:8mm">${others.map(src => `<img src="${src}" class="fit" style="max-height:20mm;max-width:${Math.floor(85 / others.length)}%" alt="">`).join('')}</div>` : ''}
+      ${CV.row.length ? `<div class="r client" style="gap:10mm">${CV.row.map(src => `<img src="${src}" class="fit" style="max-height:20mm;max-width:${CV.row.length > 1 ? 42 : 80}%" alt="">`).join('')}</div>` : ''}
       <div class="r grid g1">
         <div><span class="k">PREPARED BY / HAZIRLAYAN:</span><span class="v">${P.preparedBy.map(esc).join('<br>')}</span></div>
         <div><span class="k">DATE PREPARED / HAZIRLAMA TARİHİ:</span><span class="v">${esc(P.date)}</span></div>
@@ -248,16 +251,20 @@
     const glab = (i, t) => `<div class="lab c" style="grid-row:${7 + i};grid-column:2">${t}</div>`;
     const val = (i, t, sm) => `<div class="val ${sm ? 'sm' : ''}" style="grid-row:${7 + i};grid-column:3">${esc(t)}</div>`;
     const txt = (i, t) => `<div class="txt" style="grid-row:${7 + i} / 17">${esc(t)}</div>`;
-    const f = r.fields || {};
+    const f = r.fields || {}, W = (r.widths || []).filter(w => w.value != null && w.value !== '');
     if (r.obstacle === 'Overhead Structure' || r.obstacle === 'Overhead Cable') {
       h += lab(0, r.obstacle === 'Overhead Cable' ? 'Line Type:' : 'Structure Type:') + val(0, f.type, true) + lab(2, 'Dimensions:');
       const hs = r.heights.length ? r.heights : [{ label: 'H', value: '' }];
       hs.slice(0, 2).forEach((x, i) => { const row = hs.length > 1 ? 3 + i : 4; h += glab(row, esc(x.label) + '(m):') + val(row, num(x.value)); });
       h += lab(5, 'Actions:') + txt(6, r.actions);
     } else if (r.obstacle === 'Bridge') {
-      h += lab(0, 'Bridge Name:') + val(0, f.name, true) + lab(1, 'Bridge Type:') + val(1, f.type) + lab(3, 'Bridge Spans:') + val(3, f.spans) + lab(5, 'Remarks:') + txt(6, r.remarks);
+      h += lab(0, 'Bridge Name:') + val(0, f.name, true) + lab(1, 'Bridge Type:') + val(1, f.type) + (W[0] ? lab(2, esc(W[0].label) + '(m):') + val(2, num(W[0].value)) : '') + lab(3, 'Bridge Spans:') + val(3, f.spans) + lab(5, 'Remarks:') + txt(6, r.remarks);
     } else if (r.obstacle === 'Culvert') {
-      h += lab(0, 'Culvert Type:') + val(0, f.type, true) + lab(2, 'Culvert Spans:') + val(2, f.spans) + lab(5, 'Remarks:') + txt(6, r.remarks);
+      h += lab(0, 'Culvert Type:') + val(0, f.type, true) + (W[0] ? lab(1, esc(W[0].label) + '(m):') + val(1, num(W[0].value)) : '') + lab(2, 'Culvert Spans:') + val(2, f.spans) + lab(5, 'Remarks:') + txt(6, r.remarks);
+    } else if (W.length) {   // widths entered (gates, width obstructions…)
+      h += lab(0, 'Dimensions:');
+      W.slice(0, 3).forEach((w, i) => { h += glab(1 + i, esc(w.label) + '(m):') + val(1 + i, num(w.value)); });
+      h += txt(Math.min(3, W.length) + 2, r.remarks);
     } else {
       h += `<div class="free">${esc(r.remarks)}</div>`;
     }

@@ -10,6 +10,8 @@
   const TYPES = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn',
     'Inclination', 'Declination', 'Road Condition', 'Width Obstruction', 'Railroad Crossing', 'Port Gate', 'Satellite View', 'Drone View'];
   const QUICK = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'Inclination', 'Declination'];
+  const WIDTH_TYPES = ['Port Gate', 'Width Obstruction'];   // these ask for W automatically; any other type can add it by hand
+  const CURVES = ['Right curve. Turning radius of the curve is suitable for planned transportation operation.', 'Left curve. Turning radius of the curve is suitable for planned transportation operation.'];
   const SUB = {
     'Overhead Structure': ['L Shape Signboard', 'Signboard', 'Bridge', 'Traffic Enforcement Camera', 'L Shape Traffic Light', 'Traffic Light', 'Pedestrian Bridge', 'Pipeline'],
     'Overhead Cable': ['High Voltage Powerline', 'Medium Voltage Powerline', 'Low Voltage Powerline', 'Telephone Line'],
@@ -23,7 +25,6 @@
     'Culvert': ['The culvert is good condition.'],
     'Left Turn': ['Turn left.', 'Turn left. Turning radius of the turn is suitable for planned transportation operation.', 'Turn left. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.'],
     'Right Turn': ['Turn right.', 'Turn right. Turning radius of the turn is suitable for planned transportation operation.', 'Turn right. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.'],
-    'Curve': ['Right curve. Turning radius of the curve is suitable for planned transportation operation.', 'Left curve. Turning radius of the curve is suitable for planned transportation operation.'],
     'U Turn': ['U turn. Turning radius of the turn is suitable for planned transportation operation.'],
     'Roundabout Turn': ['Continue straight at the roundabout.'],
     'Inclination': ['The degree of the inclination is about %.'],
@@ -125,6 +126,7 @@
     const parent = o.parent || null, name = o.name || '';
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
     if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
+    if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
     if (o.file) { rec.photoId = await DB.putBlob(await to43(o.file)); rec.aspect = 4 / 3; }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
     if (pos) {
@@ -137,6 +139,20 @@
     if (name && PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
     sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); 
     go(`#/r/${sv.id}/${rec.id}`);
+  }
+
+  /* small bottom sheet with choices; gallery options are file inputs so the picker opens from the tap itself */
+  function sheet(title, items) {
+    document.querySelectorAll('.sheet').forEach(x => x.remove());
+    const d = document.createElement('div'); d.className = 'sheet';
+    d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="${esc(title)}"><b>${esc(title)}</b>
+      ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="image/*" data-i="${i}"></label>`
+        : `<button class="btn ${it.cls || ''}" data-i="${i}">${it.icon || ''}${esc(it.label)}</button>`).join('')}
+      <button class="btn dash" data-x="1">Vazgeç</button></div>`;
+    document.body.appendChild(d);
+    const close = () => d.remove();
+    d.addEventListener('click', e => { if (e.target.closest('[data-x]')) return close(); const b = e.target.closest('button[data-i]'); if (b) { close(); items[b.dataset.i].run(); } });
+    d.querySelectorAll('input[data-i]').forEach(inp => inp.onchange = () => { const f = inp.files[0]; close(); if (f) items[inp.dataset.i].run(f); });
   }
 
   // ---------- views ----------
@@ -178,7 +194,12 @@
     const compLogo = await blobUrl(await DB.getSetting('companyLogo'));
     const pv = async (bid, fallback) => { const u = await blobUrl(bid); return u ? `<img src="${u}" alt="">` : (fallback || imgSvg + ' Yükle'); };
     const slot = async (key, title, note, bid, fallback) => `<label class="logo"><b>${title}</b><span class="pv" id="pv-${key}">${await pv(bid, fallback)}</span><span>${note}</span><input class="hid" type="file" accept="image/*" data-logo="${key}"></label>`;
-    const LG = sv ? logosOf(sv) : { ids: {}, pos: { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' } };
+    const LG = sv ? logosOf(sv) : { ids: {}, pos: { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' }, cover: { tl: ['company'], tr: ['client1'], mid: ['company'], row: ['client1', 'client2'] } };
+    const cover = JSON.parse(JSON.stringify(LG.cover));
+    const LNAME = { company: 'İşi yapan', client1: 'Müşteri-1', client2: 'Müşteri-2', owner: 'İşin sahibi' };
+    const AREAS = [['tl', 'Sol üst kutu', 'alt alta'], ['tr', 'Sağ üst kutu', 'alt alta'], ['mid', 'Ortadaki büyük logo', 'alt alta'], ['row', 'Müşteri satırı', 'yan yana']];
+    const coverRow = ([a, t, how]) => `<div class="row" style="flex-wrap:wrap;gap:6px"><span style="width:150px;font-size:13px;font-weight:600">${t} <span class="hint">(en çok 2, ${how})</span></span>
+      ${Object.keys(LNAME).map(k => { const i = cover[a].indexOf(k); return `<button type="button" class="chip ${i >= 0 ? 'on' : ''}" data-ca="${a}" data-ck="${k}" style="min-height:36px;padding:5px 10px;font-size:13px;border-radius:8px">${i >= 0 && cover[a].length > 1 ? (i + 1) + '. ' : ''}${LNAME[k]}</button>`; }).join('')}</div>`;
     const logoPos = Object.assign({}, LG.pos), removed = {};
     const CORNERS = [['tl', 'Sol üst'], ['tr', 'Sağ üst'], ['bl', 'Sol alt'], ['br', 'Sağ alt']];
     const posPick = key => `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px">${CORNERS.map(([v, t]) => `<button type="button" class="chip ${logoPos[key] === v ? 'on' : ''}" data-lp="${key}" data-v="${v}" style="min-height:34px;padding:4px 6px;font-size:12px;border-radius:8px">${t}</button>`).join('')}</div>`;
@@ -220,7 +241,9 @@
         <div class="sec">Logolar · PDF'te duracağı köşe</div>
         <div class="g4">${await lslot('company', '1 · İşi yapan', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">', 'Her etütte hazır')}
           ${await lslot('client1', '2 · Müşteri-1', LG.ids.client1, null, 'İsteğe bağlı')}${await lslot('client2', '3 · Müşteri-2', LG.ids.client2, null, 'İsteğe bağlı')}${await lslot('owner', '4 · İşin sahibi', LG.ids.owner, null, 'İsteğe bağlı')}</div>
-        <span class="hint">Logolar oranı bozulmadan küçültülür ve sayfa kenar boşluklarının içinde kalır. Kapakta işi yapanın logosu solda, diğerleri müşteri satırında yer alır.</span>
+        <span class="hint">Köşe seçimi iç sayfalar içindir. Logolar oranı bozulmadan küçültülür ve sayfa kenar boşluklarının içinde kalır.</span>
+        <div class="sec">Kapak sayfası düzeni</div>
+        <div class="card" id="coverPick" style="gap:8px">${AREAS.map(coverRow).join('')}</div>
         <div class="g2">${await slot('cover', 'Kapak fotoğrafı', 'Boşsa standart', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma çizimi', 'Resim (JPG/PNG)', logos.drawing)}</div>
       </div>
     </form>
@@ -239,6 +262,12 @@
     f.addEventListener('click', e => {
       const b = e.target.closest('[data-lp]');
       if (b) { logoPos[b.dataset.lp] = b.dataset.v; f.querySelectorAll(`[data-lp="${b.dataset.lp}"]`).forEach(x => x.classList.toggle('on', x === b)); }
+      const ca = e.target.closest('[data-ca]');
+      if (ca) {
+        const a = ca.dataset.ca, k = ca.dataset.ck, list = cover[a], i = list.indexOf(k);
+        if (i >= 0) list.splice(i, 1); else { list.push(k); if (list.length > 2) list.shift(); }
+        document.getElementById('coverPick').innerHTML = AREAS.map(coverRow).join('');
+      }
       const rm = e.target.closest('[data-lrm]');
       if (rm) { removed[rm.dataset.lrm] = true; delete pending[rm.dataset.lrm]; document.getElementById('pv-' + rm.dataset.lrm).firstChild.replaceWith(document.createRange().createContextualFragment(imgSvg + ' Yükle')); rm.remove(); }
     });
@@ -267,7 +296,7 @@
       delete s.logos.client; delete s.logos.partner;
       for (const k of ['client1', 'client2', 'owner']) if (removed[k]) { await DB.delBlob(s.logos[k]); delete s.logos[k]; }
       for (const k of ['client1', 'client2', 'owner', 'cover', 'drawing']) if (pending[k]) { await DB.delBlob(s.logos[k]); s.logos[k] = await DB.putBlob(pending[k]); }
-      s.logoPos = logoPos;
+      s.logoPos = logoPos; s.coverLogos = cover;
       if (pending.company) { await DB.delBlob(await DB.getSetting('companyLogo')); await DB.setSetting('companyLogo', await DB.putBlob(pending.company)); }
       await DB.setSetting('defaults', { company: s.project.company, companyShort: s.project.companyShort, preparedBy: s.project.preparedBy, formCode: s.project.formCode });
       await DB.putSurvey(s);
@@ -340,9 +369,12 @@
   // ----- in-app camera: live view, satellite icon top right (green = precise position) -----
   const satSvg = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>';
   const PRECISE = 10, OK = 30;   // metres: green / yellow
-  V.camera = async (id) => {
+  V.camera = async (id, q) => {
+    q = q || {};
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     const recs = orderedRecords(sv), bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
+    const infoParent = q.info ? recs.find(r => r.id === q.info) : null, target = q.replace ? sv.records.find(r => r.id === q.replace) : null;
+    const back = target ? `#/r/${sv.id}/${target.id}` : infoParent ? `#/r/${sv.id}/${infoParent.id}` : `#/s/${sv.id}`;
     document.body.style.background = '#000';
     $app.innerHTML = `<div style="flex:1;min-height:0;display:flex;background:#000;color:#fff;position:relative">
       <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:12px">
@@ -350,7 +382,9 @@
           <video id="vid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
           <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(#fff3,#fff3) 33.33% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 66.66% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 0 33.33%/100% 1px no-repeat,linear-gradient(#fff3,#fff3) 0 66.66%/100% 1px no-repeat"></div>
           <div id="cmsg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:15px;color:#E5E7EB"></div>
-          ${bp ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${bp.no} BYPASS</span>` : ''}
+          ${target ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${target.no} · fotoğrafı değiştir</span>`
+            : infoParent ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${infoParent.no} → INFO</span>`
+            : bp ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${bp.no} BYPASS</span>` : ''}
         </div>
       </div>
       <div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 12px">
@@ -384,6 +418,13 @@
       let pos = GPS.fresh(8000);
       if (!pos && !fromGallery) { sact.textContent = 'Konum bekleniyor…'; pos = await new Promise(res => { const t0 = Date.now(), iv = setInterval(() => { const f = GPS.fresh(8000); if (f || Date.now() - t0 > 8000) { clearInterval(iv); res(f); } }, 300); }); }
       stop();
+      if (target) {   // replace the photo, keep the record's position (fill it in if it had none)
+        await DB.delBlob(target.photoId); urls.delete(target.photoId);
+        target.photoId = await DB.putBlob(await to43(blob)); target.pendingImage = null;
+        if (target.latDec == null && pos) { target.latDec = pos.lat; target.lonDec = pos.lon; target.lat = Geo.dms(pos.lat, true); target.lon = Geo.dms(pos.lon, false); }
+        await DB.putSurvey(sv); return go(back);
+      }
+      if (infoParent) return createRecord(sv, { file: blob, parent: infoParent, flag: 'INFO', name: infoParent.obstacle === 'Satellite View' ? 'Satellite View' : '' });
       createRecord(sv, { file: blob, pos: fromGallery ? null : pos, useGps: false, parent: bp || null, flag: bp ? 'BYPASS' : '' });
     }
     document.getElementById('shut').onclick = () => {
@@ -395,7 +436,7 @@
       c.toBlob(b => save(b), 'image/jpeg', 0.9);
     };
     document.getElementById('cgal').onchange = e => e.target.files[0] && save(e.target.files[0], false);
-    document.getElementById('cclose').onclick = () => go(`#/s/${sv.id}`);
+    document.getElementById('cclose').onclick = () => go(back);
   };
 
   // ----- add record: pick type, take photo -----
@@ -495,21 +536,31 @@
           ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>`;
       };
       const sub = SUB[r.obstacle];
+      const cw = st.general ? null : pn((sv.project.cargo || {}).width);
+      const wrow = (w, i) => {
+        const v = pn(w.value), cls = cw == null || v == null ? '' : v < cw ? 'bad' : 'ok';
+        return `<div class="hrow ${cls}"><select class="lab" data-wl="${i}" aria-label="Genişlik etiketi" style="width:84px;padding:8px;border:1px solid ${w.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:#fff">
+            <option value="" ${w.label ? '' : 'selected'}>Seç</option>${['W', 'W1', 'W2', 'W3'].map(o => `<option ${o === w.label ? 'selected' : ''}>${o}</option>`).join('')}</select>
+          <input data-wv="${i}" inputmode="decimal" value="${esc(fmt(w.value))}" placeholder="m" aria-label="Genişlik (m)">
+          <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${cls === 'bad' ? fmt(cw - v, 2) + ' m dar' : cls === 'ok' ? 'Uygun' : ''}</span>
+          <button class="btn sm" data-wdel="${i}" aria-label="Sil">×</button></div>`;
+      };
       const sw = (key, name, col, on) => `<button class="sw ${on ? 'on' : ''}" data-col="${key}"><i style="background:${col}"></i>${name}</button>`;
       $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split even">
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
-            <label class="btn sm" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}<input class="hid" type="file" accept="image/*" id="rep"></label></div>
+            <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button></div>
           <div class="card"><div class="g3">
             <label class="f">KM<input id="km" inputmode="decimal" value="${esc(fmt(r.km, 1))}"></label>
             <label class="f">Enlem<input id="la" inputmode="decimal" value="${r.latDec == null ? '' : r.latDec.toFixed(6)}"></label>
             <label class="f">Boylam<input id="lo" inputmode="decimal" value="${r.lonDec == null ? '' : r.lonDec.toFixed(6)}"></label></div>
             <div class="row" style="justify-content:space-between"><span class="hint">${r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum alınamadı, elle girilebilir'}</span><button class="btn sm" id="here">Konumu güncelle</button></div></div>
-          <div class="g2"><label class="btn grn" style="cursor:pointer">+ INFO ekle<input class="hid" type="file" accept="image/*" id="infq"></label>
-            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<button class="btn grn" id="bypq">+ BYPASS başlat</button>`}</div>
-          <span class="hint">INFO: kamera ya da galeriden görsel (uydu, drone, simülasyon). BYPASS: alternatif yolun ilk engelinin fotoğrafını çek; sonraki engeller de bypass'a eklenir.</span>
+          <div class="g3"><button class="btn grn" id="infq">+ Info ekle</button>
+            <button class="btn grn" id="simq">+ Simülasyon ekle</button>
+            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<button class="btn grn" id="bypq">+ Bypass ekle</button>`}</div>
+          <span class="hint">Info: fotoğraf çek ya da galeriden seç. Simülasyon: boş görselli kayıt, görüntü ofiste eklenir. Bypass: alternatif yolun ilk engelinin fotoğrafını çek; sonraki engeller de bypass'a eklenir.</span>
           ${r.parentId ? '' : '<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>'}
         </div>
         <div class="pane">
@@ -524,6 +575,8 @@
           ${isCu ? `<label class="f">Culvert spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 1x5m"></label>` : ''}
           ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
           ${isOH ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
+          ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
+          ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
           ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].map((p, i) => `<button class="chip" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-ph="${i}">${esc(p)}</button>`).join('')}</div>` : ''}
           <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
@@ -545,6 +598,8 @@
       if (g('sp')) r.fields.spans = g('sp').value.trim();
       document.querySelectorAll('[data-hv]').forEach(i => { r.heights[i.dataset.hv].value = pn(i.value); });
       document.querySelectorAll('[data-hl]').forEach(i => { r.heights[i.dataset.hl].label = i.value; });
+      document.querySelectorAll('[data-wv]').forEach(i => { r.widths[i.dataset.wv].value = pn(i.value); });
+      document.querySelectorAll('[data-wl]').forEach(i => { r.widths[i.dataset.wl].label = i.value; });
       const tx = g('tx').value;
       if (tx !== (r[textKey] || '')) { r[textKey] = tx; if (isOH) r.actionAuto = false; }
     };
@@ -555,15 +610,26 @@
       if (g('tt')) g('tt').addEventListener('change', () => { read(); autoAct(); draw(); });
       const setType = t => { read(); r.obstacle = t; r.fields = {}; r.actionAuto = true;
         if (/Overhead/.test(t) && !r.heights.length) r.heights = [{ label: 'H', value: null }];
+        if (WIDTH_TYPES.includes(t) && !(r.widths || []).length) r.widths = [{ label: 'W', value: null }];
         if (!r.remarks && PHRASES[t] && PHRASES[t].length === 1 && !/%/.test(PHRASES[t][0]) && !/Overhead|Bridge|Culvert/.test(t)) r.remarks = PHRASES[t][0];
         DB.putSurvey(sv).then(() => V.record(id, rid)); };
       g('cnv').onchange = () => { if (g('cnv').value.trim()) setType(g('cnv').value.trim()); };
       const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
-      infq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); await DB.putSurvey(sv); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: 'Satellite View' }); };
+      const keep = async () => { read(); autoAct(); await DB.putSurvey(sv); };
+      infq.onclick = () => sheet(`${mainRec.no} · Info ekle`, [
+        { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { await keep(); go(`#/cam/${sv.id}?info=${mainRec.id}`); } },
+        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { await keep(); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: '' }); } },
+      ]);
+      g('simq').onclick = async () => { await keep(); createRecord(sv, { parent: mainRec, flag: 'INFO', name: 'Satellite View', pending: 'sat' }); };
       if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
       if (g('hadd')) g('hadd').onclick = () => { read(); r.heights.push({ label: '', value: null }); draw(); };
+      if (g('wadd')) g('wadd').onclick = () => { read(); r.widths = r.widths || []; r.widths.push({ label: r.widths.length ? '' : 'W', value: null }); draw(); };
+      document.querySelectorAll('[data-wv],[data-wl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
-      g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); };
+      g('rep').onclick = () => sheet(u ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle', [
+        { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?replace=${r.id}`); } },
+        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(f)); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); } },
+      ]);
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
       g('del').onclick = async e => {
         const b = e.target.closest('button');
@@ -579,7 +645,9 @@
       };
       g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; }
         if (isOH && r.heights.some(h => !h.label && h.value != null)) { toast('Her yükseklik için etiket seç (H, H1, H2, HL, HM, HR)'); return; }
-        if (isOH) r.heights = r.heights.filter(h => h.label || h.value != null); autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
+        if (isOH) r.heights = r.heights.filter(h => h.label || h.value != null);
+        if ((r.widths || []).some(w => !w.label && w.value != null)) { toast('Her genişlik için etiket seç (W, W1, W2)'); return; }
+        if (r.widths) r.widths = r.widths.filter(w => w.label || w.value != null); autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
       $app.onclick = async e => {
         const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
         if (ty) return setType(ty.dataset.type);
@@ -590,6 +658,8 @@
         if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = t; if (isOH) r.actionAuto = false; draw(); const tx = document.getElementById('tx'); tx.focus(); const k = tx.value.lastIndexOf('%'); if (k >= 0 && /about %/.test(tx.value)) tx.setSelectionRange(k, k); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
+        const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
+        const cv = e.target.closest('[data-curve]'); if (cv) { read(); r.remarks = CURVES[cv.dataset.curve]; draw(); }
       };
     };
     autoAct(); draw();
@@ -727,7 +797,7 @@
       else if (p[0] === 'edit') await V.form(p[1]);
       else if (p[0] === 's') await V.survey(p[1]);
       else if (p[0] === 'add') await V.add(p[1], q);
-      else if (p[0] === 'cam') await V.camera(p[1]);
+      else if (p[0] === 'cam') await V.camera(p[1], q);
       else if (p[0] === 'r') await V.record(p[1], p[2]);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);

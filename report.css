@@ -72,6 +72,7 @@ table.clear td:first-child { text-align: left; }
 .cover .top { top: 11mm; height: 35mm; display: grid; grid-template-columns: 27% 46% 27%; }
 .cover .top > div { display: flex; align-items: center; justify-content: center; border-right: 0.3mm solid #000; }
 .cover .top > div:last-child { border-right: 0; }
+.cover .stack { flex-direction: column; gap: 2.5mm; }
 .cover .top .ttl { font-weight: 700; font-size: 13.5pt; text-align: center; line-height: 1.35; }
 .cover .main { top: 51mm; }
 .cover .main > .r { border-bottom: 0.3mm solid #000; display: flex; align-items: center; justify-content: center; text-align: center; }

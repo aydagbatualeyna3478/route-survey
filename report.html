@@ -42,6 +42,8 @@
   const L = logosOf(sv);
   A.logos = [{ key: 'company', src: A.logoCompany, pos: L.pos.company }];
   for (const k of ['client1', 'client2', 'owner']) { const u = await url(L.ids[k]); if (u) A.logos.push({ key: k, src: u, pos: L.pos[k] }); }
+  const srcOf = k => (A.logos.find(l => l.key === k) || {}).src;
+  A.cover = Object.fromEntries(Object.entries(L.cover).map(([area, keys]) => [area, keys.map(srcOf).filter(Boolean).slice(0, 2)]));
   if (A.drawing) { const i = await load(A.drawing); A.drawingLandscape = i && i.naturalWidth > i.naturalHeight; }
   ['r17','r18','r23','r24','r25','r30','r31','r36','r37','r42','r43','r48','r49','r54','r55','r60','r61','r66','r67','r72','r73','r78','r79'].forEach(k => A.ref[k] = 'assets/ref/' + k + '.jpg');
   await Promise.all(Object.entries(A.ref).map(async ([k, s]) => { const i = await load(s); if (i) A.refAR[k] = i.naturalWidth / i.naturalHeight; }));
