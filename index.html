@@ -62,6 +62,8 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .rec img,.rec .ph{width:132px;height:99px;border-radius:8px;object-fit:cover;background:#C9D2DC;flex-shrink:0;border:1px solid var(--line2)}
 .rec .t{font-size:15px;font-weight:600}.rec .s{font-size:13px;color:var(--mut)}
 .rec.sub img,.rec.sub .ph{width:104px;height:78px}
+/* Excel-like soft edges on photos (2.5 pt) */
+.rec img,.photo>img{-webkit-mask-image:linear-gradient(to right,transparent 0,#000 1.2%,#000 98.8%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 1.6%,#000 98.4%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to right,transparent 0,#000 1.2%,#000 98.8%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 1.6%,#000 98.4%,transparent 100%);mask-composite:intersect}
 .subs{border-left:3px solid var(--green);margin-left:10px;padding-left:10px;display:flex;flex-direction:column;gap:4px}
 .grp{border-bottom:1px solid var(--line);padding-bottom:6px;display:flex;flex-direction:column;gap:4px}
 /* round action buttons (survey screen) */

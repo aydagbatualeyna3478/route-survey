@@ -123,7 +123,7 @@
   async function createRecord(sv, o) {
     toast('Kaydediliyor…');
     const parent = o.parent || null, name = o.name || '';
-    const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
+    const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
     if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
     if (o.file) { rec.photoId = await DB.putBlob(await to43(o.file)); rec.aspect = 4 / 3; }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
@@ -178,6 +178,14 @@
     const compLogo = await blobUrl(await DB.getSetting('companyLogo'));
     const pv = async (bid, fallback) => { const u = await blobUrl(bid); return u ? `<img src="${u}" alt="">` : (fallback || imgSvg + ' Yükle'); };
     const slot = async (key, title, note, bid, fallback) => `<label class="logo"><b>${title}</b><span class="pv" id="pv-${key}">${await pv(bid, fallback)}</span><span>${note}</span><input class="hid" type="file" accept="image/*" data-logo="${key}"></label>`;
+    const LG = sv ? logosOf(sv) : { ids: {}, pos: { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' } };
+    const logoPos = Object.assign({}, LG.pos), removed = {};
+    const CORNERS = [['tl', 'Sol üst'], ['tr', 'Sağ üst'], ['bl', 'Sol alt'], ['br', 'Sağ alt']];
+    const posPick = key => `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px">${CORNERS.map(([v, t]) => `<button type="button" class="chip ${logoPos[key] === v ? 'on' : ''}" data-lp="${key}" data-v="${v}" style="min-height:34px;padding:4px 6px;font-size:12px;border-radius:8px">${t}</button>`).join('')}</div>`;
+    const lslot = async (key, title, bid, fallback, note) => `<div class="logo" style="cursor:default"><b>${title}</b>
+        <label class="pv" id="pv-${key}" style="cursor:pointer">${await pv(bid, fallback)}<input class="hid" type="file" accept="image/*" data-logo="${key}"></label>
+        <span>${note}</span>${posPick(key)}
+        ${key !== 'company' && bid ? `<button type="button" class="btn sm" data-lrm="${key}" style="min-height:32px;font-size:12px;color:var(--badtx)">Kaldır</button>` : ''}</div>`;
     const refsOpen = p.refLV != null && p.refLV !== '' || p.refMV != null && p.refMV !== '' || p.refHV != null && p.refHV !== '';
     $app.innerHTML = `${bar(sv ? 'Etüt bilgileri' : 'Yeni etüt raporu', sv ? `#/s/${sv.id}` : '#/')}
     <form class="split even" id="pf" autocomplete="off">
@@ -209,9 +217,10 @@
       </div>
       <div class="pane">
         <label class="f">Hazırlayanlar (her satıra bir isim)<textarea name="preparedBy" rows="3">${esc((p.preparedBy || []).join('\n'))}</textarea></label>
-        <div class="sec">Logolar · yerleşim otomatik</div>
-        <div class="g3">${await slot('company', 'Bizim firma', 'Her etütte hazır', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">')}
-          ${await slot('partner', 'Ortak logo', 'İsteğe bağlı', logos.partner)}${await slot('client', 'Müşteri', 'Kapak + sayfalar', logos.client)}</div>
+        <div class="sec">Logolar · PDF'te duracağı köşe</div>
+        <div class="g4">${await lslot('company', '1 · İşi yapan', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">', 'Her etütte hazır')}
+          ${await lslot('client1', '2 · Müşteri-1', LG.ids.client1, null, 'İsteğe bağlı')}${await lslot('client2', '3 · Müşteri-2', LG.ids.client2, null, 'İsteğe bağlı')}${await lslot('owner', '4 · İşin sahibi', LG.ids.owner, null, 'İsteğe bağlı')}</div>
+        <span class="hint">Logolar oranı bozulmadan küçültülür ve sayfa kenar boşluklarının içinde kalır. Kapakta işi yapanın logosu solda, diğerleri müşteri satırında yer alır.</span>
         <div class="g2">${await slot('cover', 'Kapak fotoğrafı', 'Boşsa standart', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma çizimi', 'Resim (JPG/PNG)', logos.drawing)}</div>
       </div>
     </form>
@@ -227,10 +236,17 @@
       f.height.required = !general;
       document.getElementById('kindHint').textContent = general ? 'Yük ölçüsü girilmez. Engeller ölçülüp kaydedilir; otomatik yükseklik kontrolü ve renklendirme yapılmaz, renkler elle seçilir.' : '';
     });
+    f.addEventListener('click', e => {
+      const b = e.target.closest('[data-lp]');
+      if (b) { logoPos[b.dataset.lp] = b.dataset.v; f.querySelectorAll(`[data-lp="${b.dataset.lp}"]`).forEach(x => x.classList.toggle('on', x === b)); }
+      const rm = e.target.closest('[data-lrm]');
+      if (rm) { removed[rm.dataset.lrm] = true; delete pending[rm.dataset.lrm]; document.getElementById('pv-' + rm.dataset.lrm).firstChild.replaceWith(document.createRange().createContextualFragment(imgSvg + ' Yükle')); rm.remove(); }
+    });
     f.querySelectorAll('[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return;
       const key = inp.dataset.logo, blob = await shrink(inp.files[0], key === 'drawing' ? 3000 : key === 'cover' ? 1800 : 1200);
-      pending[key] = blob; document.getElementById('pv-' + key).innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="">`;
+      pending[key] = blob; delete removed[key];
+      const pvEl = document.getElementById('pv-' + key); [...pvEl.childNodes].forEach(n => { if (n !== inp) n.remove(); }); pvEl.insertAdjacentHTML('afterbegin', `<img src="${URL.createObjectURL(blob)}" alt="">`);
     }));
     document.getElementById('save').onclick = async () => {
       if (!f.reportValidity()) return;
@@ -246,7 +262,12 @@
         general, cargo, minHeight: general ? null : cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
       });
       if (!sv) { s.project.date = `${months[now.getMonth()]} ${now.getFullYear()}`; s.project.surveyDate = `${full[now.getMonth()]}, ${now.getFullYear()}`; }
-      for (const k of ['partner', 'client', 'cover', 'drawing']) if (pending[k]) { await DB.delBlob(s.logos[k]); s.logos[k] = await DB.putBlob(pending[k]); }
+      // move older 'client' / 'partner' logos into the new slots
+      if (s.logos.client && !s.logos.client1) s.logos.client1 = s.logos.client; if (s.logos.partner && !s.logos.client2) s.logos.client2 = s.logos.partner;
+      delete s.logos.client; delete s.logos.partner;
+      for (const k of ['client1', 'client2', 'owner']) if (removed[k]) { await DB.delBlob(s.logos[k]); delete s.logos[k]; }
+      for (const k of ['client1', 'client2', 'owner', 'cover', 'drawing']) if (pending[k]) { await DB.delBlob(s.logos[k]); s.logos[k] = await DB.putBlob(pending[k]); }
+      s.logoPos = logoPos;
       if (pending.company) { await DB.delBlob(await DB.getSetting('companyLogo')); await DB.setSetting('companyLogo', await DB.putBlob(pending.company)); }
       await DB.setSetting('defaults', { company: s.project.company, companyShort: s.project.companyShort, preparedBy: s.project.preparedBy, formCode: s.project.formCode });
       await DB.putSurvey(s);
@@ -270,7 +291,7 @@
     const line = async (r, sub) => {
       const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
-      return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : '<span class="ph"></span>'}
+      return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">KM ${fmt(r.km, 1)}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}</button>`;
@@ -405,7 +426,8 @@
             : mode === 'sat' ? `<div class="sec">Uydu / drone görüntüsü</div>
               ${mains.length ? `<label class="f">Hangi engele ait?<select id="par">${mains.slice().reverse().map(m => `<option value="${m.id}" ${parent && parent.id === m.id ? 'selected' : ''}>${m.no} · ${esc(m.obstacle)} · KM ${fmt(m.km, 1)}</option>`).join('')}</select></label>
                 <span class="hint">Seçilen engelin altına INFO olarak eklenir; konum ve KM o engelden alınır.</span>` : '<span class="hint">Henüz engel yok; yeni kayıt olarak eklenir.</span>'}
-              <label class="btn red" style="min-height:90px;font-size:18px">${imgSvg} Galeriden seç<input class="hid" type="file" accept="image/*" id="gal"></label>`
+              <button class="btn red" id="satp" style="min-height:90px;font-size:18px">${imgSvg} Boş uydu kaydı oluştur</button>
+              <span class="hint">Fotoğraf çekilmez. Kayıt boş bir görselle oluşur; simülasyon görüntüsünü ofiste engel ekranındaki "Fotoğraf ekle" ile eklersiniz.</span>`
             : `<div class="sec">Fotoğraf</div>
               <label class="btn red" style="min-height:110px;font-size:20px">${camSvg} Fotoğraf çek<input class="hid" type="file" accept="image/*" capture="environment" id="cam"></label>
               <label class="btn" style="min-height:64px">${imgSvg} Galeriden seç<input class="hid" type="file" accept="image/*" id="gal"></label>`}
@@ -443,6 +465,8 @@
       if (cam) cam.onchange = e => e.target.files[0] && make(e.target.files[0], true);
       if (gal) gal.onchange = e => e.target.files[0] && make(e.target.files[0], mode !== 'sat' && !(flag === 'INFO'));
       if (nop) nop.onclick = () => make(null, true);
+      const satp = document.getElementById('satp');
+      if (satp) satp.onclick = () => createRecord(sv, { parent, flag: parent ? 'INFO' : '', name: 'Satellite View', pending: 'sat' });
       const f = GPS.fresh(), pe = document.getElementById('pos');
       if (mode !== 'sat') pe.textContent = f ? `Konum hazır: ${Geo.dms(f.lat, true)} · ${Geo.dms(f.lon, false)} (±${Math.round(f.acc)} m)` : 'Konum aranıyor… Kayıt anında tekrar denenecek.';
     };
@@ -475,7 +499,7 @@
       $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split even">
         <div class="pane">
-          <div class="photo">${u ? `<img src="${u}" alt="">` : ''}${annHtml(r.ann || [], -1)}
+          <div class="photo">${u ? `<img src="${u}" alt="">` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
             <label class="btn sm" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}<input class="hid" type="file" accept="image/*" id="rep"></label></div>
           <div class="card"><div class="g3">
@@ -539,7 +563,7 @@
       if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
       if (g('hadd')) g('hadd').onclick = () => { read(); r.heights.push({ label: '', value: null }); draw(); };
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
-      g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); await DB.putSurvey(sv); V.record(id, rid); };
+      g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); };
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
       g('del').onclick = async e => {
         const b = e.target.closest('button');

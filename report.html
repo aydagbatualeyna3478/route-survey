@@ -34,12 +34,14 @@
 
   const A = window.ASSETS = {
     logoCompany: (await url(await DB.getSetting('companyLogo'))) || 'assets/logo_company.jpg',
-    logoPartner: await url(sv.logos.partner), logoClient: (await url(sv.logos.client)) || BLANK,
+    logos: [],
     coverPhoto: (await url(sv.logos.cover)) || 'assets/cover_photo.jpg',
     iconTurn: 'assets/icon_turn.png', barGreen: 'assets/bar_green.jpg', barRed: 'assets/bar_red.jpg', compassK: 'assets/compass_k.jpg', compassN: 'assets/compass_n.jpg',
     drawing: await url(sv.logos.drawing), ref: {}, refAR: {},
   };
-  A.coverSecond = A.logoPartner ? null : (A.logoClient !== BLANK ? A.logoClient : null);
+  const L = logosOf(sv);
+  A.logos = [{ key: 'company', src: A.logoCompany, pos: L.pos.company }];
+  for (const k of ['client1', 'client2', 'owner']) { const u = await url(L.ids[k]); if (u) A.logos.push({ key: k, src: u, pos: L.pos[k] }); }
   if (A.drawing) { const i = await load(A.drawing); A.drawingLandscape = i && i.naturalWidth > i.naturalHeight; }
   ['r17','r18','r23','r24','r25','r30','r31','r36','r37','r42','r43','r48','r49','r54','r55','r60','r61','r66','r67','r72','r73','r78','r79'].forEach(k => A.ref[k] = 'assets/ref/' + k + '.jpg');
   await Promise.all(Object.entries(A.ref).map(async ([k, s]) => { const i = await load(s); if (i) A.refAR[k] = i.naturalWidth / i.naturalHeight; }));
@@ -74,7 +76,7 @@
       }
     } catch (e) { A.routeBase = null; }
   }
-  await Promise.all([A.logoCompany, A.logoPartner, A.logoClient, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
+  await Promise.all([...A.logos.map(l => l.src), A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
   await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js'; s.onload = res; document.body.appendChild(s); });

@@ -25,6 +25,10 @@
     .map(r => ({ r, v: Math.max(0, ...[...r.remarks.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map(m => parseFloat(m[1].replace(',', '.')))) }));
   stats.maxGrade = grades.reduce((a, b) => (b.v > (a ? a.v : -1) ? b : a), null);
 
+  const LOGOS = (A.logos || []).filter(l => l && l.src);
+  const byKey = k => (LOGOS.find(l => l.key === k) || {}).src;
+  const company = byKey('company') || A.logoCompany;
+  const others = ['client1', 'client2', 'owner'].map(byKey).filter(Boolean);
   // ---------- page factory ----------
   let pageNo = 0;
   const pages = [];
@@ -33,9 +37,12 @@
     const isCover = kind === 'cover';
     if (!isCover && kind !== 'a3') {
       // two logos: company left, client right. three logos: company left, partner right, client bottom right
-      pg.appendChild(el(`<div class="hdr"><img class="l" src="${A.logoCompany}" alt=""><img class="r ${A.logoPartner ? 'partner' : ''}" src="${A.logoPartner || A.logoClient}" alt=""></div>`));
+      // up to four logos, each in the corner chosen in the app (tl / tr / bl / br); scaled to fit, never past the margins
+      for (const pos of ['tl', 'tr', 'bl', 'br']) {
+        const ls = LOGOS.filter(l => l.pos === pos); if (!ls.length) continue;
+        pg.appendChild(el(`<div class="lg lg-${pos} n${Math.min(ls.length, 3)}">${ls.map(l => `<img src="${l.src}" alt="">`).join('')}</div>`));
+      }
     }
-    if (!isCover && A.logoPartner && A.logoClient) pg.appendChild(el(`<img class="ftr-logo" src="${A.logoClient}" alt="">`));
     if (!isCover) { pageNo += 1; pg.appendChild(el(`<div class="pno">${pageNo}</div>`)); pg.dataset.no = pageNo; }
     root.appendChild(pg); pages.push(pg);
     return pg;
@@ -59,20 +66,20 @@
   (function cover() {
     const pg = newPage('cover');
     pg.innerHTML += `
-    <div class="box top"><div class="stack">${A.logoPartner ? `<img src="${A.logoCompany}" style="height:7.5mm" alt=""><img src="${A.logoPartner}" style="height:13mm" alt="">` : `<img src="${A.coverSymbol || A.logoCompany}" style="${A.coverSymbol ? 'height:15mm' : 'max-width:85%;max-height:14mm'}" alt="">`}</div>
+    <div class="box top"><div><img src="${company}" class="fit" style="max-height:16mm" alt=""></div>
       <div class="ttl">Route Survey Report /<br>Güzergah Etüdü Rapor</div>
-      <div>${A.logoPartner ? `<img src="${A.logoClient}" style="max-width:82%;max-height:17mm" alt="">` : (A.coverSecond ? `<img src="${A.coverSecond}" style="max-width:82%;max-height:19mm" alt="">` : '')}</div></div>
+      <div>${(byKey('owner') || others[0]) ? `<img src="${byKey('owner') || others[0]}" class="fit" style="max-height:20mm" alt="">` : ''}</div></div>
     <div class="box main">
-      <div class="r logo ${A.logoPartner ? 'two' : ''}"><img src="${A.logoCompany}" alt="">${A.logoPartner ? `<img class="p" src="${A.logoPartner}" alt="">` : ''}</div>
+      <div class="r logo"><img src="${company}" class="fit" style="max-height:19mm;max-width:70%" alt=""></div>
       <div class="r co">${esc(P.company)}</div>
       <div class="r title">${esc(P.title)}</div>
-      <div class="r client"><img src="${A.logoClient}" alt=""></div>
-      <div class="r grid">
+      ${others.length ? `<div class="r client" style="gap:8mm">${others.map(src => `<img src="${src}" class="fit" style="max-height:20mm;max-width:${Math.floor(85 / others.length)}%" alt="">`).join('')}</div>` : ''}
+      <div class="r grid g1">
         <div><span class="k">PREPARED BY / HAZIRLAYAN:</span><span class="v">${P.preparedBy.map(esc).join('<br>')}</span></div>
         <div><span class="k">DATE PREPARED / HAZIRLAMA TARİHİ:</span><span class="v">${esc(P.date)}</span></div>
         <div><span class="k">REV. NO VE TARİHİ / REVISION NO AND DATE:</span><span class="v">${esc(P.rev)}</span></div>
       </div>
-      <div class="r grid">
+      <div class="r grid g2">
         <div><span class="k">PROJECT REFERENCE / PROJENIN REFERANSI:</span><span class="v">${esc(P.reference)}</span></div>
         <div><span class="k">CLIENT NAME / MÜŞTERİ UNVANI:</span><span class="v">${esc(P.client)}</span></div>
         <div><span class="k">PREPARED FOR/ KİMİN İÇİN HAZIRLANDIĞI:</span><span class="v">${esc(P.preparedFor)}</span></div>

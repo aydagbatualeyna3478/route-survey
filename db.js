@@ -66,5 +66,11 @@
     }
     return out;
   }
-  g.DB = DB; g.Geo = Geo; g.orderedRecords = ordered;
+  /* logo slots: 1 company (kept in settings) · 2 client 1 · 3 client 2 · 4 owner; each placed in a page corner */
+  const LOGO_POS = { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' };
+  function logosOf(sv) {
+    const l = sv.logos || {};
+    return { ids: { client1: l.client1 || l.client, client2: l.client2 || l.partner, owner: l.owner }, pos: Object.assign({}, LOGO_POS, sv.logoPos || {}) };
+  }
+  g.DB = DB; g.Geo = Geo; g.orderedRecords = ordered; g.logosOf = logosOf;
 })(window);

@@ -15,12 +15,15 @@ body { font-family: Carlito, Calibri, sans-serif; font-size: 11pt; color: var(--
 .page.a3 { width: 420mm; height: 297mm; page: a3land; }
 @media print { html, body { background: #fff; } .page { margin: 0; } }
 
-.hdr { position: absolute; top: 5.5mm; left: 11mm; right: 11mm; height: 12mm; display: flex; justify-content: space-between; align-items: center; }
-.hdr .l { height: 8.6mm; }
-.hdr .r { height: 11.5mm; }
+/* logo corners: inside the 12.5 mm side margins, aspect kept, never larger than the box */
+.lg { position: absolute; left: 12.5mm; right: 12.5mm; display: flex; gap: 4mm; align-items: center; pointer-events: none; }
+.lg-tl, .lg-tr { top: 6mm; height: 10mm; } .lg-bl, .lg-br { bottom: 5mm; height: 9mm; }
+.lg-tl, .lg-bl { justify-content: flex-start; right: 50%; } .lg-tr, .lg-br { justify-content: flex-end; left: 50%; }
+.lg-bl, .lg-br { margin: 0; } .lg-bl { right: calc(50% + 9mm); } .lg-br { left: calc(50% + 9mm); }
+.lg img { max-height: 100%; max-width: 100%; height: auto; width: auto; object-fit: contain; min-width: 0; flex: 0 1 auto; }
+.lg.n2 img { max-width: calc(50% - 2mm); } .lg.n3 img { max-width: calc(33% - 3mm); }
 .pno { position: absolute; bottom: 9mm; left: 0; right: 0; text-align: center; font-size: 11pt; }
 /* optional third logo: bottom right, level with the page number */
-.ftr-logo { position: absolute; right: 11mm; bottom: 5mm; height: 10mm; max-width: 45mm; object-fit: contain; object-position: right bottom; }
 .content { position: absolute; top: 24mm; left: 24mm; right: 22mm; bottom: 20mm; overflow: hidden; }
 
 /* text pages */
@@ -72,12 +75,13 @@ table.clear td:first-child { text-align: left; }
 .cover .top .ttl { font-weight: 700; font-size: 13.5pt; text-align: center; line-height: 1.35; }
 .cover .main { top: 51mm; }
 .cover .main > .r { border-bottom: 0.3mm solid #000; display: flex; align-items: center; justify-content: center; text-align: center; }
+img.fit { max-width: 85%; object-fit: contain; height: auto; width: auto; }
 .cover .main > .r:last-child { border-bottom: 0; }
-.cover .r.logo { height: 47mm; } .cover .r.logo img { height: 19mm; }
+.cover .r.logo { height: 47mm; }
 .cover .r.co { height: 16mm; font-weight: 700; font-size: 10.5pt; }
 .cover .r.title { height: 23mm; font-size: 17pt; line-height: 1.3; white-space: pre-line; }
-.cover .r.client { height: 30mm; } .cover .r.client img { height: 22mm; }
-.cover .r.grid:nth-of-type(5) { height: 35mm; } .cover .r.grid:nth-of-type(6) { height: 22mm; }
+.cover .r.client { height: 30mm; }
+.cover .r.grid.g1 { height: 35mm; } .cover .r.grid.g2 { height: 22mm; }
 .cover .r.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 .cover .r.grid > div { border-right: 0.3mm solid #000; padding: 2.5mm 1.5mm; font-size: 10.5pt; display: flex; flex-direction: column; align-items: center; gap: 1.6mm; }
 .cover .r.grid > div:last-child { border-right: 0; }
@@ -121,11 +125,9 @@ table.clear td:first-child { text-align: left; }
 .tb .txt { grid-column: 1 / 4; align-items: flex-start; padding: 0.4mm 1mm 0 0.8mm; line-height: 1.22; white-space: pre-line; }
 
 /* three-logo layout (company + partner + client) */
-.hdr .r.partner { height: 14mm; margin-top: -1mm; }
 .cover .top .stack { flex-direction: column; gap: 1.5mm; }
-.cover .r.logo.two { flex-direction: column; gap: 3mm; height: 56mm; }
-.cover .r.logo.two img { height: 15mm; }
-.cover .r.logo.two img.p { height: 25mm; }
-.cover:has(.r.logo.two) .r.co { height: 13mm; }
-.cover:has(.r.logo.two) .r.grid:nth-of-type(5) { height: 31mm; }
-.cover:has(.r.logo.two) .r.client img { height: 19mm; }
+
+/* Excel 'soft edges' (2.5 pt) on survey photos */
+.blk .ph .crop { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.9%, #000 99.1%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 1.2%, #000 98.8%, transparent 100%);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(to right, transparent 0, #000 0.9%, #000 99.1%, transparent 100%), linear-gradient(to bottom, transparent 0, #000 1.2%, #000 98.8%, transparent 100%); mask-composite: intersect; }
+.blk .ph { background: #fff; }
