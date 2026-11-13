@@ -101,7 +101,7 @@
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (Math.min(screen.width, document.documentElement.clientWidth) - 8) / 794));
   fit(); window.addEventListener('resize', fit);
   msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç.`;
-  const pr = document.getElementById('pr'); pr.disabled = false; pr.onclick = () => window.print();
+  const pr = document.getElementById('pr'); pr.disabled = false; pr.onclick = () => { if (window.AndroidPrint) AndroidPrint.print(document.title); else window.print(); };   // Android app: native print dialog → Save as PDF
 })().catch(e => { document.getElementById('msg').textContent = 'Hata: ' + e.message; console.error(e); });
 </script>
 </body>

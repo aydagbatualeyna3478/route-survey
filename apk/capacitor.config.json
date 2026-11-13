@@ -1,0 +1,8 @@
+{
+  "appId": "com.routesurvey.etut",
+  "appName": "Route Survey",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#EEF1F4"
+  }
+}

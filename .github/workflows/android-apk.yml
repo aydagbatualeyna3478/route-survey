@@ -1,0 +1,77 @@
+name: Android APK
+
+# Every push to main builds a new APK and publishes it as a GitHub release.
+# Direct download of the newest one:
+#   https://github.com/<owner>/route-survey/releases/latest/download/RouteSurvey.apk
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'KURULUM.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Copy the web app into the Android package
+        run: |
+          mkdir -p apk/www
+          cp -r index.html report.html manifest.webmanifest *.js *.css assets fonts icons apk/www/
+          rm -f apk/www/sw.js
+
+      - name: Create the Android project
+        working-directory: apk
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add android
+          npx cap sync android
+          bash patch-android.sh "${{ github.run_number }}"
+
+      - name: Build
+        working-directory: apk/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Sign
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS_SECRET: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          # company key from repository secrets when present, otherwise the test key in apk/
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > key.p12; export KS_PASS="$KS_PASS_SECRET"; echo "signing with the secret key"
+          else cp apk/test-key.p12 key.p12; export KS_PASS=routesurvey-test; echo "signing with the test key"; fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/zipalign" -p -f 4 apk/android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks key.p12 --ks-pass env:KS_PASS --ks-key-alias etut --out RouteSurvey.apk aligned.apk
+          "$BT/apksigner" verify --print-certs RouteSurvey.apk
+          rm -f key.p12
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RouteSurvey-apk
+          path: RouteSurvey.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v1.0.${{ github.run_number }}" RouteSurvey.apk \
+            --title "Route Survey 1.0.${{ github.run_number }}" \
+            --notes "Android APK, commit ${GITHUB_SHA::7}. Tablete indirip kurun." --latest

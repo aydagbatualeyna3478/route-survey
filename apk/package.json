@@ -1,0 +1,12 @@
+{
+  "name": "route-survey-android",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Packs the Route Survey web app into an Android APK (built on GitHub Actions).",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  }
+}
