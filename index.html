@@ -8,6 +8,23 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<script>
+/* Screens are laid out for a 1280×720 landscape canvas and zoomed to the device: phones in landscape keep the
+   two-pane layout a little smaller, tablets show it 1:1, large desktop windows show it larger. Portrait stacks. */
+(function () {
+  var d = document.documentElement;
+  function fit() {
+    var W = innerWidth, H = innerHeight, coarse = matchMedia('(pointer:coarse)').matches, k;
+    if (H > W) k = Math.max(0.85, Math.min(1.2, W / 440));
+    else k = Math.max(coarse ? 0.75 : 0.8, Math.min(1.35, Math.min(W / 1280, H / 720)));
+    k = Math.round(k * 1000) / 1000;
+    d.style.zoom = k;
+    d.style.setProperty('--vh', (H / k / 100) + 'px'); d.style.setProperty('--vw', (W / k / 100) + 'px');
+    d.classList.toggle('narrow', H > W || W / k < 860);
+  }
+  fit(); addEventListener('resize', fit); addEventListener('orientationchange', fit);
+})();
+</script>
 <style>
 :root{--bg:#EEF1F4;--card:#fff;--ink:#111827;--mut:#4B5563;--line:#E1E5EA;--line2:#C7CED8;--navy:#1E3A5F;--navy2:#2B4C75;--red:#D7262E;--green:#1F7A3A;--okbg:#E8F5EC;--oktx:#1F6B35;--badbg:#FDECEC;--badtx:#B4232A;--warnbg:#FFF3D6;--warntx:#8A4B00;--sel:#DCE7F5}
 *{box-sizing:border-box}
@@ -66,9 +83,22 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .rec img,.photo>img{-webkit-mask-image:linear-gradient(to right,transparent 0,#000 1.2%,#000 98.8%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 1.6%,#000 98.4%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(to right,transparent 0,#000 1.2%,#000 98.8%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 1.6%,#000 98.4%,transparent 100%);mask-composite:intersect}
 .subs{border-left:3px solid var(--green);margin-left:10px;padding-left:10px;display:flex;flex-direction:column;gap:4px}
 .grp{border-bottom:1px solid var(--line);padding-bottom:6px;display:flex;flex-direction:column;gap:4px}
+/* reorder / multi-select in the obstacle list */
+.rec{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.selbar{position:fixed;top:0;left:0;right:0;min-height:68px;z-index:6;padding:8px 20px;background:var(--navy);color:#fff;display:flex;align-items:center;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.selbar b{flex:1;font-size:15px;min-width:120px}
+.selbar .btn{min-height:40px;padding:6px 12px;font-size:14px;background:#fff;color:var(--navy);border-color:#fff}
+.selbar .btn.del{background:var(--red);color:#fff;border-color:var(--red)}
+.selmode .rec{padding-left:42px;position:relative}
+.selmode .rec::before{content:"";position:absolute;left:10px;top:50%;width:22px;height:22px;margin-top:-11px;border:2px solid var(--line2);border-radius:6px;background:#fff}
+.selmode .rec.chk::before{background:var(--navy);border-color:var(--navy)}
+.selmode .rec.chk::after{content:"";position:absolute;left:17px;top:50%;width:6px;height:12px;margin-top:-8px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(45deg)}
+.selmode .rec.chk{background:var(--sel);border-color:var(--navy)}
+.dragging{opacity:.95;box-shadow:0 10px 28px rgba(17,24,39,.28);background:var(--card);border-radius:12px;position:relative;z-index:2;outline:3px solid var(--navy)}
+.selhint{font-size:12px;color:var(--mut);text-align:center;padding:8px 0 2px}
 /* round action buttons (survey screen) */
-.acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,2.2vh,22px) 18px;justify-items:center;align-content:center;flex:1;min-height:0}
-.rb{width:clamp(78px,16vh,124px);height:clamp(78px,16vh,124px);border-radius:50%;border:2px solid var(--line2);background:#fff;color:var(--navy);font-size:14px;font-weight:600;line-height:1.2;padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center}
+.acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,calc(var(--vh,7.2px)*2.2),22px) 18px;justify-items:center;align-content:center;flex:1;min-height:0}
+.rb{width:clamp(78px,calc(var(--vh,7.2px)*16),124px);height:clamp(78px,calc(var(--vh,7.2px)*16),124px);border-radius:50%;border:2px solid var(--line2);background:#fff;color:var(--navy);font-size:14px;font-weight:600;line-height:1.2;padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center}
 .rb svg{flex-shrink:0}
 .rb.red{background:var(--red);border-color:var(--red);color:#fff}
 .rb.grn{background:var(--okbg);border-color:#9CCBA9;color:var(--oktx)}
@@ -108,23 +138,38 @@ input[type=file].hid{position:absolute;width:1px;height:1px;opacity:0;pointer-ev
 /* choice sheet */
 .sheet{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center}
 .sheet-bg{position:absolute;inset:0;background:rgba(17,24,39,.45)}
-.sheet-box{position:relative;background:var(--card);border-radius:16px;padding:18px;width:min(420px,92vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.sheet-box{position:relative;background:var(--card);border-radius:16px;padding:18px;width:min(420px,calc(var(--vw,12.8px)*92));display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
 .sheet-box b{font-size:17px;margin-bottom:4px}
 .sheet-box .btn{min-height:56px;font-size:16px}
-/* narrow screens / portrait: stack the panes */
-@media (max-width:860px),(orientation:portrait) and (max-width:1000px){
-  html,body{overflow:auto}
-  #app{height:auto;min-height:100%}
-  .split,.split.even,.split.wide{display:flex;flex-direction:column;padding:16px}
-  .pane,.side{overflow:visible}
-  .acts{flex:none}
-  .cargo{min-width:0}
-  .acts{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .rb{width:96px;height:96px;font-size:12px}
-  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .foot .btn{min-width:0;flex:1}
-  .photo-stage .photo{height:auto;width:100%}
-}
+/* extra photos: strip under the photo + full-screen picker */
+.thumbs{display:flex;gap:8px;overflow-x:auto;flex-shrink:0;padding:2px 0}
+.thumbs .th{position:relative;flex:0 0 auto;width:92px;aspect-ratio:4/3;border-radius:8px;overflow:hidden;border:2px solid var(--line2);background:#C9D2DC;padding:0}
+.thumbs .th img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbs .th.on{border:3px solid var(--green)}
+.thumbs .th .use{position:absolute;left:0;right:0;bottom:0;background:var(--green);color:#fff;font-size:10px;font-weight:700;text-align:center;padding:1px 0}
+.thumbs .th.add{border-style:dashed;background:#fff;color:var(--navy);font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.picker{position:fixed;inset:0;z-index:30;background:rgba(17,24,39,.97);display:flex;flex-direction:column;color:#fff}
+.picker .ph-top{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.picker .ph-top b{flex:1;font-size:17px}
+.picker .ph-grid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:4px 16px 16px;align-content:start}
+.picker .pc{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;border:3px solid transparent;background:#111;padding:0}
+.picker .pc img{width:100%;height:100%;object-fit:cover;display:block}
+.picker .pc.on{border-color:#22C55E}
+.picker .pc .lb{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px}
+.picker .pc.on .lb{background:#22C55E}
+.picker .pc .dl{position:absolute;right:8px;top:8px;width:36px;height:36px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:20px;line-height:1}
+.picker .ph-foot{display:flex;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:#111827}
+/* portrait (or a very narrow window): stack the panes. html.narrow is set by the fit script in <head>. */
+html.narrow,html.narrow body{overflow:auto}
+html.narrow #app{height:auto;min-height:100%}
+html.narrow .split,html.narrow .split.even,html.narrow .split.wide{display:flex;flex-direction:column;padding:16px}
+html.narrow .pane,html.narrow .side{overflow:visible}
+html.narrow .acts{flex:none;grid-template-columns:repeat(3,minmax(0,1fr))}
+html.narrow .cargo{min-width:0}
+html.narrow .rb{width:96px;height:96px;font-size:12px}
+html.narrow .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+html.narrow .foot .btn{min-width:0;flex:1}
+html.narrow .photo-stage .photo{height:auto;width:100%}
 </style>
 </head>
 <body>

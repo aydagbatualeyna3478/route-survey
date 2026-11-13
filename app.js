@@ -146,14 +146,114 @@
     document.querySelectorAll('.sheet').forEach(x => x.remove());
     const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="${esc(title)}"><b>${esc(title)}</b>
-      ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="image/*" data-i="${i}"></label>`
+      ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="image/*" data-i="${i}" ${it.multi ? 'multiple' : ''}></label>`
         : `<button class="btn ${it.cls || ''}" data-i="${i}">${it.icon || ''}${esc(it.label)}</button>`).join('')}
       <button class="btn dash" data-x="1">Vazgeç</button></div>`;
     document.body.appendChild(d);
     const close = () => d.remove();
     d.addEventListener('click', e => { if (e.target.closest('[data-x]')) return close(); const b = e.target.closest('button[data-i]'); if (b) { close(); items[b.dataset.i].run(); } });
-    d.querySelectorAll('input[data-i]').forEach(inp => inp.onchange = () => { const f = inp.files[0]; close(); if (f) items[inp.dataset.i].run(f); });
+    d.querySelectorAll('input[data-i]').forEach(inp => inp.onchange = () => { const fs = [...inp.files], it = items[inp.dataset.i]; close(); if (fs.length) it.run(it.multi ? fs : fs[0]); });
   }
+
+  // ---------- photos from a folder -> survey (EXIF time + GPS) ----------
+  let IMPORT = null;   // photos chosen on the import screen, waiting for the survey form to be saved
+  async function exifOf(file) {   // minimal JPEG EXIF reader: capture time and GPS position
+    try {
+      const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+      if (v.getUint16(0) !== 0xFFD8) return {};
+      let o = 2;
+      while (o + 10 < v.byteLength) {
+        const m = v.getUint16(o), len = v.getUint16(o + 2);
+        if ((m & 0xFF00) !== 0xFF00) break;
+        if (m === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) return tiff(v, o + 10);
+        o += 2 + len;
+      }
+    } catch (e) { /* not readable: treated as a photo without EXIF */ }
+    return {};
+  }
+  function tiff(v, t) {
+    const le = v.getUint16(t) === 0x4949, u16 = p => v.getUint16(p, le), u32 = p => v.getUint32(p, le);
+    const ifd = p => { const n = u16(p), out = {}; for (let i = 0; i < n; i++) { const e = p + 2 + i * 12; out[u16(e)] = { count: u32(e + 4), at: e + 8 }; } return out; };
+    const str = e => { const p = e.count > 4 ? t + u32(e.at) : e.at; let x = ''; for (let i = 0; i < e.count - 1; i++) x += String.fromCharCode(v.getUint8(p + i)); return x; };
+    const rats = e => { const p = t + u32(e.at), a = []; for (let i = 0; i < e.count; i++) a.push(u32(p + i * 8) / u32(p + i * 8 + 4)); return a; };
+    const res = {}, i0 = ifd(t + u32(t + 4));
+    if (i0[0x8769]) { const ex = ifd(t + u32(i0[0x8769].at)), d = ex[0x9003] || ex[0x9004]; if (d) res.date = str(d); }
+    if (!res.date && i0[0x0132]) res.date = str(i0[0x0132]);
+    if (i0[0x8825]) {
+      const g = ifd(t + u32(i0[0x8825].at));
+      if (g[2] && g[4]) {
+        const la = rats(g[2]), lo = rats(g[4]), dms = a => a[0] + (a[1] || 0) / 60 + (a[2] || 0) / 3600;
+        let lat = dms(la), lon = dms(lo);
+        if (g[1] && v.getUint8(g[1].at) === 83) lat = -lat;   // 'S'
+        if (g[3] && v.getUint8(g[3].at) === 87) lon = -lon;   // 'W'
+        if (isFinite(lat) && isFinite(lon) && (lat || lon)) { res.lat = lat; res.lon = lon; }
+      }
+    }
+    const m = res.date && res.date.match(/(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+    if (m) res.t = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+    return res;
+  }
+  async function importInto(sv, items) {   // one main obstacle per photo, in capture order; KM like in the field
+    const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
+    sv.track = []; sv.odo = 0; let km = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]; ov.textContent = `Fotoğraflar ekleniyor… ${i + 1} / ${items.length}`;
+      const rec = { id: DB.uid(), parentId: null, flag: '', obstacle: '', t: it.t || Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [], source: it.file.name };
+      try { rec.photoId = await DB.putBlob(await to43(it.file)); rec.aspect = 4 / 3; } catch (e) { rec.pendingImage = 'sat'; }
+      if (it.lat != null) {
+        rec.latDec = it.lat; rec.lonDec = it.lon; rec.lat = Geo.dms(it.lat, true); rec.lon = Geo.dms(it.lon, false);
+        GPS.extend(sv, { lat: it.lat, lon: it.lon, t: rec.t }); km = Math.round(sv.odo) / 1000;
+      }
+      rec.km = km; sv.records.push(rec);
+      if (i % 10 === 9) await DB.putSurvey(sv);
+    }
+    sv.status = 'done'; sv.imported = { at: Date.now(), count: items.length };
+    await DB.putSurvey(sv); ov.remove();
+    toast(`${items.length} fotoğraf eklendi. Engel tiplerini seç; sıra yanlışsa basılı tutup sürükle.`);
+  }
+  const importerView = async () => {
+    const android = /Android/i.test(navigator.userAgent);
+    let items = IMPORT ? IMPORT.items : [];
+    const draw = () => {
+      const withPos = items.filter(x => x.lat != null).length, noT = items.filter(x => !x.exifT).length;
+      const tf = t => new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      $app.innerHTML = `${bar('Fotoğraflardan etüt oluştur', '#/')}
+      <div class="split even">
+        <div class="pane">
+          <div class="card"><b>Eski usulle çekilmiş fotoğraflar</b>
+            <span class="hint">Bir etüdün fotoğraflarını seç. Her fotoğraf bir engel olur; çekim saatine göre 1, 2, 3… diye sıralanır. Konum bilgisi olan fotoğraflardan koordinat ve KM, sahadaki gibi hesaplanır.</span>
+            <label class="btn red" style="min-height:80px;font-size:18px;cursor:pointer">${imgSvg} Fotoğrafları seç<input class="hid" type="file" accept="image/jpeg,image/*" multiple id="ifiles"></label>
+            ${android ? '<span class="hint">Galeride klasörü açıp "Tümünü seç" ile hepsini birden seçebilirsin.</span>' : `<label class="btn" style="cursor:pointer">Klasör seç<input class="hid" type="file" webkitdirectory multiple id="idir"></label>`}</div>
+          <div class="note w">Engel tipi, yükseklikler, açıklamalar ve INFO/BYPASS fotoğraflarda yazmaz; bunlar sonra engel ekranında doldurulur. WhatsApp ile gönderilmiş fotoğraflarda konum silinmiş olur, orijinallerini kullan.</div>
+        </div>
+        <div class="pane">
+          ${items.length ? `<div class="card"><b>${items.length} fotoğraf</b>
+              <div class="stat4" style="color:var(--ink)"><div><b>${withPos}</b><span style="color:var(--mut)">konumlu</span></div><div><b>${items.length - withPos}</b><span style="color:var(--mut)">konumsuz</span></div>
+                <div><b>${items.length - noT}</b><span style="color:var(--mut)">çekim saatli</span></div></div>
+              ${items[0].t ? `<span class="hint">${tf(items[0].t)} → ${tf(items[items.length - 1].t)}</span>` : ''}
+              ${withPos < items.length ? `<span class="note w">${items.length - withPos} fotoğrafta konum yok: bunların KM'si bir önceki fotoğraftan alınır, konumu sonra elle girilebilir.</span>` : ''}
+              ${noT ? `<span class="note w">${noT} fotoğrafta çekim saati yok: dosya tarihine göre sıralandı.</span>` : ''}
+              <div style="max-height:260px;overflow:auto;font-size:13px;border:1px solid var(--line);border-radius:10px">${items.map((x, i) => `<div class="row" style="padding:6px 10px;border-bottom:1px solid var(--line);gap:8px"><b style="width:34px">${i + 1}</b><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.file.name)}</span><span class="hint">${x.t ? tf(x.t) : ''}</span>${x.lat != null ? '<span class="tag ok">konum</span>' : '<span class="tag warn">konum yok</span>'}</div>`).join('')}</div>
+            </div>
+            <button class="btn pri" id="inext" style="min-height:64px;font-size:17px">Devam: etüt bilgilerini gir</button>`
+          : '<div class="empty">Henüz fotoğraf seçilmedi.</div>'}
+        </div>
+      </div>`;
+      const take = async fl => {
+        const fs = [...fl].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic)$/i.test(f.name));
+        if (!fs.length) return toast('Fotoğraf bulunamadı');
+        toast('Fotoğraflar okunuyor…');
+        const out = [];
+        for (const f of fs) { const x = await exifOf(f); out.push({ file: f, lat: x.lat, lon: x.lon, exifT: x.t || null, t: x.t || f.lastModified || null }); }
+        out.sort((a, b) => (a.t || 0) - (b.t || 0) || a.file.name.localeCompare(b.file.name, 'tr', { numeric: true }));
+        items = out; IMPORT = { items }; draw();
+      };
+      document.getElementById('ifiles').onchange = e => take(e.target.files);
+      const d = document.getElementById('idir'); if (d) d.onchange = e => take(e.target.files);
+      const n = document.getElementById('inext'); if (n) n.onclick = () => go('#/new');
+    };
+    draw();
+  };
 
   // ---------- views ----------
   const V = {};
@@ -175,7 +275,7 @@
         <div class="hint">${esc(sv.project.date || '')} · ${fmt(sv.odo / 1000, 1)} km · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button></div></div>`;
     };
-    $app.innerHTML = `${bar('Etütlerim', null, '<button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>')}
+    $app.innerHTML = `${bar('Etütlerim', null, `<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>`)}
       <div class="full">${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="hint" style="text-align:center;margin-top:auto">Veriler bu cihazda saklanır, internetsiz de çalışır.</div></div>`;
   };
@@ -208,9 +308,11 @@
         <span>${note}</span>${posPick(key)}
         ${key !== 'company' && bid ? `<button type="button" class="btn sm" data-lrm="${key}" style="min-height:32px;font-size:12px;color:var(--badtx)">Kaldır</button>` : ''}</div>`;
     const refsOpen = p.refLV != null && p.refLV !== '' || p.refMV != null && p.refMV !== '' || p.refHV != null && p.refHV !== '';
-    $app.innerHTML = `${bar(sv ? 'Etüt bilgileri' : 'Yeni etüt raporu', sv ? `#/s/${sv.id}` : '#/')}
+    const imp = !sv && IMPORT ? IMPORT : null;
+    $app.innerHTML = `${bar(sv ? 'Etüt bilgileri' : imp ? 'Fotoğraflardan etüt · bilgiler' : 'Yeni etüt raporu', sv ? `#/s/${sv.id}` : imp ? '#/import' : '#/')}
     <form class="split even" id="pf" autocomplete="off">
       <div class="pane">
+        ${imp ? `<div class="note g">${imp.items.length} fotoğraf, çekim saatine göre sıralanıp engel olarak eklenecek${imp.items.some(x => x.lat == null) ? ` (${imp.items.filter(x => x.lat == null).length} tanesinde konum yok)` : ''}. Etüt bilgilerini girip kaydet.</div>` : ''}
         <div class="sec">Güzergah</div>
         <div class="g2"><label class="f">Başlangıç noktası<input name="start" required value="${esc(p.start.name)}" placeholder="Fabrika / saha adı"></label>
           <label class="f">Varış noktası<input name="end" required value="${esc(p.end.name)}" placeholder="Liman / saha adı"></label></div>
@@ -301,11 +403,13 @@
       await DB.setSetting('defaults', { company: s.project.company, companyShort: s.project.companyShort, preparedBy: s.project.preparedBy, formCode: s.project.formCode });
       await DB.putSurvey(s);
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      if (imp) { await importInto(s, imp.items); IMPORT = null; }
       go(`#/s/${s.id}`);
     };
   };
 
   // ----- active survey: obstacle list on the left, actions on the right -----
+  const SELST = {};   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     const act = sv.status === 'active';
@@ -322,7 +426,7 @@
       const txt = (r.actions || r.remarks || '').slice(0, 90);
       return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
-        <span class="s">KM ${fmt(r.km, 1)}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}</span>
+        <span class="s">KM ${fmt(r.km, 1)}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}</button>`;
     };
     let html = '';
@@ -341,7 +445,7 @@
             ${act ? '<span class="hint">Konum fotoğraf çekerken alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM <b id="km" style="color:var(--ink)">${fmt(sv.odo / 1000, 1)}</b></span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
-          <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun.</div>
+          <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun. Sırayı değiştirmek için engele <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(bp.obstacle)}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
@@ -354,9 +458,112 @@
         </div>
       </div>`;
     const onSel = document.querySelector('.rec.on'); if (onSel) onSel.scrollIntoView({ block: 'nearest' });
+
+    /* reorder: long press selects the obstacle and lets you drag it; while selecting, a tap adds/removes an
+       obstacle. Numbers are not stored — they follow the list order, so a move renumbers everything. */
+    const list = document.getElementById('list'), keep = SELST[id] || { on: false, ids: [] };
+    let selMode = keep.on, lp = null, drag = null, suppressClick = false, delSure = false;
+    const sel = new Set(keep.ids.filter(x => sv.records.some(r => r.id === x)));
+    const isUnit = (c, grp) => grp ? c.classList.contains('grp') : c.classList.contains('rec');
+    const unitOf = rec => rec.classList.contains('sub') ? rec : rec.closest('.grp');
+    const recOf = u => u.classList.contains('grp') ? u.querySelector(':scope > .rec') : u;
+    const remember = () => { SELST[id] = { on: selMode, ids: [...sel] }; };
+    const paintSel = () => {
+      list.classList.toggle('selmode', selMode);
+      list.querySelectorAll('.rec').forEach(b => b.classList.toggle('chk', sel.has(b.dataset.rec)));
+      let sb = list.querySelector('.selbar');
+      if (!selMode) { if (sb) sb.remove(); remember(); return; }
+      if (!sb) { sb = document.createElement('div'); sb.className = 'selbar'; list.appendChild(sb); }   // fixed over the top bar: the list does not shift
+      const n = sel.size;
+      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
+        <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="done">Bitti</button>`;
+      remember();
+    };
+    const applyDom = async () => {   // list order on screen -> sv.records (each main followed by its INFO/BYPASS)
+      const byId = Object.fromEntries(sv.records.map(r => [r.id, r])), out = [];
+      list.querySelectorAll(':scope > .grp').forEach(g => {
+        out.push(byId[g.querySelector(':scope > .rec').dataset.rec]);
+        g.querySelectorAll(':scope > .subs > .rec').forEach(c => out.push(byId[c.dataset.rec]));
+      });
+      for (const r of sv.records) if (!out.includes(r)) out.push(r);
+      sv.records = out.filter(Boolean); await DB.putSurvey(sv); remember(); V.survey(id);
+    };
+    const step = async dir => {   // move every selected obstacle one place up/down among its neighbours
+      const units = [...new Set([...sel].map(x => list.querySelector(`.rec[data-rec="${x}"]`)).filter(Boolean).map(unitOf))];
+      const ordered = [...list.querySelectorAll('.grp, .subs > .rec')].filter(u => units.includes(u));
+      if (dir > 0) ordered.reverse();
+      let moved = false;
+      for (const u of ordered) {
+        const grp = u.classList.contains('grp');
+        let nb = dir < 0 ? u.previousElementSibling : u.nextElementSibling;
+        while (nb && !isUnit(nb, grp)) nb = dir < 0 ? nb.previousElementSibling : nb.nextElementSibling;
+        if (!nb || units.includes(nb)) continue;
+        if (dir < 0) u.parentElement.insertBefore(u, nb); else u.parentElement.insertBefore(nb, u);
+        moved = true;
+      }
+      if (moved) await applyDom(); else toast(dir < 0 ? 'Zaten en üstte' : 'Zaten en altta');
+    };
+    const startDrag = (rec, pid) => {
+      lp = null; suppressClick = true; if (navigator.vibrate) navigator.vibrate(25);
+      if (!selMode) sel.clear();
+      selMode = true; sel.add(rec.dataset.rec); delSure = false; paintSel();
+      const u = unitOf(rec); u.classList.add('dragging');
+      drag = { u, y: null, moved: false, iv: setInterval(() => { if (drag && drag.y != null) { const lr = list.getBoundingClientRect(); if (drag.y < lr.top + 60) list.scrollTop -= 12; else if (drag.y > lr.bottom - 60) list.scrollTop += 12; moveDrag(drag.y); } }, 30) };
+      try { list.setPointerCapture(pid); } catch (e) {}
+    };
+    const moveDrag = y => {
+      drag.y = y; const u = drag.u, box = u.parentElement, grp = u.classList.contains('grp');
+      const nextU = () => { let n = u.nextElementSibling; while (n && !isUnit(n, grp)) n = n.nextElementSibling; return n; };
+      const prevU = () => { let n = u.previousElementSibling; while (n && !isUnit(n, grp)) n = n.previousElementSibling; return n; };
+      let n;
+      while ((n = nextU()) && y > n.getBoundingClientRect().top + n.getBoundingClientRect().height / 2) { box.insertBefore(n, u); drag.moved = true; }
+      while ((n = prevU()) && y < n.getBoundingClientRect().top + n.getBoundingClientRect().height / 2) { box.insertBefore(u, n); drag.moved = true; }
+    };
+    const endDrag = async () => {
+      const { u, moved } = drag; clearInterval(drag.iv); drag = null; u.classList.remove('dragging');
+      if (!moved) return;
+      const grp = u.classList.contains('grp'), box = u.parentElement;   // other selected obstacles follow the dragged one
+      const others = [...box.children].filter(c => c !== u && isUnit(c, grp) && sel.has(recOf(c).dataset.rec));
+      let after = u; for (const o of others) { box.insertBefore(o, after.nextSibling); after = o; }
+      await applyDom();
+    };
+    list.addEventListener('pointerdown', e => {
+      const rec = e.target.closest('.rec'); if (!rec || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      const pid = e.pointerId; suppressClick = false;
+      lp = { x0: e.clientX, y0: e.clientY, t: setTimeout(() => startDrag(rec, pid), 450) };
+    });
+    list.addEventListener('pointermove', e => {
+      if (drag) return moveDrag(e.clientY);
+      if (lp && Math.hypot(e.clientX - lp.x0, e.clientY - lp.y0) > 10) { clearTimeout(lp.t); lp = null; }
+    });
+    const pend = () => { if (lp) { clearTimeout(lp.t); lp = null; } if (drag) endDrag(); };
+    list.addEventListener('pointerup', pend); list.addEventListener('pointercancel', pend);
+    list.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
+    list.addEventListener('contextmenu', e => e.preventDefault());
+    if (selMode) paintSel();
+
     $app.onclick = async e => {
+      const sb = e.target.closest('[data-sel]');
+      if (sb) {
+        const k = sb.dataset.sel;
+        if (k === 'done') { selMode = false; sel.clear(); delSure = false; return paintSel(); }
+        if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
+        if (k === 'del') {
+          if (!delSure) { delSure = true; return paintSel(); }
+          const gone = sv.records.filter(x => sel.has(x.id) || sel.has(x.parentId));
+          for (const x of gone) for (const b of [x.photoId, ...(x.extras || [])]) await DB.delBlob(b);
+          sv.records = sv.records.filter(x => !gone.includes(x));
+          if (gone.some(x => x.id === sv.bypassParent)) sv.bypassParent = null;
+          if (gone.some(x => x.id === sv.selected)) sv.selected = null;
+          delete SELST[id]; await DB.putSurvey(sv); toast(`${gone.length} kayıt silindi`); return V.survey(id);
+        }
+      }
       const rc = e.target.closest('[data-rec]');
-      if (rc) return go(`#/r/${sv.id}/${rc.dataset.rec}`);
+      if (rc) {
+        if (suppressClick) { suppressClick = false; return; }
+        if (selMode) { const k = rc.dataset.rec; sel.has(k) ? sel.delete(k) : sel.add(k); delSure = false; return paintSel(); }
+        delete SELST[id]; return go(`#/r/${sv.id}/${rc.dataset.rec}`);
+      }
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
@@ -374,7 +581,9 @@
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     const recs = orderedRecords(sv), bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
     const infoParent = q.info ? recs.find(r => r.id === q.info) : null, target = q.replace ? sv.records.find(r => r.id === q.replace) : null;
-    const back = target ? `#/r/${sv.id}/${target.id}` : infoParent ? `#/r/${sv.id}/${infoParent.id}` : `#/s/${sv.id}`;
+    const extraFor = q.extra ? recs.find(r => r.id === q.extra) : null;   // extra photos: camera stays open, shot after shot
+    let shots = 0;
+    const back = target ? `#/r/${sv.id}/${target.id}` : infoParent ? `#/r/${sv.id}/${infoParent.id}` : extraFor ? `#/r/${sv.id}/${extraFor.id}` : `#/s/${sv.id}`;
     document.body.style.background = '#000';
     $app.innerHTML = `<div style="flex:1;min-height:0;display:flex;background:#000;color:#fff;position:relative">
       <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:12px">
@@ -382,17 +591,18 @@
           <video id="vid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
           <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(#fff3,#fff3) 33.33% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 66.66% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 0 33.33%/100% 1px no-repeat,linear-gradient(#fff3,#fff3) 0 66.66%/100% 1px no-repeat"></div>
           <div id="cmsg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:15px;color:#E5E7EB"></div>
-          ${target ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${target.no} · fotoğrafı değiştir</span>`
+          ${extraFor ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${extraFor.no} · ek fotoğraf: <b id="xc">0</b></span>`
+            : target ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${target.no} · fotoğrafı değiştir</span>`
             : infoParent ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${infoParent.no} → INFO</span>`
             : bp ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${bp.no} BYPASS</span>` : ''}
         </div>
       </div>
       <div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 12px">
-        <div id="sat" style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#9CA3AF;font-size:12px;text-align:center;min-height:70px">${satSvg}<span id="sact">Konum aranıyor…</span></div>
+        <div id="sat" style="${extraFor ? 'visibility:hidden;' : ''}display:flex;flex-direction:column;align-items:center;gap:4px;color:#9CA3AF;font-size:12px;text-align:center;min-height:70px">${satSvg}<span id="sact">Konum aranıyor…</span></div>
         <button id="shut" aria-label="Fotoğraf çek" style="width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:transparent;padding:0;display:flex;align-items:center;justify-content:center"><span style="width:76px;height:76px;border-radius:50%;background:#fff;display:block"></span></button>
         <div style="display:flex;flex-direction:column;gap:10px;width:100%">
-          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal"></label>
-          <button class="btn sm" id="cclose" style="background:#1F2937;color:#fff;border-color:#374151">Kapat</button>
+          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal" ${extraFor ? 'multiple' : ''}></label>
+          <button class="btn sm" id="cclose" style="${extraFor ? 'background:#22C55E;border-color:#22C55E;color:#06260F' : 'background:#1F2937;color:#fff;border-color:#374151'}">${extraFor ? 'Bitti · seç' : 'Kapat'}</button>
         </div>
       </div></div>`;
     const vid = document.getElementById('vid'), msg = document.getElementById('cmsg'), sat = document.getElementById('sat'), sact = document.getElementById('sact');
@@ -403,7 +613,7 @@
       sat.style.color = col;
       sact.textContent = GPS.err === 'izin' ? 'Konum izni yok' : GPS.err === 'yok' ? 'Konum yok' : !f ? 'Konum aranıyor…' : f.acc <= PRECISE ? `Hassas konum ±${Math.round(f.acc)} m` : `±${Math.round(f.acc)} m`;
     };
-    GPS.last = null; GPS.on(paint); paint();
+    if (!extraFor) { GPS.last = null; GPS.on(paint); paint(); }
     const tick = setInterval(paint, 2000);
     const stop = () => { clearInterval(tick); GPS.off(); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; document.body.style.background = ''; window.removeEventListener('hashchange', stop); };
     window.addEventListener('hashchange', stop);
@@ -414,6 +624,11 @@
       vid.srcObject = stream; await vid.play().catch(() => {});
     } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
     async function save(blob, fromGallery) {
+      if (extraFor) {   // keep shooting; each photo is kept as a candidate for this obstacle
+        const rr = sv.records.find(x => x.id === extraFor.id);
+        rr.extras = rr.extras || []; rr.extras.push(await DB.putBlob(await to43(blob)));
+        await DB.putSurvey(sv); shots += 1; document.getElementById('xc').textContent = shots; return;
+      }
       if (busy) return; busy = true;
       let pos = GPS.fresh(8000);
       if (!pos && !fromGallery) { sact.textContent = 'Konum bekleniyor…'; pos = await new Promise(res => { const t0 = Date.now(), iv = setInterval(() => { const f = GPS.fresh(8000); if (f || Date.now() - t0 > 8000) { clearInterval(iv); res(f); } }, 300); }); }
@@ -435,8 +650,8 @@
       document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
       c.toBlob(b => save(b), 'image/jpeg', 0.9);
     };
-    document.getElementById('cgal').onchange = e => e.target.files[0] && save(e.target.files[0], false);
-    document.getElementById('cclose').onclick = () => go(back);
+    document.getElementById('cgal').onchange = async e => { for (const f of [...e.target.files]) await save(f, false); };
+    document.getElementById('cclose').onclick = () => go(extraFor && shots ? back + '?pick=1' : back);
   };
 
   // ----- add record: pick type, take photo -----
@@ -515,12 +730,16 @@
   };
 
   // ----- record form: photo on the left, details on the right -----
-  V.record = async (id, rid) => {
+  V.record = async (id, rid, q) => {
+    q = q || {};
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     const recs = orderedRecords(sv), r = recs.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
     if (sv.selected !== r.id) { sv.selected = r.id; }
     const st = settingsOf(sv), refs = R.refs(st);
     const u = await blobUrl(r.photoId);
+    r.extras = r.extras || [];
+    const thumbs = [];   // [blobId, url] — the photo used in the report first, then the extra shots
+    for (const b of [r.photoId, ...r.extras].filter(Boolean)) thumbs.push([b, await blobUrl(b)]);
     const isOH = /^Overhead/.test(r.obstacle), isBr = r.obstacle === 'Bridge', isCu = r.obstacle === 'Culvert';
     const textKey = isOH ? 'actions' : 'remarks';
     const limit = () => { if (r.obstacle === 'Overhead Structure') return refs.min; const c = R.lineClass(r.fields.type); return c ? refs[c] : refs.LV; };
@@ -552,6 +771,8 @@
           <div class="photo">${u ? `<img src="${u}" alt="">` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
             <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button></div>
+          ${u ? `<div class="thumbs" aria-label="Bu engelin fotoğrafları">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
+            <button class="th add" id="xadd">${camSvg}<span>Ek fotoğraf</span></button></div>` : ''}
           <div class="card"><div class="g3">
             <label class="f">KM<input id="km" inputmode="decimal" value="${esc(fmt(r.km, 1))}"></label>
             <label class="f">Enlem<input id="la" inputmode="decimal" value="${r.latDec == null ? '' : r.latDec.toFixed(6)}"></label>
@@ -630,17 +851,21 @@
         { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?replace=${r.id}`); } },
         { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(f)); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); } },
       ]);
+      if (g('xadd')) g('xadd').onclick = () => sheet(`${r.no} · Ek fotoğraf`, [
+        { label: 'Fotoğraf çek (art arda)', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?extra=${r.id}`); } },
+        { label: 'Galeriden seç (birden çok)', icon: imgSvg, file: true, multi: true, run: async fs => { read(); toast('Ekleniyor…'); for (const f of fs) r.extras.push(await DB.putBlob(await to43(f))); await DB.putSurvey(sv); picker(); } },
+      ]);
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
       g('del').onclick = async e => {
         const b = e.target.closest('button');
         if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Kaydı ve alt kayıtlarını sil'; return; }
         const gone = sv.records.filter(x => x.id === r.id || x.parentId === r.id);
-        for (const x of gone) await DB.delBlob(x.photoId);
+        for (const x of gone) for (const b of [x.photoId, ...(x.extras || [])]) await DB.delBlob(b);
         sv.records = sv.records.filter(x => !gone.includes(x)); if (sv.bypassParent === r.id) sv.bypassParent = null; sv.selected = null;
         await DB.putSurvey(sv); go(`#/s/${sv.id}`);
       };
       g('cancel').onclick = async () => {   // a fresh photo without a type is thrown away; otherwise just leave without saving
-        if (!r.obstacle) { await DB.delBlob(r.photoId); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv);  }
+        if (!r.obstacle) { for (const b of [r.photoId, ...(r.extras || [])]) await DB.delBlob(b); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv);  }
         go(`#/s/${sv.id}`);
       };
       g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; }
@@ -652,6 +877,7 @@
         const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
         if (ty) return setType(ty.dataset.type);
         if (tc) { document.getElementById('cnw').style.display = ''; document.getElementById('cnv').focus(); return; }
+        const pk = e.target.closest('[data-pick]'); if (pk) { read(); return picker(pk.dataset.pick); }
         const s = e.target.closest('[data-sub]'), p = e.target.closest('[data-ph]'), c = e.target.closest('[data-col]'), hd = e.target.closest('[data-hdel]'), nav = e.target.closest('[data-go]');
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
@@ -662,7 +888,47 @@
         const cv = e.target.closest('[data-curve]'); if (cv) { read(); r.remarks = CURVES[cv.dataset.curve]; draw(); }
       };
     };
+    /* full-screen picker: all photos of this obstacle side by side; the one tapped goes into the report */
+    async function picker(focus) {
+      const all = [r.photoId, ...r.extras].filter(Boolean);
+      let chosen = focus && all.includes(focus) ? focus : r.photoId;
+      document.querySelectorAll('.picker').forEach(x => x.remove());
+      const d = document.createElement('div'); d.className = 'picker'; document.body.appendChild(d);
+      const paint = async () => {
+        const list = [r.photoId, ...r.extras].filter(Boolean); let h = '';
+        for (let i = 0; i < list.length; i++) {
+          const b = list[i], x = await blobUrl(b);
+          h += `<button class="pc ${b === chosen ? 'on' : ''}" data-c="${b}"><img src="${x}" alt="Fotoğraf ${i + 1}"><span class="lb">${b === chosen ? 'Raporda kullanılacak' : i + 1}</span>${b !== r.photoId ? `<span class="dl" data-del="${b}" role="button" aria-label="Bu fotoğrafı sil">×</span>` : ''}</button>`;
+        }
+        d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(r.obstacle || 'Engel')} — raporda kullanılacak fotoğrafı seç</b><span style="font-size:13px;color:#D1D5DB">${list.length} fotoğraf</span></div>
+          <div class="ph-grid">${h}</div>
+          <div class="ph-foot"><button class="btn" data-x="1" style="background:#1F2937;color:#fff;border-color:#374151">Vazgeç</button>
+            <button class="btn" id="pmore" style="background:#1F2937;color:#fff;border-color:#374151">${camSvg} Daha çek</button><span style="flex:1"></span>
+            <button class="btn pri" id="puse" style="min-width:220px;background:#22C55E;border-color:#22C55E;color:#06260F">Bunu kullan</button></div>`;
+      };
+      await paint();
+      d.onclick = async e => {
+        if (e.target.closest('[data-x]')) return d.remove();
+        const del = e.target.closest('[data-del]');
+        if (del) {
+          if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'Sil?'; del.style.width = 'auto'; del.style.padding = '0 10px'; del.style.background = '#B4232A'; return; }
+          const b = del.dataset.del; r.extras = r.extras.filter(x => x !== b); await DB.delBlob(b); urls.delete(b);
+          if (chosen === b) chosen = r.photoId; await DB.putSurvey(sv); return paint();
+        }
+        const c = e.target.closest('[data-c]'); if (c) { chosen = c.dataset.c; return paint(); }
+        if (e.target.closest('#pmore')) { d.remove(); await DB.putSurvey(sv); return go(`#/cam/${sv.id}?extra=${r.id}`); }
+        if (e.target.closest('#puse')) {
+          if (chosen !== r.photoId) {   // swap: the old report photo stays as an extra
+            r.extras = r.extras.filter(x => x !== chosen); r.extras.unshift(r.photoId); r.photoId = chosen;
+            if ((r.ann || []).length) toast('Fotoğraf değişti; işaretleri kontrol et');
+          }
+          await DB.putSurvey(sv); d.remove(); V.record(id, rid);
+        }
+      };
+      window.addEventListener('hashchange', () => d.remove(), { once: true });
+    }
     autoAct(); draw();
+    if (q.pick) { history.replaceState(null, '', `#/r/${id}/${rid}`); picker(); }
   };
 
   // ----- photo annotation -----
@@ -794,11 +1060,12 @@
     try {
       if (!p.length) await V.home();
       else if (p[0] === 'new') await V.form(null);
+      else if (p[0] === 'import') await importerView();
       else if (p[0] === 'edit') await V.form(p[1]);
       else if (p[0] === 's') await V.survey(p[1]);
       else if (p[0] === 'add') await V.add(p[1], q);
       else if (p[0] === 'cam') await V.camera(p[1], q);
-      else if (p[0] === 'r') await V.record(p[1], p[2]);
+      else if (p[0] === 'r') await V.record(p[1], p[2], q);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);
       else go('#/');
