@@ -449,7 +449,9 @@
       const lim = limit();
       const hrow = (h, i) => {
         const v = pn(h.value), cls = v == null ? '' : v < lim ? 'bad' : 'ok';
-        return `<div class="hrow ${cls}"><input class="lab" data-hl="${i}" value="${esc(h.label)}" aria-label="Etiket"><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
+        const opts = ['H', 'H1', 'H2', 'H3', 'HL', 'HM', 'HR'];
+        return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:#fff">
+            <option value="" ${h.label ? '' : 'selected'}>Seç</option>${opts.map(o => `<option ${o === h.label ? 'selected' : ''}>${o}</option>`).join('')}</select><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
           ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>`;
       };
@@ -481,7 +483,8 @@
             <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
           ${isBr ? `<div class="g2"><label class="f">Bridge name<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label><label class="f">Bridge spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label></div>` : ''}
           ${isCu ? `<label class="f">Culvert spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 1x5m"></label>` : ''}
-          ${isOH ? `<div class="sec">Yükseklikler · sınır ${fmt(lim, 2)} m</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle (H1 / H2 / HR / HL)</button>` : ''}
+          ${isOH && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
+          ${isOH ? `<div class="sec">Yükseklikler · sınır ${fmt(lim, 2)} m</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
           ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].map((p, i) => `<button class="chip" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-ph="${i}">${esc(p)}</button>`).join('')}</div>` : ''}
           <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
@@ -502,7 +505,7 @@
       if (g('bn')) r.fields.name = g('bn').value.trim();
       if (g('sp')) r.fields.spans = g('sp').value.trim();
       document.querySelectorAll('[data-hv]').forEach(i => { r.heights[i.dataset.hv].value = pn(i.value); });
-      document.querySelectorAll('[data-hl]').forEach(i => { r.heights[i.dataset.hl].label = i.value.trim() || 'H'; });
+      document.querySelectorAll('[data-hl]').forEach(i => { r.heights[i.dataset.hl].label = i.value; });
       const tx = g('tx').value;
       if (tx !== (r[textKey] || '')) { r[textKey] = tx; if (isOH) r.actionAuto = false; }
     };
@@ -519,7 +522,8 @@
       const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
       infq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); await DB.putSurvey(sv); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: 'Satellite View' }); };
       if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
-      if (g('hadd')) g('hadd').onclick = () => { read(); if (r.heights.length === 1 && r.heights[0].label === 'H') r.heights[0].label = 'H1'; r.heights.push({ label: 'H' + (r.heights.length + 1), value: null }); draw(); };
+      if (g('hadd')) g('hadd').onclick = () => { read(); r.heights.push({ label: '', value: null }); draw(); };
+      document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
       g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); await DB.putSurvey(sv); V.record(id, rid); };
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
       g('del').onclick = async e => {
@@ -534,7 +538,9 @@
         if (!r.obstacle) { await DB.delBlob(r.photoId); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv);  }
         go(`#/s/${sv.id}`);
       };
-      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; } autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
+      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; }
+        if (isOH && r.heights.some(h => !h.label && h.value != null)) { toast('Her yükseklik için etiket seç (H, H1, H2, HL, HM, HR)'); return; }
+        if (isOH) r.heights = r.heights.filter(h => h.label || h.value != null); autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
       $app.onclick = async e => {
         const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
         if (ty) return setType(ty.dataset.type);
@@ -542,7 +548,7 @@
         const s = e.target.closest('[data-sub]'), p = e.target.closest('[data-ph]'), c = e.target.closest('[data-col]'), hd = e.target.closest('[data-hdel]'), nav = e.target.closest('[data-go]');
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
-        if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = (r[textKey] ? r[textKey].trim() + ' ' : '') + t; if (isOH) r.actionAuto = false; draw(); const tx = document.getElementById('tx'); tx.focus(); const k = tx.value.lastIndexOf('%'); if (k >= 0 && /about %/.test(tx.value)) tx.setSelectionRange(k, k); }
+        if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = t; if (isOH) r.actionAuto = false; draw(); const tx = document.getElementById('tx'); tx.focus(); const k = tx.value.lastIndexOf('%'); if (k >= 0 && /about %/.test(tx.value)) tx.setSelectionRange(k, k); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
       };
