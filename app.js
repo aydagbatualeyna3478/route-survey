@@ -240,8 +240,7 @@
     const act = sv.status === 'active';
     if (act) GPS.start(sv); else GPS.stop();
     const st = settingsOf(sv), recs = orderedRecords(sv);
-    let sel = recs.find(r => r.id === sv.selected) || recs.filter(r => !r.parentId).pop() || null;
-    const mainOf = r => r && (r.parentId ? recs.find(x => x.id === r.parentId) : r);
+    const last = sv.selected;
     const status = r => {
       const s = R.suggest(r, st), col = R.highlightOf(r, st);
       if (col) return `<span class="tag bad">${COLNAME[col] || col}</span>`;
@@ -251,7 +250,7 @@
     const line = async (r, sub) => {
       const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
-      return `<button class="rec ${sub ? 'sub' : ''} ${sel && sel.id === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : '<span class="ph"></span>'}
+      return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : '<span class="ph"></span>'}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${esc(r.obstacle)}</span>
         <span class="s">KM ${fmt(r.km, 1)}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}</button>`;
@@ -262,7 +261,6 @@
       html += `<div class="grp">${await line(m)}${subs.length ? `<div class="subs">${(await Promise.all(subs.map(x => line(x, true)))).join('')}</div>` : ''}</div>`;
     }
     const bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
-    const target = mainOf(sel);
     const rb = (attrs, cls, icon, label, dis) => `<button class="rb ${cls}" ${attrs} ${dis ? 'disabled' : ''}>${icon || ''}<span>${label}</span></button>`;
     $app.innerHTML = `<div class="bar"><button class="back" data-go="#/" aria-label="Geri">${backSvg}</button>
         <h1>${esc(sv.project.start.name)} &gt; ${esc(sv.project.end.name)}</h1>${cargoBox(sv.project)}</div>
@@ -273,14 +271,13 @@
             ${act ? '<span class="gps" id="gps"><i></i><span>GPS aranıyor…</span></span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM <b id="km" style="color:var(--ink)">${fmt(sv.odo / 1000, 1)}</b></span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
-          ${sel ? `<div class="note" style="background:var(--sel);border:1px solid #B8CBE4;color:var(--navy)">Seçili: <b>${sel.no} · ${esc(sel.obstacle)}</b> · Info / Bypass buna eklenir. Düzenlemek için tekrar dokun.</div>` : ''}
+          <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun.</div>
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(bp.obstacle)}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb(`data-go="#/add/${sv.id}?mode=nophoto"`, '', '', 'Fotoğrafsız Engel Ekle')
-              + rb(`data-go="#/add/${sv.id}?mode=sat${target ? '&parent=' + target.id : ''}"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
-              + rb(`data-go="#/add/${sv.id}?parent=${target ? target.id : ''}&flag=INFO"`, 'grn', '', 'Info Ekle', !target)
-              + rb('', 'ghost', '', '') + rb('', 'ghost', '', '')
-              + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('data-act="bypass"', 'grn', '', 'Bypass Ekle', !target))
+              + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
+              + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '')
+              + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/add/${sv.id}"`, 'red', camSvg, 'Yeni Engel Ekle')
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor')}
           </div>
@@ -290,13 +287,9 @@
     const onSel = document.querySelector('.rec.on'); if (onSel) onSel.scrollIntoView({ block: 'nearest' });
     $app.onclick = async e => {
       const rc = e.target.closest('[data-rec]');
-      if (rc) {
-        if (sel && sel.id === rc.dataset.rec) return go(`#/r/${sv.id}/${sel.id}`);
-        sv.selected = rc.dataset.rec; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; return V.survey(id);
-      }
+      if (rc) return go(`#/r/${sv.id}/${rc.dataset.rec}`);
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
-      if (a.dataset.act === 'bypass') { sv.bypassParent = target.id; await DB.putSurvey(sv); return go(`#/add/${sv.id}`); }
       if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } GPS.flush(); sv.status = 'done'; sv.bypassParent = null; }
       if (a.dataset.act === 'resume') sv.status = 'active';
       await DB.putSurvey(sv); V.survey(id);
@@ -308,15 +301,16 @@
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     if (sv.status === 'active') GPS.start(sv);
     const recs = orderedRecords(sv), mode = q.mode || 'photo';
-    let parent = q.parent ? recs.find(r => r.id === q.parent) : (sv.bypassParent ? recs.find(r => r.id === sv.bypassParent) : null);
+    const mains = recs.filter(r => !r.parentId);
+    let parent = q.parent ? recs.find(r => r.id === q.parent) : mode === 'sat' ? mains[mains.length - 1] : (sv.bypassParent ? recs.find(r => r.id === sv.bypassParent) : null);
     if (parent && parent.parentId) parent = recs.find(r => r.id === parent.parentId);
-    const flag = q.parent ? (q.flag || 'INFO') : (parent ? 'BYPASS' : '');
+    const flag = q.parent || (mode === 'sat' && parent) ? (q.flag || 'INFO') : (parent ? 'BYPASS' : '');
     const custom = [...new Set(sv.records.map(r => r.obstacle).filter(t => !TYPES.includes(t)))];
     let type = mode === 'sat' ? 'Satellite View' : flag === 'INFO' ? 'Satellite View' : null, all = false, customName = '';
     const title = mode === 'sat' ? 'Uydu fotoğrafı ekle' : mode === 'nophoto' ? 'Fotoğrafsız engel ekle' : parent ? `Yeni kayıt · ${parent.no}-… ${flag}` : 'Yeni engel ekle';
     const draw = () => {
       const list = all ? TYPES : QUICK.concat(['Satellite View', 'Drone View']);
-      $app.innerHTML = `${bar(title, `#/s/${sv.id}`, parent ? `<span class="tag sub">${parent.no} · ${esc(parent.obstacle)} → ${flag}</span>` : '')}
+      $app.innerHTML = `${bar(title, `#/s/${sv.id}`, parent && mode !== 'sat' ? `<span class="tag sub">${parent.no} · ${esc(parent.obstacle)} → ${flag}</span>` : '')}
       <div class="split">
         <div class="pane">
           <div class="sec">Engel tipi</div>
@@ -328,7 +322,9 @@
         <div class="pane">
           ${mode === 'nophoto' ? `<div class="sec">Fotoğrafsız kayıt</div><span class="hint">Konum ve KM şu anki GPS'ten alınır. Fotoğrafı sonradan da ekleyebilirsin.</span>
               <button class="btn red" id="nop" style="min-height:90px;font-size:18px">Kaydı oluştur</button>`
-            : mode === 'sat' ? `<div class="sec">Uydu / drone görüntüsü</div><span class="hint">${parent ? `${parent.no} · ${esc(parent.obstacle)} altına INFO olarak eklenir; konum ve KM bu engelden alınır.` : 'Yeni engel olarak eklenir.'}</span>
+            : mode === 'sat' ? `<div class="sec">Uydu / drone görüntüsü</div>
+              ${mains.length ? `<label class="f">Hangi engele ait?<select id="par">${mains.slice().reverse().map(m => `<option value="${m.id}" ${parent && parent.id === m.id ? 'selected' : ''}>${m.no} · ${esc(m.obstacle)} · KM ${fmt(m.km, 1)}</option>`).join('')}</select></label>
+                <span class="hint">Seçilen engelin altına INFO olarak eklenir; konum ve KM o engelden alınır.</span>` : '<span class="hint">Henüz engel yok; yeni kayıt olarak eklenir.</span>'}
               <label class="btn red" style="min-height:90px;font-size:18px">${imgSvg} Galeriden seç<input class="hid" type="file" accept="image/*" id="gal"></label>`
             : `<div class="sec">Fotoğraf</div>
               <label class="btn red" style="min-height:110px;font-size:20px">${camSvg} Fotoğraf çek<input class="hid" type="file" accept="image/*" capture="environment" id="cam"></label>
@@ -336,8 +332,9 @@
           <div class="hint" id="pos"></div>
         </div>
       </div>`;
-      const ct = document.getElementById('ct');
+      const ct = document.getElementById('ct'), par = document.getElementById('par');
       ct.oninput = () => { customName = ct.value; };
+      if (par) par.onchange = () => { parent = recs.find(r => r.id === par.value); };
       $app.onclick = e => {
         const t = e.target.closest('[data-type]');
         if (t) { type = t.dataset.type; customName = ''; draw(); return; }
@@ -602,7 +599,7 @@
   // ---------- router ----------
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
   async function route() {
-    $app.onclick = null; $app.onchange = null; window.scrollTo(0, 0);
+    $app.onclick = null; $app.onchange = null; window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach(t => t.remove());
     const [path, qs] = (location.hash.slice(1) || '/').split('?'), p = path.split('/').filter(Boolean), q = Object.fromEntries(new URLSearchParams(qs || ''));
     try {
       if (!p.length) await V.home();
