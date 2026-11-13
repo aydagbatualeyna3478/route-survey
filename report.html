@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Route Survey Report</title>
+<link rel="stylesheet" href="report.css">
+<style>
+#tb{position:sticky;top:0;z-index:10;background:#1E3A5F;color:#fff;display:flex;gap:10px;align-items:center;padding:10px 12px;font:15px system-ui,sans-serif}
+#tb button,#tb a{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 14px;min-height:44px;background:#fff;color:#1E3A5F;text-decoration:none}
+#tb span{flex:1;font-size:13px}
+@media screen{#report{zoom:var(--z,1)}}
+@media print{#tb{display:none}}
+</style>
+</head>
+<body>
+<div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
+<main id="report"></main>
+<script src="db.js"></script>
+<script src="rules.js"></script>
+<script>
+(async () => {
+  const id = location.hash.slice(1), msg = document.getElementById('msg');
+  document.getElementById('bk').href = 'index.html#/rep/' + id;
+  const sv = await DB.getSurvey(id);
+  if (!sv) { msg.textContent = 'Etüt bulunamadı.'; return; }
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const url = async bid => (await DB.blobUrl(bid)) || null;
+  const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+
+  const recs = orderedRecords(sv);
+  for (const r of recs) r.photo = await url(r.photoId);
+  window.SURVEY = { project: sv.project, records: recs };
+
+  const A = window.ASSETS = {
+    logoCompany: (await url(await DB.getSetting('companyLogo'))) || 'assets/logo_company.jpg',
+    logoPartner: await url(sv.logos.partner), logoClient: (await url(sv.logos.client)) || BLANK,
+    coverPhoto: (await url(sv.logos.cover)) || 'assets/cover_photo.jpg',
+    iconTurn: 'assets/icon_turn.png', barGreen: 'assets/bar_green.jpg', barRed: 'assets/bar_red.jpg', compassK: 'assets/compass_k.jpg', compassN: 'assets/compass_n.jpg',
+    drawing: await url(sv.logos.drawing), ref: {}, refAR: {},
+  };
+  A.coverSecond = A.logoPartner ? null : (A.logoClient !== BLANK ? A.logoClient : null);
+  if (A.drawing) { const i = await load(A.drawing); A.drawingLandscape = i && i.naturalWidth > i.naturalHeight; }
+  ['r17','r18','r23','r24','r25','r30','r31','r36','r37','r42','r43','r48','r49','r54','r55','r60','r61','r66','r67','r72','r73','r78','r79'].forEach(k => A.ref[k] = 'assets/ref/' + k + '.jpg');
+  await Promise.all(Object.entries(A.ref).map(async ([k, s]) => { const i = await load(s); if (i) A.refAR[k] = i.naturalWidth / i.naturalHeight; }));
+
+  // ---- route map from OpenStreetMap tiles (needs internet; falls back to a plain background) ----
+  const line = (sv.track.length >= 2 ? sv.track : recs.filter(r => !r.flag && r.latDec != null).map(r => [r.latDec, r.lonDec])).map(p => [p[0], p[1]]);
+  const step = Math.max(1, Math.ceil(line.length / 800)); A.routeLine = line.filter((_, i) => i % step === 0 || i === line.length - 1);
+  const W = 1186, H = 884; A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: 1, lon: 0 }, b: { x: 1, y: 1, lat: 0, lon: 1 } };
+  if (A.routeLine.length >= 2) {
+    msg.textContent = 'Harita hazırlanıyor…';
+    const wx = (lon, n) => (lon + 180) / 360 * n, wy = (lat, n) => (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+    const ilat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI, ilon = (x, n) => x / n * 360 - 180;
+    const las = A.routeLine.map(p => p[0]), los = A.routeLine.map(p => p[1]);
+    const b = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
+    let z = 16, n;
+    for (; z > 2; z--) { n = 256 * 2 ** z; if ((wx(b[3], n) - wx(b[2], n)) <= W * 0.62 && (wy(b[0], n) - wy(b[1], n)) <= H * 0.62) break; }
+    n = 256 * 2 ** z;
+    const cx = (wx(b[2], n) + wx(b[3], n)) / 2, cy = (wy(b[0], n) + wy(b[1], n)) / 2, x0 = cx - W / 2, y0 = cy - H / 2;
+    A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: ilat(y0, n), lon: ilon(x0, n) }, b: { x: 1, y: 1, lat: ilat(y0 + H, n), lon: ilon(x0 + W, n) } };
+    try {
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#EEF1F4'; g.fillRect(0, 0, W, H);
+      const jobs = [];
+      for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++) for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++) {
+        jobs.push(new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => { g.drawImage(i, tx * 256 - x0, ty * 256 - y0); res(true); }; i.onerror = () => res(false);
+          i.src = `https://tile.openstreetmap.org/${z}/${((tx % 2 ** z) + 2 ** z) % 2 ** z}/${ty}.png`; }));
+      }
+      const ok = await Promise.race([Promise.all(jobs), new Promise(res => setTimeout(() => res([]), 12000))]);
+      if (ok.some(Boolean)) {
+        g.font = '14px sans-serif'; const t = '© OpenStreetMap contributors', tw = g.measureText(t).width;
+        g.fillStyle = 'rgba(255,255,255,.8)'; g.fillRect(W - tw - 12, H - 22, tw + 12, 22); g.fillStyle = '#333'; g.fillText(t, W - tw - 6, H - 6);
+        A.routeBase = c.toDataURL('image/jpeg', 0.85);
+      }
+    } catch (e) { A.routeBase = null; }
+  }
+  await Promise.all([A.logoCompany, A.logoPartner, A.logoClient, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
+  await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito'].map(f => document.fonts.load(f)));
+  msg.textContent = 'Sayfalar diziliyor…';
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js'; s.onload = res; document.body.appendChild(s); });
+  await Promise.all([...document.images].map(i => i.decode ? i.decode().catch(() => {}) : null));
+  const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (Math.min(screen.width, document.documentElement.clientWidth) - 8) / 794));
+  fit(); window.addEventListener('resize', fit);
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç.`;
+  const pr = document.getElementById('pr'); pr.disabled = false; pr.onclick = () => window.print();
+})().catch(e => { document.getElementById('msg').textContent = 'Hata: ' + e.message; console.error(e); });
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+@font-face { font-family: Carlito; src: url(fonts/Carlito-Regular.ttf); font-weight: 400; font-style: normal; }
+@font-face { font-family: Carlito; src: url(fonts/Carlito-Bold.ttf); font-weight: 700; font-style: normal; }
+@font-face { font-family: Carlito; src: url(fonts/Carlito-Italic.ttf); font-weight: 400; font-style: italic; }
+@font-face { font-family: Carlito; src: url(fonts/Carlito-BoldItalic.ttf); font-weight: 700; font-style: italic; }
+
+@page { size: A4 portrait; margin: 0; }
+@page a3land { size: A3 landscape; margin: 0; }
+
+:root { --ink: #000; --link: #0563C1; --green: #92D050; --line: #000; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #888; }
+body { font-family: Carlito, Calibri, sans-serif; font-size: 11pt; color: var(--ink); }
+
+.page { width: 210mm; height: 297mm; background: #fff; position: relative; overflow: hidden; margin: 0 auto 8mm; break-after: page; page-break-after: always; }
+.page.a3 { width: 420mm; height: 297mm; page: a3land; }
+@media print { html, body { background: #fff; } .page { margin: 0; } }
+
+.hdr { position: absolute; top: 5.5mm; left: 11mm; right: 11mm; height: 12mm; display: flex; justify-content: space-between; align-items: center; }
+.hdr .l { height: 8.6mm; }
+.hdr .r { height: 11.5mm; }
+.pno { position: absolute; bottom: 9mm; left: 0; right: 0; text-align: center; font-size: 11pt; }
+/* optional third logo: bottom right, level with the page number */
+.ftr-logo { position: absolute; right: 11mm; bottom: 5mm; height: 10mm; max-width: 45mm; object-fit: contain; object-position: right bottom; }
+.content { position: absolute; top: 24mm; left: 24mm; right: 22mm; bottom: 20mm; overflow: hidden; }
+
+/* text pages */
+h1 { font-size: 13pt; font-weight: 700; margin: 0 0 3.2mm; display: flex; gap: 5mm; }
+h2 { font-size: 11pt; font-weight: 700; margin: 4.5mm 0 2.4mm 2.5mm; display: flex; gap: 4mm; }
+p { margin: 0 0 3mm 6.5mm; line-height: 1.28; text-align: justify; }
+.keep { break-inside: avoid; }
+.ind { margin-left: 6.5mm; }
+.abbr p { margin-bottom: 1.6mm; text-align: left; }
+.sym { display: flex; align-items: center; gap: 2mm; margin: 3.5mm 0 3.5mm 6.5mm; line-height: 1.25; }
+ol.alpha { margin: 0 0 3mm 6.5mm; padding-left: 9mm; list-style: lower-alpha; }
+ol.alpha li { margin-bottom: 1.2mm; line-height: 1.28; text-align: justify; }
+a { color: var(--link); }
+
+/* contents */
+.toc h1 { margin-bottom: 4mm; }
+.toc .row { display: flex; align-items: baseline; font-size: 10.5pt; margin: 0 0 2.1mm; }
+.toc .n { width: 9mm; }
+.toc .row.sub { padding-left: 4mm; }
+.toc .row.sub .n { width: 13mm; }
+.toc .t { white-space: nowrap; }
+.toc .dots { flex: 1; border-bottom: 1px dotted #000; margin: 0 1.5mm; transform: translateY(-1.2mm); }
+
+/* brief info */
+table.brief { border-collapse: collapse; margin-left: 6.5mm; font-size: 10.5pt; }
+table.brief td { padding: 0.9mm 0; vertical-align: top; }
+table.brief td:first-child { width: 74mm; }
+
+/* route map */
+.map { position: relative; width: 100%; margin: 2mm 0 4mm; }
+.map img { width: 100%; display: block; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map .lbl { position: absolute; background: #fff; border: 0.35mm solid #000; font-weight: 700; font-size: 8.5pt; padding: 1mm 2mm; text-align: center; line-height: 1.15; transform: translate(-50%, -50%); white-space: pre; }
+
+/* conclusion figures */
+figure.ref { position: relative; margin: 2mm 0 4mm 6.5mm; width: 150mm; }
+figure.ref img { width: 100%; display: block; }
+figure.ref figcaption { position: absolute; left: 3mm; bottom: 4mm; background: #fff; border: 0.3mm solid #000; font-weight: 700; font-size: 7.5pt; padding: 1mm 2mm; text-align: center; max-width: 52mm; line-height: 1.2; }
+table.clear { border-collapse: collapse; margin: 2mm auto 5mm; font-size: 9pt; }
+table.clear td, table.clear th { border: 0.25mm solid #000; padding: 0.5mm 3mm; text-align: center; }
+table.clear th { font-weight: 700; }
+table.clear td:first-child { text-align: left; }
+
+/* cover */
+.cover .box { position: absolute; left: 13mm; right: 13mm; border: 0.3mm solid #000; }
+.cover .top { top: 11mm; height: 35mm; display: grid; grid-template-columns: 27% 46% 27%; }
+.cover .top > div { display: flex; align-items: center; justify-content: center; border-right: 0.3mm solid #000; }
+.cover .top > div:last-child { border-right: 0; }
+.cover .top .ttl { font-weight: 700; font-size: 13.5pt; text-align: center; line-height: 1.35; }
+.cover .main { top: 51mm; }
+.cover .main > .r { border-bottom: 0.3mm solid #000; display: flex; align-items: center; justify-content: center; text-align: center; }
+.cover .main > .r:last-child { border-bottom: 0; }
+.cover .r.logo { height: 47mm; } .cover .r.logo img { height: 19mm; }
+.cover .r.co { height: 16mm; font-weight: 700; font-size: 10.5pt; }
+.cover .r.title { height: 23mm; font-size: 17pt; line-height: 1.3; white-space: pre-line; }
+.cover .r.client { height: 30mm; } .cover .r.client img { height: 22mm; }
+.cover .r.grid:nth-of-type(5) { height: 35mm; } .cover .r.grid:nth-of-type(6) { height: 22mm; }
+.cover .r.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+.cover .r.grid > div { border-right: 0.3mm solid #000; padding: 2.5mm 1.5mm; font-size: 10.5pt; display: flex; flex-direction: column; align-items: center; gap: 1.6mm; }
+.cover .r.grid > div:last-child { border-right: 0; }
+.cover .r.grid .k { font-weight: 700; text-decoration: underline; line-height: 1.2; min-height: 7.5mm; display: flex; align-items: center; }
+.cover .r.grid .v { line-height: 1.5; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.cover .r.photo { height: 33mm; overflow: hidden; } .cover .r.photo img { width: 100%; height: 100%; object-fit: cover; }
+.cover .code { position: absolute; left: 13mm; bottom: 12mm; font-weight: 700; font-size: 9pt; }
+
+/* survey blocks: 3 per page */
+.survey { position: absolute; top: 19.5mm; left: 12.5mm; right: 12.5mm; }
+.blk { height: 82mm; display: flex; margin-bottom: 4.2mm; }
+.blk .ph { width: 60.4%; height: 100%; position: relative; overflow: hidden; border: 0.25mm solid #000; container-type: inline-size; background: #eee; }
+.blk .ph .crop { position: absolute; inset: 0; overflow: hidden; }
+.blk .ph .crop img { position: absolute; }
+.blk .ph .ov { position: absolute; }
+.blk .ph .ov img { width: 100%; height: 100%; display: block; }
+.blk .ph .ov.txt { display: flex; align-items: flex-start; overflow: visible; padding: 0.6cqw 1cqw; line-height: 1.15; }
+.blk .ph svg.ovs { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.blk .tb { width: 39.6%; height: 100%; display: grid; grid-template-columns: 16.5% 20.8% 62.7%; grid-template-rows: repeat(16, minmax(0, 1fr)); border: 0.25mm solid #000; border-left: 0; font-size: 10.4pt; }
+.tb > div { display: flex; align-items: center; min-width: 0; }
+.tb .c { justify-content: center; text-align: center; }
+.tb .b { font-weight: 700; }
+.tb .bd { border-right: 0.25mm solid #000; border-bottom: 0.25mm solid #000; }
+.tb .br { border-right: 0.25mm solid #000; }
+.tb .bb { border-bottom: 0.25mm solid #000; }
+.tb .no { flex-direction: column; justify-content: center; align-items: center; line-height: 1.05; }
+.tb .no.flag { background: linear-gradient(180deg, #fff 0%, var(--green) 50%, #fff 100%); align-items: flex-start; padding-left: 0.6mm; }
+.tb .no .f { font-size: 7.8pt; }
+.tb .lnk a { color: var(--link); text-decoration: underline; }
+.tb .rem { grid-column: 1 / 4; }
+.tb .hl-red { background: linear-gradient(180deg, #fff 0%, #FF0000 50%, #fff 100%); }
+.tb .hl-yellow { background: linear-gradient(180deg, #fff 0%, #FFFF00 50%, #fff 100%); }
+.tb .hl-purple { background: linear-gradient(180deg, #fff 0%, #7030A0 50%, #fff 100%); }
+.tb .hl-green { background: linear-gradient(180deg, #fff 0%, #92D050 50%, #fff 100%); }
+.tb .hl-magenta { background: linear-gradient(180deg, #fff 0%, #FF00FF 50%, #fff 100%); }
+.tb .hl-blue { background: linear-gradient(180deg, #fff 0%, #4F81BD 50%, #fff 100%); }
+.tb .free { grid-column: 1 / 4; grid-row: 7 / 17; padding: 0 1mm; line-height: 1.22; white-space: pre-line; }
+.tb .lab { padding-left: 0.8mm; white-space: nowrap; overflow: visible; }
+.tb .val { padding-left: 0.5mm; }
+.tb .val.sm { font-size: 8.2pt; line-height: 1.1; }
+.tb .txt { grid-column: 1 / 4; align-items: flex-start; padding: 0.4mm 1mm 0 0.8mm; line-height: 1.22; white-space: pre-line; }
+
+/* three-logo layout (company + partner + client) */
+.hdr .r.partner { height: 14mm; margin-top: -1mm; }
+.cover .top .stack { flex-direction: column; gap: 1.5mm; }
+.cover .r.logo.two { flex-direction: column; gap: 3mm; height: 56mm; }
+.cover .r.logo.two img { height: 15mm; }
+.cover .r.logo.two img.p { height: 25mm; }
+.cover:has(.r.logo.two) .r.co { height: 13mm; }
+.cover:has(.r.logo.two) .r.grid:nth-of-type(5) { height: 31mm; }
+.cover:has(.r.logo.two) .r.client img { height: 19mm; }

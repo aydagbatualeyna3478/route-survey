@@ -1,0 +1,24 @@
+ROUTE SURVEY - ETÜT UYGULAMASI (deneme sürümü 1)
+
+Bu klasör hazır bir web uygulamasıdır. Telefonda çalışması için internette
+https ile başlayan bir adrese konması gerekir (kamera ve GPS yalnızca güvenli
+adreslerde çalışır). Klasörün içindeki dosyaları değiştirmeden yükleyin.
+
+TELEFONA KURMA
+1. Uygulamanın adresini telefonda Chrome ile açın.
+2. Sağ üstteki üç nokta > "Ana ekrana ekle" (iPhone: Safari > Paylaş > Ana Ekrana Ekle).
+3. Ana ekrandaki "Etüt" simgesinden açın. İlk açılıştan sonra internetsiz de çalışır.
+4. İlk fotoğrafta kamera ve konum izni isteyecek; ikisine de izin verin.
+
+KULLANIM
+- Etütlerim > Yeni etüt raporu oluştur > bilgileri girin > Etüdü başlat
+- Engel ekle > tipi seçin > Fotoğraf çek > bilgileri girin > Kaydet
+- Kayıt içinde: + INFO ekle, + BYPASS başlat, İşaretle (ok / not / yükseklik)
+- Rapor > Raporu aç ve PDF al > yazıcı olarak "PDF olarak kaydet"
+
+NOTLAR
+- Veriler telefonun içinde saklanır. Tarayıcı verilerini silerseniz etütler de silinir.
+- Etüt sırasında ekran açık kalır; ekran kapanırsa GPS izi durur, fotoğraf anındaki
+  konum yine kaydedilir.
+- KM her kayıtta elle düzeltilebilir.
+- Güzergah haritası rapor açılırken internetten (OpenStreetMap) çizilir.
