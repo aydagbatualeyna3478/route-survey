@@ -72,64 +72,52 @@
     return new Promise(res => c.toBlob(res, png ? 'image/png' : 'image/jpeg', 0.88));
   }
 
-  // ---------- GPS: track + odometer while a survey is active ----------
+  // ---------- GPS: only while the camera is open; KM from the photo positions ----------
   const GPS = {
-    watch: null, last: null, sv: null, dirty: 0, err: null, lock: null,
-    start(sv) {
-      this.sv = sv;
-      if (this.watch != null || !navigator.geolocation) { if (!navigator.geolocation) this.err = 'yok'; return; }
-      this.watch = navigator.geolocation.watchPosition(p => this.on(p), e => { this.err = e.code === 1 ? 'izin' : 'sinyal'; paintGps(); }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
-      this.keepAwake();
+    watch: null, last: null, err: null, cb: null,
+    on(cb) {   // start watching (camera opened)
+      this.cb = cb || null; this.err = null;
+      if (!navigator.geolocation) { this.err = 'yok'; this.cb && this.cb(); return; }
+      if (this.watch == null) this.watch = navigator.geolocation.watchPosition(p => this.got(p), e => { this.err = e.code === 1 ? 'izin' : 'sinyal'; this.cb && this.cb(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
     },
-    stop() { if (this.watch != null) navigator.geolocation.clearWatch(this.watch); this.watch = null; this.flush(); this.sv = null; if (this.lock) { this.lock.release().catch(() => {}); this.lock = null; } },
-    async keepAwake() { try { if ('wakeLock' in navigator && !this.lock) { this.lock = await navigator.wakeLock.request('screen'); this.lock.addEventListener('release', () => { this.lock = null; }); } } catch (e) { /* not available */ } },
-    on(p) {
+    off() { if (this.watch != null) navigator.geolocation.clearWatch(this.watch); this.watch = null; this.cb = null; },
+    got(p) {
       this.err = null;
-      this.last = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
-      const sv = this.sv;
-      if (sv && sv.status === 'active' && p.coords.accuracy <= 40) this.extend(sv, this.last);
-      paintGps();
+      const fix = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+      this.last = fix;   // always the newest fix: the vehicle may be moving
+      this.cb && this.cb();
     },
-    /* Track points are [lat, lon, time, km-from-start in metres]. Driving back along a road already measured
-       (e.g. returning to where a bypass branches off) snaps the odometer back to that earlier point,
-       so KM is always the distance from the starting point. */
-    extend(sv, pt, force) {
-      const tr = sv.track, prev = tr[tr.length - 1];
-      if (!prev) { tr.push([pt.lat, pt.lon, pt.t, 0]); sv.odo = 0; this.dirty++; return; }
-      const d = Geo.hav(prev, [pt.lat, pt.lon]);
-      if (d < (force ? 3 : Math.max(8, Math.min(pt.acc || 0, 25)))) return;
-      let cum = (prev[3] || 0) + d;
-      const k = Math.cos(pt.lat * Math.PI / 180), vx = (pt.lon - prev[1]) * k, vy = pt.lat - prev[0];
-      let best = -1, bd = 45;
-      for (let j = 0; j < tr.length - 12; j++) {
-        const q = tr[j]; if (Math.abs(q[0] - pt.lat) > 0.0006 || Math.abs(q[1] - pt.lon) > 0.0009) continue;
-        const dj = Geo.hav(q, [pt.lat, pt.lon]); if (dj >= bd || cum - (q[3] || 0) < 250) continue;
-        const n = tr[j + 1], ux = (n[1] - q[1]) * k, uy = n[0] - q[0];
-        if (ux * vx + uy * vy < 0) { bd = dj; best = j; }   // only when heading the opposite way
-      }
-      if (best >= 0) cum = tr[best][3] || 0;
-      tr.push([pt.lat, pt.lon, pt.t, cum]); sv.odo = cum; this.dirty++; if (this.dirty >= 12) this.flush();
-    },
-    flush() { if (this.sv && this.dirty) { this.dirty = 0; DB.putSurvey(this.sv); } },
-    fresh() { return this.last && Date.now() - this.last.t < 30000 ? this.last : null; },
-    current() { // best position for a new record
+    fresh(maxAge) { return this.last && Date.now() - this.last.t < (maxAge || 30000) ? this.last : null; },
+    current() {   // one-off position (photo-less record, "update position")
       return new Promise(res => {
-        const f = this.fresh(); if (f) return res(f);
         if (!navigator.geolocation) return res(null);
-        navigator.geolocation.getCurrentPosition(p => { this.on(p); res(this.last); }, () => res(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 });
+        navigator.geolocation.getCurrentPosition(p => { this.got(p); res(this.last); }, () => res(null), { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
       });
     },
+    /* Route points are [lat, lon, time, km-from-start in metres], one per photo. KM normally adds the distance
+       from the previous point; a point that lies beside the route already measured (driving back to where a
+       bypass branches off) takes the KM of that place instead, so KM always counts from the starting point. */
+    extend(sv, pt, opts) {
+      const tr = sv.track, prev = tr[tr.length - 1];
+      if (!prev) { tr.push([pt.lat, pt.lon, pt.t, 0]); sv.odo = 0; return; }
+      const d = Geo.hav(prev, [pt.lat, pt.lon]);
+      if (d < 3) return;
+      let cum = (prev[3] || 0) + d;
+      const k = Math.cos(pt.lat * Math.PI / 180), M = 111320;
+      let best = null;
+      for (let j = 0; j < tr.length - 2; j++) {   // nearest place on the earlier route (not the last stretch)
+        const A = tr[j], B = tr[j + 1];
+        const ax = A[1] * k * M, ay = A[0] * M, bx = B[1] * k * M, by = B[0] * M, px = pt.lon * k * M, py = pt.lat * M;
+        const L = (bx - ax) ** 2 + (by - ay) ** 2, t = L ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L)) : 0;
+        const off = Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+        const c = (A[3] || 0) + t * ((B[3] || 0) - (A[3] || 0)) + off;
+        if (off < 400 && (!best || c < best)) best = c;
+      }
+      if (best != null && (opts && opts.bypass ? best < cum : best < cum - 500)) cum = best;
+      tr.push([pt.lat, pt.lon, pt.t, cum]); sv.odo = cum;
+    },
   };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && GPS.sv) GPS.keepAwake(); else GPS.flush(); });
-  function paintGps() {
-    const g = document.getElementById('gps'), k = document.getElementById('km');
-    if (g) {
-      const f = GPS.fresh();
-      g.className = 'gps ' + (GPS.err ? 'bad' : f ? 'on' : '');
-      g.lastChild.textContent = GPS.err === 'izin' ? 'Konum izni yok' : GPS.err ? 'GPS sinyali yok' : f ? `GPS ±${Math.round(f.acc)} m` : 'GPS aranıyor…';
-    }
-    if (k && GPS.sv) k.textContent = fmt(GPS.sv.odo / 1000, 1);
-  }
+
 
   /* new record from a photo (or none). Camera photos take the current GPS position; INFO images take the parent's. */
   async function createRecord(sv, o) {
@@ -138,16 +126,16 @@
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
     if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
     if (o.file) { rec.photoId = await DB.putBlob(await to43(o.file)); rec.aspect = 4 / 3; }
-    const pos = o.useGps ? await GPS.current() : null;
+    const pos = o.pos || (o.useGps ? await GPS.current() : null);
     if (pos) {
       rec.latDec = pos.lat; rec.lonDec = pos.lon; rec.acc = pos.acc;
-      if (sv.status === 'active') GPS.extend(sv, pos, true);
+      if (sv.status === 'active') GPS.extend(sv, pos, { bypass: rec.flag === 'BYPASS' });
       rec.km = Math.round(sv.odo) / 1000;
     } else if (parent) { rec.latDec = parent.latDec; rec.lonDec = parent.lonDec; rec.km = parent.km; }
     else { const prevRec = sv.records[sv.records.length - 1]; rec.km = prevRec ? prevRec.km : Math.round(sv.odo) / 1000; }
     if (rec.latDec != null) { rec.lat = Geo.dms(rec.latDec, true); rec.lon = Geo.dms(rec.lonDec, false); }
     if (name && PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
-    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv;
+    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); 
     go(`#/r/${sv.id}/${rec.id}`);
   }
 
@@ -162,7 +150,6 @@
   };
 
   V.home = async () => {
-    GPS.stop();
     const list = (await DB.listSurveys()).sort((a, b) => b.createdAt - a.createdAt);
     const card = sv => {
       const n = sv.records.length, act = sv.status === 'active', c = cargoOf(sv.project);
@@ -178,7 +165,6 @@
 
   // ----- project form (new / edit) -----
   V.form = async (id) => {
-    GPS.stop();
     const sv = id ? await DB.getSurvey(id) : null;
     const last = (await DB.getSetting('defaults')) || {};
     const p = sv ? sv.project : {
@@ -258,7 +244,6 @@
   V.survey = async (id) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
     const act = sv.status === 'active';
-    if (act) GPS.start(sv); else GPS.stop();
     const st = settingsOf(sv), recs = orderedRecords(sv);
     const last = sv.selected;
     const status = r => {
@@ -288,7 +273,7 @@
         <div class="pane box" id="list">${html || '<div class="empty">Henüz engel yok.<br>Sağdaki "Yeni engel ekle" ile ilk fotoğrafı çek.</div>'}</div>
         <div class="side">
           <div class="row" style="justify-content:space-between"><span class="count">Engel Sayısı: ${recs.length}</span>
-            ${act ? '<span class="gps" id="gps"><i></i><span>GPS aranıyor…</span></span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
+            ${act ? '<span class="hint">Konum fotoğraf çekerken alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM <b id="km" style="color:var(--ink)">${fmt(sv.odo / 1000, 1)}</b></span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
           <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun.</div>
@@ -298,14 +283,11 @@
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
               + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
-              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + `<label class="rb red" style="cursor:pointer">${camSvg}<span>Yeni Engel Ekle</span><input class="hid" type="file" accept="image/*" capture="environment" id="camq"></label>`
+              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/cam/${sv.id}"`, 'red', camSvg, 'Yeni Engel Ekle')
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor')}
           </div>
         </div>
       </div>`;
-    paintGps();
-    const camq = document.getElementById('camq');
-    if (camq) camq.onchange = e => { const f = e.target.files[0]; if (f) createRecord(sv, { file: f, useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' }); };
     const onSel = document.querySelector('.rec.on'); if (onSel) onSel.scrollIntoView({ block: 'nearest' });
     $app.onclick = async e => {
       const rc = e.target.closest('[data-rec]');
@@ -313,16 +295,76 @@
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
-      if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } GPS.flush(); sv.status = 'done'; sv.bypassParent = null; }
+      if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } sv.status = 'done'; sv.bypassParent = null; }
       if (a.dataset.act === 'resume') sv.status = 'active';
       await DB.putSurvey(sv); V.survey(id);
     };
   };
 
+  // ----- in-app camera: live view, satellite icon top right (green = precise position) -----
+  const satSvg = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>';
+  const PRECISE = 10, OK = 30;   // metres: green / yellow
+  V.camera = async (id) => {
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const recs = orderedRecords(sv), bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
+    document.body.style.background = '#000';
+    $app.innerHTML = `<div style="flex:1;min-height:0;display:flex;background:#000;color:#fff;position:relative">
+      <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:12px">
+        <div id="vf" style="position:relative;height:100%;aspect-ratio:4/3;max-width:100%;background:#111;overflow:hidden;border-radius:6px">
+          <video id="vid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(#fff3,#fff3) 33.33% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 66.66% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 0 33.33%/100% 1px no-repeat,linear-gradient(#fff3,#fff3) 0 66.66%/100% 1px no-repeat"></div>
+          <div id="cmsg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:15px;color:#E5E7EB"></div>
+          ${bp ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${bp.no} BYPASS</span>` : ''}
+        </div>
+      </div>
+      <div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 12px">
+        <div id="sat" style="display:flex;flex-direction:column;align-items:center;gap:4px;color:#9CA3AF;font-size:12px;text-align:center;min-height:70px">${satSvg}<span id="sact">Konum aranıyor…</span></div>
+        <button id="shut" aria-label="Fotoğraf çek" style="width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:transparent;padding:0;display:flex;align-items:center;justify-content:center"><span style="width:76px;height:76px;border-radius:50%;background:#fff;display:block"></span></button>
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%">
+          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal"></label>
+          <button class="btn sm" id="cclose" style="background:#1F2937;color:#fff;border-color:#374151">Kapat</button>
+        </div>
+      </div></div>`;
+    const vid = document.getElementById('vid'), msg = document.getElementById('cmsg'), sat = document.getElementById('sat'), sact = document.getElementById('sact');
+    let stream = null, busy = false;
+    const paint = () => {
+      const f = GPS.fresh(8000);
+      const col = GPS.err ? '#F87171' : !f ? '#9CA3AF' : f.acc <= PRECISE ? '#22C55E' : f.acc <= OK ? '#FACC15' : '#F97316';
+      sat.style.color = col;
+      sact.textContent = GPS.err === 'izin' ? 'Konum izni yok' : GPS.err === 'yok' ? 'Konum yok' : !f ? 'Konum aranıyor…' : f.acc <= PRECISE ? `Hassas konum ±${Math.round(f.acc)} m` : `±${Math.round(f.acc)} m`;
+    };
+    GPS.last = null; GPS.on(paint); paint();
+    const tick = setInterval(paint, 2000);
+    const stop = () => { clearInterval(tick); GPS.off(); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; document.body.style.background = ''; window.removeEventListener('hashchange', stop); };
+    window.addEventListener('hashchange', stop);
+    const fallback = text => { msg.style.display = 'flex'; msg.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px;align-items:center"><span>${text}</span><label class="btn red" style="cursor:pointer">${camSvg} Telefonun kamerasıyla çek<input class="hid" type="file" accept="image/*" capture="environment" id="cnat"></label></div>`;
+      document.getElementById('cnat').onchange = e => e.target.files[0] && save(e.target.files[0]); };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+      vid.srcObject = stream; await vid.play().catch(() => {});
+    } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
+    async function save(blob, fromGallery) {
+      if (busy) return; busy = true;
+      let pos = GPS.fresh(8000);
+      if (!pos && !fromGallery) { sact.textContent = 'Konum bekleniyor…'; pos = await new Promise(res => { const t0 = Date.now(), iv = setInterval(() => { const f = GPS.fresh(8000); if (f || Date.now() - t0 > 8000) { clearInterval(iv); res(f); } }, 300); }); }
+      stop();
+      createRecord(sv, { file: blob, pos: fromGallery ? null : pos, useGps: false, parent: bp || null, flag: bp ? 'BYPASS' : '' });
+    }
+    document.getElementById('shut').onclick = () => {
+      if (!stream || !vid.videoWidth) return;
+      const w = vid.videoWidth, h = vid.videoHeight; let cw = w, ch = w * 3 / 4; if (ch > h) { ch = h; cw = h * 4 / 3; }
+      const c = document.createElement('canvas'); c.width = Math.round(cw); c.height = Math.round(ch);
+      c.getContext('2d').drawImage(vid, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height);
+      document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
+      c.toBlob(b => save(b), 'image/jpeg', 0.9);
+    };
+    document.getElementById('cgal').onchange = e => e.target.files[0] && save(e.target.files[0], false);
+    document.getElementById('cclose').onclick = () => go(`#/s/${sv.id}`);
+  };
+
   // ----- add record: pick type, take photo -----
   V.add = async (id, q) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
-    if (sv.status === 'active') GPS.start(sv);
     const recs = orderedRecords(sv), mode = q.mode || 'photo';
     const mains = recs.filter(r => !r.parentId);
     let parent = q.parent ? recs.find(r => r.id === q.parent) : mode === 'sat' ? mains[mains.length - 1] : (sv.bypassParent ? recs.find(r => r.id === sv.bypassParent) : null);
@@ -379,7 +421,7 @@
         else { const prevRec = sv.records[sv.records.length - 1]; rec.km = prevRec ? prevRec.km : 0; }
         if (rec.latDec != null) { rec.lat = Geo.dms(rec.latDec, true); rec.lon = Geo.dms(rec.lonDec, false); }
         if (PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
-        sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv;
+        sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); 
         go(`#/r/${sv.id}/${rec.id}`);
       };
       const cam = document.getElementById('cam'), gal = document.getElementById('gal'), nop = document.getElementById('nop');
@@ -395,7 +437,6 @@
   // ----- record form: photo on the left, details on the right -----
   V.record = async (id, rid) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/');
-    if (sv.status === 'active') GPS.start(sv);
     const recs = orderedRecords(sv), r = recs.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
     if (sv.selected !== r.id) { sv.selected = r.id; }
     const st = settingsOf(sv), refs = R.refs(st);
@@ -426,7 +467,7 @@
             <label class="f">Boylam<input id="lo" inputmode="decimal" value="${r.lonDec == null ? '' : r.lonDec.toFixed(6)}"></label></div>
             <div class="row" style="justify-content:space-between"><span class="hint">${r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum alınamadı, elle girilebilir'}</span><button class="btn sm" id="here">Konumu güncelle</button></div></div>
           <div class="g2"><label class="btn grn" style="cursor:pointer">+ INFO ekle<input class="hid" type="file" accept="image/*" id="infq"></label>
-            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<label class="btn grn" style="cursor:pointer">+ BYPASS başlat<input class="hid" type="file" accept="image/*" capture="environment" id="bypq"></label>`}</div>
+            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<button class="btn grn" id="bypq">+ BYPASS başlat</button>`}</div>
           <span class="hint">INFO: kamera ya da galeriden görsel (uydu, drone, simülasyon). BYPASS: alternatif yolun ilk engelinin fotoğrafını çek; sonraki engeller de bypass'a eklenir.</span>
           ${r.parentId ? '' : '<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>'}
         </div>
@@ -477,7 +518,7 @@
       g('cnv').onchange = () => { if (g('cnv').value.trim()) setType(g('cnv').value.trim()); };
       const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
       infq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); await DB.putSurvey(sv); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: 'Satellite View' }); };
-      if (bypq) bypq.onchange = async e => { const f = e.target.files[0]; if (!f) return; read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); createRecord(sv, { file: f, useGps: true, parent: r, flag: 'BYPASS' }); };
+      if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
       if (g('hadd')) g('hadd').onclick = () => { read(); if (r.heights.length === 1 && r.heights[0].label === 'H') r.heights[0].label = 'H1'; r.heights.push({ label: 'H' + (r.heights.length + 1), value: null }); draw(); };
       g('rep').onchange = async e => { if (!e.target.files[0]) return; read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(e.target.files[0])); await DB.putSurvey(sv); V.record(id, rid); };
       g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
@@ -490,10 +531,10 @@
         await DB.putSurvey(sv); go(`#/s/${sv.id}`);
       };
       g('cancel').onclick = async () => {   // a fresh photo without a type is thrown away; otherwise just leave without saving
-        if (!r.obstacle) { await DB.delBlob(r.photoId); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; }
+        if (!r.obstacle) { await DB.delBlob(r.photoId); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv);  }
         go(`#/s/${sv.id}`);
       };
-      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; } autoAct(); await DB.putSurvey(sv); if (GPS.sv) GPS.sv = sv; go(`#/s/${sv.id}`); };
+      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; } autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
       $app.onclick = async e => {
         const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
         if (ty) return setType(ty.dataset.type);
@@ -627,7 +668,7 @@
     <div class="foot"><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
     const save = async () => { const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim(); await DB.putSurvey(sv); };
     $app.onchange = async e => { if (e.target.type === 'radio') { await save(); c[e.target.name] = e.target.value; await DB.putSurvey(sv); V.report(id); } };
-    document.getElementById('mk').onclick = async () => { await save(); GPS.flush(); location.href = `report.html#${id}`; };
+    document.getElementById('mk').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
 
   // ---------- router ----------
@@ -641,6 +682,7 @@
       else if (p[0] === 'edit') await V.form(p[1]);
       else if (p[0] === 's') await V.survey(p[1]);
       else if (p[0] === 'add') await V.add(p[1], q);
+      else if (p[0] === 'cam') await V.camera(p[1]);
       else if (p[0] === 'r') await V.record(p[1], p[2]);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);

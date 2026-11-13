@@ -12,13 +12,14 @@ TELEFONA KURMA
 
 KULLANIM
 - Etütlerim > Yeni etüt raporu oluştur > bilgileri girin > Etüdü başlat
-- Engel ekle > tipi seçin > Fotoğraf çek > bilgileri girin > Kaydet
+- Yeni Engel Ekle > uygulamanın kamerası açılır > fotoğraf çek > engel tipini ve bilgileri gir > Kaydet
 - Kayıt içinde: + INFO ekle, + BYPASS başlat, İşaretle (ok / not / yükseklik)
 - Rapor > Raporu aç ve PDF al > yazıcı olarak "PDF olarak kaydet"
 
 NOTLAR
 - Veriler telefonun içinde saklanır. Tarayıcı verilerini silerseniz etütler de silinir.
-- Etüt sırasında ekran açık kalır; ekran kapanırsa GPS izi durur, fotoğraf anındaki
-  konum yine kaydedilir.
+- Konum yalnızca kamera açıkken alınır. Sağ üstteki uydu simgesi: gri = aranıyor,
+  sarı = yaklaşık (30 m'ye kadar), yeşil = hassas konum (10 m ve altı).
+- KM, fotoğraf konumları arasındaki mesafeden hesaplanır.
 - KM her kayıtta elle düzeltilebilir.
 - Güzergah haritası rapor açılırken internetten (OpenStreetMap) çizilir.
