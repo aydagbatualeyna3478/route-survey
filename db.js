@@ -115,6 +115,20 @@
     return line.map(x => [x[0], x[1]]);
   }
   g.archivedRecords = archived; g.routeKm = routeKm;
+  /* Critical (lowest) clear height along the route the load will actually take. A main obstacle that has a BYPASS is
+     driven round, so its own height does not limit the load; the heights met on its bypass do. Otherwise the obstacle's
+     heights count, together with heights entered on its INFO records. Archived records are left out. */
+  function criticalHeight(sv) {
+    const live = ordered(sv); let best = null, skipped = 0;
+    const take = r => { for (const h of r.heights || []) { const v = Number(h.value); if (h.value == null || h.value === '' || !(v > 0)) continue; if (!best || v < best.value) best = { value: v, rec: r, label: h.label || 'H' }; } };
+    for (const m of live.filter(r => !r.parentId)) {
+      const kids = live.filter(r => r.parentId === m.id), bypass = kids.filter(r => r.flag === 'BYPASS');
+      if (bypass.length) { if ((m.heights || []).some(h => h.value != null && h.value !== '')) skipped += 1; bypass.forEach(take); }
+      else { take(m); kids.filter(r => r.flag !== 'BYPASS').forEach(take); }
+    }
+    return best ? Object.assign(best, { skipped }) : (skipped ? { value: null, skipped } : null);
+  }
+  g.criticalHeight = criticalHeight;
   /* photo annotations (arrows, notes, lines) drawn over a 4:3 photo box; shared by the app and the report */
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function annHtml(items, sel) {

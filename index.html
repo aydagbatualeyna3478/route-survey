@@ -37,6 +37,10 @@ button{cursor:pointer}
 .bar h1{font-size:20px;margin:0;flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .back{width:48px;height:48px;margin-left:-12px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:inherit}
 .cargo{display:flex;flex-direction:column;gap:2px;border-left:1px solid var(--line);padding-left:16px;min-width:220px}
+.cargo.minh{min-width:200px;max-width:300px;text-align:left;background:none;border-top:0;border-right:0;border-bottom:0;font:inherit;color:inherit;cursor:pointer;padding-top:0;padding-bottom:0}
+.cargo.minh .v{font-size:20px;font-weight:700;color:var(--navy);line-height:1.1;display:flex;align-items:center;gap:6px}
+.cargo.minh.low .v{color:var(--badtx)}
+.cargo.minh .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cargo b{font-size:14px}
 .cargo .cg{display:grid;grid-template-columns:auto auto;column-gap:14px;font-size:12px;color:var(--mut)}
 .cargo .cg span b{font-size:12px;color:var(--ink);font-weight:600}

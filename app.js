@@ -309,6 +309,15 @@
   const V = {};
   const imgSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>';
   const cargoOf = p => p.cargo || { height: p.minHeight };
+  /* lowest clear height met so far on the route the load takes (bypassed obstacles left out, their bypass counted) */
+  const minHBox = sv => {
+    const c = criticalHeight(sv), ch = sv.project.general ? null : Number(cargoOf(sv.project).height) || null;
+    if (!c || c.value == null) return `<div class="cargo minh"><b>Kritik min. H</b><span class="hint">${c && c.skipped ? 'Yükseklikler bypass edilen engellerde' : 'Henüz yükseklik girilmedi'}</span></div>`;
+    const r = c.rec, low = ch && c.value < ch;
+    return `<button class="cargo minh ${low ? 'low' : ''}" data-go="#/r/${sv.id}/${r.id}" title="Engeli aç"><b>Kritik min. H</b>
+      <span class="v">${fmt(c.value)} m${low ? ' <span class="tag bad">yükten alçak</span>' : ''}</span>
+      <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(r.obstacle || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen engel hariç` : ''}</span></button>`;
+  };
   const cargoBox = p => {
     if (p.general) return `<div class="cargo"><b>Taşıma Bilgileri</b><span style="font-size:15px;font-weight:700;color:var(--navy)">Genel Etüt</span><span class="hint">Belirli bir yüke bağlı değil</span></div>`;
     const c = cargoOf(p), m = v => v == null || v === '' ? '–' : fmt(v) + ' m';
@@ -562,7 +571,7 @@
       : `<label class="rb red" style="cursor:pointer">${imgSvg}<span>Yeni Engel Ekle</span><input class="hid" type="file" accept="image/*" multiple id="addph"></label>`;
     const rb = (attrs, cls, icon, label, dis) => `<button class="rb ${cls}" ${attrs} ${dis ? 'disabled' : ''}>${icon || ''}<span>${label}</span></button>`;
     $app.innerHTML = `<div class="bar"><button class="back" data-go="#/" aria-label="Geri">${backSvg}</button>
-        <h1>${esc(sv.project.start.name)} &gt; ${esc(sv.project.end.name)}</h1>${cargoBox(sv.project)}</div>
+        <h1>${esc(sv.project.start.name)} &gt; ${esc(sv.project.end.name)}</h1>${minHBox(sv)}${cargoBox(sv.project)}</div>
       <div class="split">
         <div class="pane box" id="list">${html}</div>
         <div class="side">
