@@ -26,7 +26,7 @@
     const t = (type || '').toLowerCase();
     if (t.includes('high')) return 'HV';
     if (t.includes('medium')) return 'MV';
-    if (t.includes('low') || t.includes('tele')) return 'LV';
+    if (t.includes('low') || t.includes('tele') || t.includes('communication')) return 'LV';   // telephone / railroad communication: low-voltage reference
     return null;
   }
   function minH(rec) {
