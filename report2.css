@@ -1,0 +1,61 @@
+/* Route survey report, new draft (Nov 2026): A4 landscape, one record per page.
+   Measurements in pt follow the team's draft PDF (841.89 × 595.28 pt). */
+@font-face { font-family: 'DejaVu Sans'; src: url(fonts/DejaVuSans.ttf); font-weight: 400; }
+@font-face { font-family: 'DejaVu Sans'; src: url(fonts/DejaVuSans-Bold.ttf); font-weight: 700; }
+@page { size: 297mm 210mm; margin: 0; }
+:root { --navy: #1F3A68; --line: #B9BEC6; --head: #F2F2F2; --ink: #111; --mut: #555; --cream: #FFF6DC; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #E6E8EB; }
+@media print { html, body { background: #fff; } }
+#report { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 16px 0; }
+@media print { #report { display: block; padding: 0; } }
+
+.pg { width: 841.89pt; height: 595.28pt; position: relative; overflow: hidden; background: #fff; color: var(--ink);
+  font-family: 'DejaVu Sans', 'Segoe UI', Arial, sans-serif; break-after: page; page-break-after: always; }
+.pg:last-child { break-after: auto; page-break-after: auto; }
+@media screen { .pg { box-shadow: 0 2px 10px rgba(0,0,0,.18); } }
+.a { position: absolute; }
+
+/* header (unchanged from the draft) */
+.logos { left: 36pt; top: 20pt; width: 191pt; height: 60pt; border: .75pt solid var(--line); display: flex; align-items: center; justify-content: space-evenly; gap: 6pt; padding: 6pt 8pt; }
+.logos img { max-height: 44pt; max-width: 84pt; object-fit: contain; }
+.logos.n3 img { max-width: 56pt; }
+.info { left: 236pt; top: 20pt; width: 570pt; height: 60pt; border-collapse: collapse; table-layout: fixed; font-size: 7.4pt; }
+.info td { border: .75pt solid var(--line); padding: 0 5pt; height: 15pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.info td.l { background: var(--head); font-weight: 700; }
+.title { left: 36pt; top: 86pt; width: 770pt; height: 26pt; background: var(--navy); color: #fff; font-weight: 700; font-size: 12.5pt;
+  display: flex; align-items: center; justify-content: center; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+
+/* record strip above the photo */
+.strip { left: 36pt; top: 118pt; width: 770pt; border-collapse: collapse; table-layout: fixed; }
+.strip th { background: var(--navy); color: #fff; font-size: 7.6pt; font-weight: 700; height: 14pt; border: .75pt solid var(--navy); letter-spacing: .02em; }
+.strip td { border: .75pt solid var(--line); height: 34pt; padding: 2pt 6pt; text-align: center; font-size: 10pt; vertical-align: middle; }
+.strip td.det { text-align: left; font-size: 8pt; line-height: 1.25; }
+.strip td.ll a { color: #1155CC; text-decoration: underline; font-size: 9pt; }
+.strip .flag { display: inline-block; background: #1F7A3A; color: #fff; font-size: 7pt; font-weight: 700; padding: 1pt 4pt; border-radius: 2pt; margin-left: 4pt; vertical-align: 1pt; }
+
+/* body: photo left, map / remarks / satellite right */
+.photo { left: 36pt; top: 170pt; width: 485pt; height: 362pt; background: #F3F4F6; overflow: hidden; container-type: inline-size; }
+.photo > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo .ov { position: absolute; }
+.none { display: flex; align-items: center; justify-content: center; color: #8A93A0; font-size: 9pt; background: #F3F4F6; border: .75pt solid #E1E4E8; }
+.map { left: 531pt; width: 275pt; height: 118pt; overflow: hidden; background: #EEF1F4; border: .75pt solid var(--line); }
+.map > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.map.route { top: 170pt; }
+.map.sat { top: 414pt; }
+.map .lbl { position: absolute; left: 0; top: 0; background: var(--navy); color: #fff; font-size: 6.5pt; font-weight: 700; padding: 2pt 5pt; letter-spacing: .03em; }
+.map .pin { position: absolute; width: 10pt; height: 10pt; margin: -10pt 0 0 -5pt; }
+.rmh { left: 531pt; top: 294pt; width: 275pt; height: 15pt; background: var(--navy); color: #fff; font-weight: 700; font-size: 8.6pt; display: flex; align-items: center; justify-content: center; letter-spacing: .03em; }
+.rmb { left: 531pt; top: 309pt; width: 275pt; height: 99pt; border: .75pt solid var(--line); border-top: 0; padding: 5pt 7pt; font-size: 8.6pt; line-height: 1.3; overflow: hidden; white-space: pre-wrap; }
+
+/* footer */
+.owner { left: 36pt; top: 538pt; height: 26pt; width: 150pt; display: flex; align-items: center; }
+.owner img { max-height: 26pt; max-width: 150pt; object-fit: contain; }
+.conf { left: 220pt; top: 546pt; width: 402pt; text-align: center; font-size: 6.2pt; color: var(--mut); line-height: 1.25; }
+.pno { right: 36pt; top: 552pt; font-size: 7pt; color: var(--mut); }
+
+/* summary pages */
+.sum { left: 36pt; top: 120pt; width: 770pt; border-collapse: collapse; table-layout: fixed; font-size: 7.6pt; }
+.sum th { background: var(--navy); color: #fff; font-weight: 700; height: 15pt; text-align: left; padding: 0 6pt; border: .75pt solid var(--navy); }
+.sum td { background: var(--cream); border: .75pt solid #E8DDBF; height: 15.4pt; padding: 0 6pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sum tr.sub td:first-child { padding-left: 12pt; }

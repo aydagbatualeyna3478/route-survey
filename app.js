@@ -6,6 +6,7 @@
   const pn = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; };
   const fmt = (v, d) => v == null || v === '' ? '' : (d == null ? String(v) : Number(v).toFixed(d)).replace('.', ',');
   const R = window.SurveyRules;
+  const longDate = d => `${d.getDate()} ${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()]} ${d.getFullYear()}`;
   /* Field = the tablet app (APK): survey only. Office = the same app on a computer: also the report and PDF.
      For testing in a browser: ?saha=1 switches to field, ?ofis=1 back to office (remembered). */
   const FIELD = (() => {
@@ -398,6 +399,13 @@
         <div class="g2"><label class="f">Müşteri unvanı<input name="client" value="${esc(p.client)}"></label>
           <label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa müşteri unvanı yazılır"></label></div>
         <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
+        <div class="sec">Rapor başlığı (yeni taslak)</div>
+        <div class="g2"><label class="f">Proje / Project<input name="projectName" value="${esc(p.projectName || '')}" placeholder="ör. Mozambique Inhassoro Project"></label>
+          <label class="f">Ülke / Country<input name="country" value="${esc(p.country || '')}"></label></div>
+        <div class="g3"><label class="f">Doküman No / Doc. No<input name="docNo" value="${esc(p.docNo || '')}" placeholder="ör. RS-102026-MOZ-001-SB"></label>
+          <label class="f">Tarih / Date<input name="reportDate" value="${esc(p.reportDate || longDate(new Date()))}"></label>
+          <label class="f">Revizyon Tarihi<input name="revDate" value="${esc(p.revDate || p.reportDate || longDate(new Date()))}"></label></div>
+        <span class="hint">Güzergah / Route satırına otomatik "${esc(p.start.name || 'A')} - ${esc(p.end.name || 'B')} Arası Yol Etüdü" yazılır.</span>
         </div>
         ${FIELD ? '<div class="note g">Kapak bilgileri, logolar, kapak fotoğrafı, taşıma çizimi ve sonuç bölümü ofiste, bilgisayardaki uygulamada girilir. Etüt bitince "Dışa Aktar" ile dosyayı bilgisayara gönder.</div>' : ''}
       </div>
@@ -451,6 +459,7 @@
       Object.assign(s.project, {
         start: { name: f.start.value.trim() }, end: { name: f.end.value.trim() },
         title: `ROUTE SURVEY REPORT FROM\n${f.start.value.trim().toUpperCase()} TO ${f.end.value.trim().toUpperCase()}`,
+        projectName: f.projectName.value.trim(), country: f.country.value.trim(), docNo: f.docNo.value.trim(), reportDate: f.reportDate.value.trim(), revDate: f.revDate.value.trim(),
         client: f.client.value.trim(), preparedFor: f.preparedFor.value.trim() || f.client.value.trim(), reference: f.reference.value.trim(), rev: f.rev.value.trim(),
         preparedBy: f.preparedBy.value.split('\n').map(x => x.trim()).filter(Boolean), executedBy: s.project.companyShort,
         general, cargo, minHeight: general ? null : cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
@@ -1036,18 +1045,6 @@
 
   // ----- photo annotation -----
   // editor items: {k:'arrow',x,y,w,h,rot} · {k:'text',x,y,w,text} · {k:'line',x1,y1,x2,y2}   (all in 0..1 of the photo)
-  function annHtml(items, sel) {
-    let h = '', lines = '';
-    items.forEach((o, i) => {
-      if (o.k === 'arrow') h += `<div class="ov ${i === sel ? 'sel' : ''}" data-i="${i}" style="left:${o.x * 100}%;top:${o.y * 100}%;width:${o.w * 100}%;height:${o.h * 100}%;transform:rotate(${o.rot || 0}deg);touch-action:none"><svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block"><polygon points="50,0 100,50 75,50 75,100 25,100 25,50 0,50" fill="#FFFF00" stroke="#8a7a00" stroke-width="2"/></svg></div>`;
-      if (o.k === 'text') h += `<div class="ov ${i === sel ? 'sel' : ''}" data-i="${i}" style="left:${o.x * 100}%;top:${o.y * 100}%;width:${o.w * 100}%;border:.45cqw solid #FF0000;background:rgba(255,255,255,.9);color:#FF0000;font-weight:700;font-size:3.7cqw;line-height:1.15;padding:.6cqw 1cqw;touch-action:none">${esc(o.text) || 'Not'}</div>`;
-      if (o.k === 'line') {
-        lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="#FF0000" stroke-width="0.8" marker-end="url(#ah)"/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
-        if (i === sel) h += `<span class="hd" data-i="${i}" data-h="1" style="left:${o.x1 * 100}%;top:${o.y1 * 100}%"></span><span class="hd" data-i="${i}" data-h="2" style="left:${o.x2 * 100}%;top:${o.y2 * 100}%"></span>`;
-      }
-    });
-    return (lines ? `<svg viewBox="0 0 100 75" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FF0000"/></marker></defs>${lines}</svg>` : '') + h;
-  }
   function annToOverlays(items, stage) {
     return items.map((o, i) => {
       if (o.k === 'arrow') return { kind: 'sp', geom: 'upArrow', x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot || 0, fill: '#FFFF00' };
@@ -1128,6 +1125,7 @@
     routeKm(sv);   // KMs from the final order
     const recs = orderedRecords(sv), c = sv.project.conclusion || (sv.project.conclusion = {});
     const cnt = t => recs.filter(r => t.includes(r.obstacle)).length;
+    const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
     const nf = recs.filter(r => r.flag === 'BYPASS').length, ni = recs.filter(r => r.flag === 'INFO').length;
     const miss = recs.filter(r => !r.photoId).length, nopos = recs.filter(r => r.latDec == null).length;
     c.bridge = c.bridge || 'required'; c.road = c.road || 'paved_ok';
@@ -1138,22 +1136,30 @@
         <div class="card"><b>1.5 Brief Information <span class="tag ok">Otomatik</span></b>
           <div class="stat4"><div><b>${Math.round(Math.max(0, ...recs.filter(r => !r.flag).map(r => r.km || 0)))}</b><span>km</span></div><div><b>${cnt(['Bridge'])}</b><span>köprü</span></div>
             <div><b>${cnt(['Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn'])}</b><span>dönüş/viraj</span></div><div><b>${cnt(['Overhead Structure'])}</b><span>üst yapı</span></div></div></div>
-        <div class="card"><b>3 Route Survey</b><span class="hint">${recs.length} kayıt · her sayfada 3 engel · ${Math.ceil(recs.length / 3)} sayfa · ${recs.length - nf - ni} ana, ${nf} BYPASS, ${ni} INFO</span>
+        <div class="card"><b>Engel sayfaları</b><span class="hint">${recs.length} kayıt · yeni taslakta her kayıt (INFO/BYPASS dahil) ayrı yatay sayfa · ${recs.length - nf - ni} ana, ${nf} BYPASS, ${ni} INFO · arşivdekiler hariç</span>
           ${miss ? `<span class="note w">${miss} kayıtta fotoğraf yok.</span>` : ''}${nopos ? `<span class="note w">${nopos} kayıtta konum yok.</span>` : ''}</div>
         <div class="card"><b>2 Transportation Drawing</b><span class="hint">${sv.logos.drawing ? 'Çizim yüklendi.' : 'Çizim yüklenmedi; "Etüt bilgileri" ekranından resim olarak ekleyebilirsin.'}</span></div>
         <div class="hint">Giriş metinleri, kısaltmalar, 4.2–4.8 standart metinleri ve referans fotoğrafları otomatik eklenir. Güzergah haritası internet varsa OpenStreetMap'ten çizilir.</div>
       </div>
       <div class="pane">
+        <div class="card"><b>Haritalar (yeni taslak)</b>
+          <span class="hint">Her engel sayfasında: güzergahın tamamı üzerinde engelin yeri ve engelin yakın uydu görüntüsü. Rapor açılırken internetten alınır.</span>
+          ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:#fff"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (anahtarsız; taslaktaki uydu görüntüsü gibi)' : 'Google Maps (API anahtarı gerekir)'}</label>`).join('')}
+          <label class="f" style="${mp.provider === 'google' ? '' : 'display:none'}">Google Maps API anahtarı<input id="gkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label></div>
         <div class="card"><b>4.1 Bridge</b>${opt('bridge', 'done_ok', 'Statik analiz yapıldı, tüm köprüler uygun')}${opt('bridge', 'required', 'Statik analiz gerekli')}${opt('bridge', 'custom', 'Kendi metnimi yazacağım')}
           <label class="f" style="${c.bridge === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="bt" rows="3">${esc(c.bridgeText || '')}</textarea></label></div>
         <div class="card"><b>4.6 Road condition</b>${opt('road', 'paved_ok', 'Yol uygun, tamamı asfalt, kritik dar nokta yok')}${opt('road', 'custom', 'Kendi metnimi yazacağım')}
           <label class="f" style="${c.road === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="rt" rows="3">${esc(c.roadText || '')}</textarea></label></div>
       </div>
     </div>
-    <div class="foot"><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
-    const save = async () => { const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim(); await DB.putSurvey(sv); };
-    $app.onchange = async e => { if (e.target.type === 'radio') { await save(); c[e.target.name] = e.target.value; await DB.putSurvey(sv); V.report(id); } };
-    document.getElementById('mk').onclick = async () => { await save(); location.href = `report.html#${id}`; };
+    <div class="foot"><button class="btn" id="mkold" style="min-width:0">Eski format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
+    const save = async () => { const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim(); mp.key = document.getElementById('gkey').value.trim(); await DB.setSetting('maps', mp); await DB.putSurvey(sv); };
+    $app.onchange = async e => {
+      if (e.target.name === 'mapProvider') { await save(); mp.provider = e.target.value; await DB.setSetting('maps', mp); return V.report(id); }
+      if (e.target.type === 'radio') { await save(); c[e.target.name] = e.target.value; await DB.putSurvey(sv); V.report(id); }
+    };
+    document.getElementById('mk').onclick = async () => { await save(); if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını gir ya da Esri seç'); location.href = `report2.html#${id}`; };
+    document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
 
   // ---------- router ----------
