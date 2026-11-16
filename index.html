@@ -118,6 +118,10 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 /* field (tablet APK): report material lives in the office version */
 html.field .office-only{display:none!important}
 html.field #pf{grid-template-columns:minmax(0,1fr);max-width:860px;margin:0 auto;width:100%}
+.rec{cursor:pointer;align-items:center}
+.rec .det{flex-shrink:0;min-height:38px;padding:6px 12px;font-size:13px}
+.rec.on{outline:3px solid var(--navy);outline-offset:2px;border-radius:10px}
+.selmode .rec .det{display:none}
 .selhint{font-size:12px;color:var(--mut);text-align:center;padding:8px 0 2px}
 /* round action buttons (survey screen) */
 .acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,calc(var(--vh,7.2px)*2.2),22px) 18px;justify-items:center;align-content:center;flex:1;min-height:0}

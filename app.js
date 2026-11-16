@@ -153,9 +153,43 @@
     } else if (parent) { rec.latDec = parent.latDec; rec.lonDec = parent.lonDec; }
     if (rec.latDec != null) { rec.lat = Geo.dms(rec.latDec, true); rec.lon = Geo.dms(rec.lonDec, false); }
     if (name && PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
-    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv);
+    if (o.t) rec.t = o.t; if (o.source) rec.source = o.source;
+    if (parent) sv.records.push(rec);
+    else { sv.records.splice(insertAt(sv), 0, rec); if (sv.insertAfter) sv.insertAfter = rec.id; }   // the next one follows this one
+    sv.selected = rec.id; await DB.putSurvey(sv);
     if (o.late && rec.latDec == null) waitLate(sv, rec);
-    go(`#/r/${sv.id}/${rec.id}`);
+    if (o.go !== false) go(`#/r/${sv.id}/${rec.id}`);
+    return rec;
+  }
+  /* where a new obstacle goes: right after the obstacle chosen in the list (after its INFO/BYPASS too), else at the end */
+  function insertAt(sv) {
+    let s = sv.insertAfter && sv.records.find(r => r.id === sv.insertAfter);
+    if (s && s.parentId) s = sv.records.find(r => r.id === s.parentId);
+    if (!s || s.archived) { sv.insertAfter = null; return sv.records.length; }
+    let i = sv.records.indexOf(s);
+    sv.records.forEach((r, j) => { if (r.parentId === s.id && j > i) i = j; });
+    return i + 1;
+  }
+  /* several photos at once (gallery / folder): each becomes an empty obstacle, in capture order, with the position
+     read from the photo; details are filled in later with "Detay göster" */
+  async function addPhotos(sv, files) {
+    files = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic)$/i.test(f.name));
+    if (!files.length) return toast('Fotoğraf seçilmedi');
+    const items = [];
+    for (const f of files) { const x = await exifOf(f); items.push({ f, x, t: x.t || f.lastModified || 0 }); }
+    items.sort((a, b) => a.t - b.t || a.f.name.localeCompare(b.f.name, 'tr', { numeric: true }));
+    const bp = sv.bypassParent && sv.records.find(r => r.id === sv.bypassParent && !r.archived);
+    const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; document.body.appendChild(tt);
+    let rec = null, nopos = 0;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i]; tt.textContent = `Fotoğraflar ekleniyor… ${i + 1} / ${items.length}`;
+      if (it.x.lat == null) nopos += 1;
+      rec = await createRecord(sv, { file: it.f, pos: it.x.lat != null ? { lat: it.x.lat, lon: it.x.lon } : null, parent: bp || null, flag: bp ? 'BYPASS' : '', go: false, t: it.x.t || null, source: it.f.name });
+    }
+    tt.remove(); document.querySelectorAll('.toast').forEach(t => t.remove());
+    if (items.length === 1) return go(`#/r/${sv.id}/${rec.id}`);
+    toast(`${items.length} engel eklendi${nopos ? ` (${nopos} tanesinde konum yok)` : ''}. Düzenlemek için "Detay göster".`);
+    if (location.hash.startsWith(`#/s/${sv.id}`)) V.survey(sv.id); else go(`#/s/${sv.id}`);
   }
 
   /* small bottom sheet with choices; gallery options are file inputs so the picker opens from the tap itself */
@@ -493,7 +527,7 @@
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const act = sv.status === 'active';
     const st = settingsOf(sv), recs = orderedRecords(sv);
-    const last = sv.selected;
+    const pick = sv.insertAfter && sv.records.find(r => r.id === sv.insertAfter && !r.archived) ? sv.insertAfter : null;   // new obstacles go after this one
     const status = r => {
       const s = R.suggest(r, st), col = R.highlightOf(r, st);
       if (col) return `<span class="tag bad">${COLNAME[col] || col}</span>`;
@@ -503,10 +537,10 @@
     const line = async (r, sub) => {
       const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
-      return `<button class="rec ${sub ? 'sub' : ''} ${last === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
+      return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">${r.latDec == null ? '<b style="color:var(--warntx)">konum yok</b>' : r.kmManual != null ? 'KM ' + fmt(r.kmManual, 1) : ''}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
-        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}</button>`;
+        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
     };
     const keep = SELST[id] || { on: false, ids: [], tab: 's' }, tab = keep.tab || 's';
     const arch = archivedRecords(sv);
@@ -523,6 +557,9 @@
       + (tab === 's' ? (await group(recs) || '<div class="empty">Henüz engel yok.<br>Sağdaki "Yeni engel ekle" ile ilk fotoğrafı çek.</div>')
         : (await group(arch) || '<div class="empty">Arşiv boş.<br>Yalnızca arşiv için çekilen engelleri engel ekranındaki "Arşive gönder" ile ya da listede basılı tutup seçerek buraya gönderebilirsin. Arşivdekiler rapora girmez.</div>'));
     const bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
+    // computer: "Yeni Engel Ekle" opens the file picker (several photos at once), the tablet opens the camera
+    const addBtn = FIELD ? `<button class="rb red" data-go="#/cam/${sv.id}">${camSvg}<span>Yeni Engel Ekle</span></button>`
+      : `<label class="rb red" style="cursor:pointer">${imgSvg}<span>Yeni Engel Ekle</span><input class="hid" type="file" accept="image/*" multiple id="addph"></label>`;
     const rb = (attrs, cls, icon, label, dis) => `<button class="rb ${cls}" ${attrs} ${dis ? 'disabled' : ''}>${icon || ''}<span>${label}</span></button>`;
     $app.innerHTML = `<div class="bar"><button class="back" data-go="#/" aria-label="Geri">${backSvg}</button>
         <h1>${esc(sv.project.start.name)} &gt; ${esc(sv.project.end.name)}</h1>${cargoBox(sv.project)}</div>
@@ -533,16 +570,17 @@
             ${act ? '<span class="hint">Konum fotoğraf çekerken alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM'ler rapor oluşturulurken son sıraya göre hesaplanır</span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
-          <div class="hint">Info, Bypass ve uydu fotoğrafını bir engele eklemek ya da engeli düzenlemek için listeden engele dokun. Sırayı değiştirmek için engele <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
+          <div class="hint">Engele dokununca seçilir: yeni engeller seçili engelin arkasına eklenir. Düzenlemek, Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
+          ${pick ? (() => { const pr = recs.find(r => r.id === pick) || archivedRecords(sv).find(r => r.id === pick); return pr ? `<div class="note w row" style="justify-content:space-between;gap:10px"><span>Yeni engeller <b>${pr.no} · ${esc(pr.obstacle || 'Tip seçilmedi')}</b> engelinin arkasına eklenecek.</span><button class="btn sm" data-act="toend" style="min-width:0">Sona ekle</button></div>` : ''; })() : ''}
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(bp.obstacle)}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
               + rb('', 'ghost', '', '') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
-              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/cam/${sv.id}"`, 'red', camSvg, 'Yeni Engel Ekle')
+              + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + addBtn
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri')
-              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar'))}
+              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + addBtn)}
           </div>
         </div>
       </div>`;
@@ -618,7 +656,9 @@
       let after = u; for (const o of others) { box.insertBefore(o, after.nextSibling); after = o; }
       await applyDom();
     };
+    const ap = document.getElementById('addph'); if (ap) ap.onchange = () => addPhotos(sv, ap.files);
     list.addEventListener('pointerdown', e => {
+      if (e.target.closest('[data-open]')) return;
       const rec = e.target.closest('.rec'); if (!rec || (e.pointerType === 'mouse' && e.button !== 0)) return;
       const pid = e.pointerId; suppressClick = false;
       lp = { x0: e.clientX, y0: e.clientY, t: setTimeout(() => startDrag(rec, pid), 450) };
@@ -658,14 +698,18 @@
       }
       const tb = e.target.closest('[data-tab]');
       if (tb) { SELST[id] = { on: false, ids: [], tab: tb.dataset.tab }; return V.survey(id); }
+      const op = e.target.closest('[data-open]');
+      if (op) { if (suppressClick) { suppressClick = false; return; } delete SELST[id]; return go(`#/r/${sv.id}/${op.dataset.open}`); }
       const rc = e.target.closest('[data-rec]');
       if (rc) {
         if (suppressClick) { suppressClick = false; return; }
         if (selMode) { const k = rc.dataset.rec; sel.has(k) ? sel.delete(k) : sel.add(k); delSure = false; return paintSel(); }
-        delete SELST[id]; return go(`#/r/${sv.id}/${rc.dataset.rec}`);
+        const k = rc.dataset.rec; sv.insertAfter = sv.insertAfter === k ? null : k;   // tap again to unselect
+        await DB.putSurvey(sv); return V.survey(id);
       }
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'export') return exportNow(sv, a);
+      if (a.dataset.act === 'toend') { sv.insertAfter = null; await DB.putSurvey(sv); return V.survey(id); }
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
       if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } sv.status = 'done'; sv.bypassParent = null; }
@@ -702,7 +746,7 @@
         <div id="sat" style="${extraFor ? 'visibility:hidden;' : ''}display:flex;flex-direction:column;align-items:center;gap:4px;color:#9CA3AF;font-size:12px;text-align:center;min-height:70px">${satSvg}<span id="sact">Konum aranıyor…</span></div>
         <button id="shut" aria-label="Fotoğraf çek" style="width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:transparent;padding:0;display:flex;align-items:center;justify-content:center"><span style="width:76px;height:76px;border-radius:50%;background:#fff;display:block"></span></button>
         <div style="display:flex;flex-direction:column;gap:10px;width:100%">
-          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal" ${extraFor ? 'multiple' : ''}></label>
+          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal" multiple></label>
           <button class="btn sm" id="cclose" style="${extraFor ? 'background:#22C55E;border-color:#22C55E;color:#06260F' : 'background:#1F2937;color:#fff;border-color:#374151'}">${extraFor ? 'Bitti · seç' : 'Kapat'}</button>
         </div>
       </div></div>`;
@@ -720,10 +764,6 @@
     window.addEventListener('hashchange', stop);
     const fallback = text => { msg.style.display = 'flex'; msg.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px;align-items:center"><span>${text}</span><label class="btn red" style="cursor:pointer">${camSvg} Telefonun kamerasıyla çek<input class="hid" type="file" accept="image/*" capture="environment" id="cnat"></label></div>`;
       document.getElementById('cnat').onchange = e => e.target.files[0] && save(e.target.files[0]); };
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
-      vid.srcObject = stream; await vid.play().catch(() => {});
-    } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
     async function save(blob, fromGallery, fromCam) {
       if (extraFor) {   // keep shooting; each photo is kept as a candidate for this obstacle
         const rr = sv.records.find(x => x.id === extraFor.id);
@@ -752,8 +792,18 @@
       document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
       c.toBlob(b => save(b, false, true), 'image/jpeg', 0.82);
     };
-    document.getElementById('cgal').onchange = async e => { for (const f of [...e.target.files]) await save(f, false); };
+    document.getElementById('cgal').onchange = async e => {
+      const fs = [...e.target.files]; if (!fs.length) return;
+      if (!extraFor && !target && !infoParent) { stop(); return addPhotos(sv, fs); }   // new obstacles: position from each photo
+      if (extraFor) { for (const f of fs) await save(f, false); return; }
+      save(fs[0], false);
+    };
     document.getElementById('cclose').onclick = () => go(extraFor && shots ? back + '?pick=1' : back);
+    // buttons are wired first, so the gallery works while the camera permission is still being asked
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+      vid.srcObject = stream; await vid.play().catch(() => {});
+    } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
   };
 
   // ----- add record: pick type, take photo -----
