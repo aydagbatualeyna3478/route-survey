@@ -913,7 +913,10 @@
         const s = e.target.closest('[data-sub]'), p = e.target.closest('[data-ph]'), c = e.target.closest('[data-col]'), hd = e.target.closest('[data-hdel]'), nav = e.target.closest('[data-go]');
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
-        if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = t; if (isOH) r.actionAuto = false; draw(); const tx = document.getElementById('tx'); tx.focus(); const k = tx.value.lastIndexOf('%'); if (k >= 0 && /about %/.test(tx.value)) tx.setSelectionRange(k, k); }
+        if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = t; if (isOH) r.actionAuto = false; draw();
+          // a standard phrase never opens the keyboard; only Inclination/Declination ("about %") need the degree typed in
+          const tx = document.getElementById('tx'), k = tx.value.lastIndexOf('%');
+          if (k >= 0 && /about %/.test(tx.value)) { tx.focus(); tx.setSelectionRange(k, k + 1); } else if (document.activeElement) document.activeElement.blur(); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
         const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
