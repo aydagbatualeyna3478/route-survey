@@ -107,7 +107,7 @@
     const en = await api('/auth/v1/factors', { method: 'POST', body: { factor_type: 'totp', friendly_name: 'Route Survey ' + new Date().toISOString().slice(0, 16) } });
     $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Authenticator'ı bağla (bir kez)</b>
       <div class="hint">Telefonuna Google Authenticator ya da Microsoft Authenticator kur. Uygulamada "+" → "QR kodu tara" ile aşağıdaki kodu okut.</div>
-      <img alt="QR kodu" src="${esc(window.QRSvg && en.totp.uri ? URL.createObjectURL(new Blob([QRSvg(en.totp.uri)], { type: 'image/svg+xml' })) : qrSrc(en.totp.qr_code))}" style="width:210px;height:210px;align-self:center;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)">
+      <div id="qrbox" role="img" aria-label="QR kodu" style="width:214px;height:214px;align-self:center;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)">${qrHtml(en.totp, S && S.email)}</div>
       <div class="hint">QR okutamıyorsan anahtarı elle gir: <b style="user-select:all;word-break:break-all;color:var(--ink)">${esc(en.totp.secret)}</b></div>
       <form id="cf" style="display:flex;flex-direction:column;gap:12px"><label class="f">Authenticator'daki 6 haneli kod<input id="cc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
       ${errBox('cerr')}<button class="btn pri" id="cb">Doğrula</button></form>
@@ -123,6 +123,12 @@
     if (m) { const body = q.slice(m[0].length); svg = /;base64/.test(m[1] || '') ? atob(body) : (/%3C/i.test(body.slice(0, 6)) ? decodeURIComponent(body) : body); }
     if (!/^\s*<svg/i.test(svg)) return q;
     return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  }
+  /* the QR is drawn here from the secret (qr.js), inline SVG: no image URL, works the same in the APK and every browser */
+  function qrHtml(t, email) {
+    const uri = `otpauth://totp/${encodeURIComponent('Route Survey')}:${encodeURIComponent(email || 'hesap')}?secret=${encodeURIComponent(t.secret)}&issuer=${encodeURIComponent('Route Survey')}&algorithm=SHA1&digits=6&period=30`;
+    try { if (window.QRSvg) return QRSvg(uri).replace('<svg ', '<svg width="196" height="196" '); } catch (e) { console.error(e); }
+    return `<img alt="" src="${esc(qrSrc(t.qr_code))}" style="width:196px;height:196px">`;
   }
   function codeView(fid, done) {
     $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Doğrulama kodu</b>
