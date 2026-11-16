@@ -107,12 +107,22 @@
     const en = await api('/auth/v1/factors', { method: 'POST', body: { factor_type: 'totp', friendly_name: 'Route Survey ' + new Date().toISOString().slice(0, 16) } });
     $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Authenticator'ı bağla (bir kez)</b>
       <div class="hint">Telefonuna Google Authenticator ya da Microsoft Authenticator kur. Uygulamada "+" → "QR kodu tara" ile aşağıdaki kodu okut.</div>
-      <img alt="QR kodu" src="${esc(en.totp.qr_code)}" style="width:210px;height:210px;align-self:center;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)">
+      <img alt="QR kodu" src="${esc(qrSrc(en.totp.qr_code))}" style="width:210px;height:210px;align-self:center;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)">
       <div class="hint">QR okutamıyorsan anahtarı elle gir: <b style="user-select:all;word-break:break-all;color:var(--ink)">${esc(en.totp.secret)}</b></div>
       <form id="cf" style="display:flex;flex-direction:column;gap:12px"><label class="f">Authenticator'daki 6 haneli kod<input id="cc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
       ${errBox('cerr')}<button class="btn pri" id="cb">Doğrula</button></form>
       <button class="btn dash" id="cx">Vazgeç</button>`);
     wireCode(en.id, done);
+  }
+  /* Supabase returns the QR as "data:image/svg+xml;utf-8,<svg …>" with the SVG unencoded: a "#" in it cuts the data URL,
+     so the picture never shows. Turn it into a proper blob URL. */
+  function qrSrc(q) {
+    q = String(q || '');
+    const m = /^data:image\/svg\+xml(;[^,]*)?,/.exec(q);
+    let svg = q;
+    if (m) { const body = q.slice(m[0].length); svg = /;base64/.test(m[1] || '') ? atob(body) : (/%3C/i.test(body.slice(0, 6)) ? decodeURIComponent(body) : body); }
+    if (!/^\s*<svg/i.test(svg)) return q;
+    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   }
   function codeView(fid, done) {
     $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Doğrulama kodu</b>
