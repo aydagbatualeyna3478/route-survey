@@ -46,7 +46,9 @@
       'The clearance between the L-shape traffic lights is enough for transportation. No action required.',
       'The height of the traffic lights is suitable for the planned operation. No action required.',
       'Signboard must be removed.'],
-    'Bridge': ['Bridge static analysis and evaluation is required.', 'The bridge is in good condition.',
+    'Bridge': ['Bridge static analysis and evaluation is required.',
+      'Bridge static analysis and evaluation is required. Major cracks observed.',
+      'Bridge static analysis and evaluation is required. Minor cracks observed.', 'The bridge is in good condition.',
       'Construction of a new bridge has commenced along the route. The height of bridge is currently unknown.'],
     'Culvert': ['The culvert is good condition.', 'Bridge static analysis and evaluation is required.'],
     'Left Turn': ['Turn left.', 'Turn left. Turning radius of the turn is suitable for planned transportation operation.', 'Turn left. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.',
@@ -77,6 +79,18 @@
     'Drone View': ['Drone view of transportation simulation.'],
   };
   for (const k of Object.keys(PHRASES)) if (!['Satellite View', 'Drone View'].includes(k) && !PHRASES[k].some(t => /^no action required\.?$/i.test(t))) PHRASES[k].push('No action required.');
+  /* remarks the user typed themselves on obstacles of the same type in this survey, offered as options for the rest of it
+     (derived from the records, so an edited or deleted text simply drops out) */
+  function ownPhrases(sv, type, key, skipId) {
+    if (!type) return [];
+    const std = new Set([...(PHRASES[type] || []), W_OK, W_NO].map(t => t.trim())), seen = new Set(), out = [];
+    for (const x of sv.records) {
+      const t = (x[key] || '').trim();
+      if (x.obstacle !== type || !t || std.has(t) || /about %\.$/.test(t) || seen.has(t)) continue;
+      seen.add(t); out.push(t);
+    }
+    return out.reverse();   // newest first
+  }
   const phLabel = t => { const m = /about (\d+)%\.$/.exec(t); return m ? `%${m[1]}` : /about %\.$/.test(t) ? 'Diğer %…' : t; };   // slope buttons show only the percentage
   const COLORS = [['red', 'Kırmızı', '#FF0000'], ['yellow', 'Sarı', '#FFFF00'], ['magenta', 'Magenta', '#FF00FF'], ['purple', 'Mor', '#7030A0'], ['blue', 'Mavi', '#4F81BD'], ['green', 'Yeşil', '#92D050']];
   const COLNAME = Object.fromEntries(COLORS.map(c => [c[0], c[1].toLowerCase()]));
@@ -949,6 +963,7 @@
     const thumbs = [];   // [blobId, url] — the photo used in the report first, then the extra shots
     for (const b of [r.photoId, ...r.extras].filter(Boolean)) thumbs.push([b, await blobUrl(b)]);
     const isOH = /^Overhead/.test(r.obstacle), isBr = r.obstacle === 'Bridge', isCu = r.obstacle === 'Culvert';
+    let OWN = [];
     const textKey = isOH ? 'actions' : 'remarks', isSlope = /^(In|De)clination$/.test(r.obstacle);
     const limit = () => { if (r.obstacle === 'Overhead Structure') return refs.min; const c = R.lineClass(r.fields.type); return c ? refs[c] : refs.LV; };
     const draw = () => {
@@ -1007,6 +1022,7 @@
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
           ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
+          ${(() => { const own = ownPhrases(sv, r.obstacle, textKey); OWN = own; return own.length ? `<div class="sec" style="margin-top:2px">Bu etütte yazdıkların</div><div class="chips">${own.slice(0, 3).map((t, i) => `<button class="chip own ${r[textKey] === t ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-own="${i}">${esc(t)}</button>`).join('')}${own.length > 3 ? `<button class="chip dash" id="ownall" style="font-size:13px;border-radius:10px;min-height:40px">Tümü (${own.length})</button>` : ''}</div>` : ''; })()}
           ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].slice(0, isSlope ? 99 : 4).map((p, i) => `<button class="chip ${isSlope && r[textKey] === p ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px${isSlope ? ';min-width:58px;justify-content:center;font-weight:600' : ''}" data-ph="${i}">${esc(isSlope ? phLabel(p) : p)}</button>`).join('')}${!isSlope && PHRASES[r.obstacle].length > 4 ? `<button class="chip dash" id="phall" style="font-size:13px;border-radius:10px;min-height:40px">Tüm hazır cümleler (${PHRASES[r.obstacle].length})</button>` : ''}</div>` : ''}
           <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
           <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px">
@@ -1097,7 +1113,9 @@
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
         if (p) applyPh(+p.dataset.ph);
-        if (e.target.closest('#phall')) { read(); sheet(`${r.obstacle} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) }))); }
+        if (e.target.closest('#phall')) { read(); sheet(`${r.obstacle} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) })).concat(OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) })))); }
+        const ow = e.target.closest('[data-own]'); if (ow) applyOwn(OWN[+ow.dataset.own]);
+        if (e.target.closest('#ownall')) { read(); sheet(`${r.obstacle} · bu etütte yazdıkların`, OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) }))); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
         const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
@@ -1150,6 +1168,7 @@
       if (cur && ![W_OK, W_NO, 'The clearance is sufficient for transport.', 'No action required.'].includes(cur)) return;
       r.remarks = Math.min(...vals) >= lw ? W_OK : W_NO;
     }
+    function applyOwn(t) { read(); r[textKey] = t; if (isOH) r.actionAuto = false; draw(); if (document.activeElement) document.activeElement.blur(); }
     function applyPh(i) {   // a standard phrase replaces the text; it never opens the keyboard, except to type the degree in "about %"
       read(); r[textKey] = PHRASES[r.obstacle][i]; if (isOH) r.actionAuto = false; draw();
       const tx = document.getElementById('tx'), k = tx.value.lastIndexOf('%');
