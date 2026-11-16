@@ -309,14 +309,18 @@
   const V = {};
   const imgSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>';
   const cargoOf = p => p.cargo || { height: p.minHeight };
-  /* lowest clear height met so far on the route the load takes (bypassed obstacles left out, their bypass counted) */
+  /* lowest clear height and width met so far on the route the load takes (bypassed obstacles left out, their bypass
+     counted); each line opens its obstacle */
   const minHBox = sv => {
-    const c = criticalHeight(sv), ch = sv.project.general ? null : Number(cargoOf(sv.project).height) || null;
-    if (!c || c.value == null) return `<div class="cargo minh"><b>Kritik min. H</b><span class="hint">${c && c.skipped ? 'Yükseklikler bypass edilen engellerde' : 'Henüz yükseklik girilmedi'}</span></div>`;
-    const r = c.rec, low = ch && c.value < ch;
-    return `<button class="cargo minh ${low ? 'low' : ''}" data-go="#/r/${sv.id}/${r.id}" title="Engeli aç"><b>Kritik min. H</b>
-      <span class="v">${fmt(c.value)} m${low ? ' <span class="tag bad">yükten alçak</span>' : ''}</span>
-      <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(r.obstacle || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen engel hariç` : ''}</span></button>`;
+    const cg = sv.project.general ? {} : cargoOf(sv.project);
+    const line = (key, t, limit, word) => {
+      const c = criticalDim(sv, key);
+      if (!c || c.value == null) return `<div class="mrow"><b>${t}</b><span class="hint">${c && c.skipped ? 'yalnız bypass edilen engellerde' : 'henüz girilmedi'}</span></div>`;
+      const r = c.rec, low = limit && c.value < limit;
+      return `<button class="mrow ${low ? 'low' : ''}" data-go="#/r/${sv.id}/${r.id}" title="Engeli aç"><b>${t}</b><span class="v">${fmt(c.value)} m</span>${low ? `<span class="tag bad">${word}</span>` : ''}
+        <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(r.obstacle || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen hariç` : ''}</span></button>`;
+    };
+    return `<div class="cargo minh">${line('heights', 'Kritik min. H', Number(cg.height) || null, 'yükten alçak')}${line('widths', 'Kritik min. W', Number(cg.width) || null, 'yükten dar')}</div>`;
   };
   const cargoBox = p => {
     if (p.general) return `<div class="cargo"><b>Taşıma Bilgileri</b><span style="font-size:15px;font-weight:700;color:var(--navy)">Genel Etüt</span><span class="hint">Belirli bir yüke bağlı değil</span></div>`;
