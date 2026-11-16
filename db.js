@@ -55,17 +55,66 @@
     },
   };
 
-  /* numbering: main records 1,2,3…; INFO/BYPASS records hang under a parent as 16-1, 16-2… */
+  /* numbering: main records 1,2,3…; INFO/BYPASS records hang under a parent as 16-1, 16-2…
+     Archived records (archive only, not in the report) are left out and numbered A1, A2… by archivedRecords. */
   function ordered(sv) {
     const out = []; let n = 0;
     const mains = sv.records.filter(r => !r.parentId);
     for (const m of mains) {
+      if (m.archived) continue;
       n += 1; m.no = String(n); out.push(m);
       let k = 0;
-      for (const c of sv.records.filter(r => r.parentId === m.id)) { k += 1; c.no = `${n}-${k}`; out.push(c); }
+      for (const c of sv.records.filter(r => r.parentId === m.id && !r.archived)) { k += 1; c.no = `${n}-${k}`; out.push(c); }
     }
     return out;
   }
+  function archived(sv) {   // archived mains with their INFO/BYPASS, then INFO/BYPASS archived on their own
+    const out = []; let a = 0;
+    for (const m of sv.records.filter(r => !r.parentId)) {
+      if (m.archived) {
+        a += 1; m.no = `A${a}`; out.push(m); let k = 0;
+        for (const c of sv.records.filter(r => r.parentId === m.id)) { k += 1; c.no = `A${a}-${k}`; out.push(c); }
+      } else for (const c of sv.records.filter(r => r.parentId === m.id && r.archived)) { a += 1; c.no = `A${a}`; c.solo = true; out.push(c); }
+    }
+    return out;
+  }
+
+  /* KM is worked out once the obstacles and their order are final (when the report is made), not while
+     photographing. The main route runs through the main obstacles' photo positions in list order; an obstacle
+     without a position takes the KM before it; INFO takes its obstacle's KM; a BYPASS continues from its
+     obstacle along the bypass, and takes the KM of the main route where it rejoins it (within 400 m).
+     A KM typed by hand (kmManual) always wins. Returns the main route line for the map. */
+  function routeKm(sv) {
+    const recs = ordered(sv), line = []; let cum = 0, prev = null;
+    for (const r of recs) {
+      if (r.parentId) continue;
+      if (r.latDec != null) { const p = [r.latDec, r.lonDec]; if (prev) cum += Geo.hav(prev, p); prev = p; line.push([p[0], p[1], cum]); }
+      r.kmAuto = cum;
+    }
+    const k = line.length ? Math.cos(line[0][0] * Math.PI / 180) : 1, M = 111320;
+    const onMain = (lat, lon) => {   // KM (m) of the nearest place on the main route, if within 400 m
+      let best = null;
+      for (let j = 0; j + 1 < line.length; j++) {
+        const A = line[j], B = line[j + 1], ax = A[1] * k * M, ay = A[0] * M, bx = B[1] * k * M, by = B[0] * M, px = lon * k * M, py = lat * M;
+        const L = (bx - ax) ** 2 + (by - ay) ** 2, t = L ? Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / L)) : 0;
+        const off = Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+        if (off < 400 && (!best || off < best.off)) best = { off, km: A[2] + t * (B[2] - A[2]) };
+      }
+      return best && best.km;
+    };
+    for (const m of recs.filter(r => !r.parentId)) {
+      let bcum = m.kmAuto, bprev = m.latDec != null ? [m.latDec, m.lonDec] : null;
+      for (const c of recs.filter(r => r.parentId === m.id)) {
+        if (c.flag !== 'BYPASS' || c.latDec == null) { c.kmAuto = c.flag === 'BYPASS' ? bcum : m.kmAuto; continue; }
+        const p = [c.latDec, c.lonDec]; if (bprev) bcum += Geo.hav(bprev, p); bprev = p;
+        const back = onMain(p[0], p[1]);
+        c.kmAuto = back != null && back < bcum ? back : bcum;
+      }
+    }
+    for (const r of recs) r.km = r.kmManual != null ? r.kmManual : Math.round(r.kmAuto) / 1000;
+    return line.map(x => [x[0], x[1]]);
+  }
+  g.archivedRecords = archived; g.routeKm = routeKm;
   /* logo slots: 1 company (kept in settings) · 2 client 1 · 3 client 2 · 4 owner; each placed in a page corner */
   const LOGO_POS = { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' };
   function logosOf(sv) {

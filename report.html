@@ -28,6 +28,7 @@
   const url = async bid => (await DB.blobUrl(bid)) || null;
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 
+  const routeLine = routeKm(sv);   // final order -> route line and every obstacle's KM
   const recs = orderedRecords(sv);
   /* photos for the report: 1200×900 JPEG (quality 0.72) with Excel's 2.5 pt soft edges baked in.
      Small, plain JPEGs keep the PDF light; nothing has to be rasterised when printing. */
@@ -64,7 +65,7 @@
   await Promise.all(Object.entries(A.ref).map(async ([k, s]) => { const i = await load(s); if (i) A.refAR[k] = i.naturalWidth / i.naturalHeight; }));
 
   // ---- route map from OpenStreetMap tiles (needs internet; falls back to a plain background) ----
-  const line = (sv.track.length >= 2 ? sv.track : recs.filter(r => !r.flag && r.latDec != null).map(r => [r.latDec, r.lonDec])).map(p => [p[0], p[1]]);
+  const line = routeLine;
   const step = Math.max(1, Math.ceil(line.length / 800)); A.routeLine = line.filter((_, i) => i % step === 0 || i === line.length - 1);
   const W = 1186, H = 884; A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: 1, lon: 0 }, b: { x: 1, y: 1, lat: 0, lon: 1 } };
   if (A.routeLine.length >= 2) {
