@@ -29,19 +29,47 @@
     'Bridge': ['Precast Concrete I Girder', 'Precast Concrete U Girder', 'Concrete Tee Beam', 'Concrete Flat Slab', 'Steel I Girder', 'Steel U Girder', 'Concrete Box Girder'],
     'Culvert': ['Box', 'Arc', 'Pipe'],
   };
+  /* standard comments; each list opens with the app's own, followed by the wording used in the team's past reports
+     (Gaziantep–Kahramanmaraş and Best Transformer–İzmir Aliağa, Nov 2026) */
   const PHRASES = {
-    'Overhead Cable': [R.TEXT.lvLift, R.TEXT.lvOff, R.TEXT.hvOff, R.TEXT.none],
-    'Overhead Structure': [R.TEXT.structure, 'Structure must be removed/bypassed.', 'Use right lane to pass. No action required.', 'Use left lane to pass. No action required.', R.TEXT.none],
-    'Bridge': ['Bridge static analysis and evaluation is required.', 'The bridge is in good condition.'],
-    'Culvert': ['The culvert is good condition.'],
-    'Left Turn': ['Turn left.', 'Turn left. Turning radius of the turn is suitable for planned transportation operation.', 'Turn left. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.'],
-    'Right Turn': ['Turn right.', 'Turn right. Turning radius of the turn is suitable for planned transportation operation.', 'Turn right. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.'],
-    'U Turn': ['U turn. Turning radius of the turn is suitable for planned transportation operation.'],
-    'Roundabout Turn': ['Continue straight at the roundabout.'],
+    'Overhead Cable': [R.TEXT.lvLift, R.TEXT.lvOff, R.TEXT.hvOff, R.TEXT.none,
+      'Cable height is enough for planned transportation operation. No action required.',
+      'The height of the cables is suitable for the planned operation. No action required.'],
+    'Overhead Structure': [R.TEXT.structure, 'Structure must be removed/bypassed.', 'Use right lane to pass. No action required.', 'Use left lane to pass. No action required.', R.TEXT.none,
+      'The heights and widths of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
+      'The heights of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
+      'The widths of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
+      'The clearance on the right side of the L-shape traffic light is enough for transportation.',
+      'The clearance between the L-shape traffic lights is enough for transportation. No action required.',
+      'The height of the traffic lights is suitable for the planned operation. No action required.',
+      'Signboard must be removed.'],
+    'Bridge': ['Bridge static analysis and evaluation is required.', 'The bridge is in good condition.',
+      'Construction of a new bridge has commenced along the route. The height of bridge is currently unknown.'],
+    'Culvert': ['The culvert is good condition.', 'Bridge static analysis and evaluation is required.'],
+    'Left Turn': ['Turn left.', 'Turn left. Turning radius of the turn is suitable for planned transportation operation.', 'Turn left. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.',
+      'Turn left and take the second exit at the roundabout.', 'Turn left by roundabout turn.', 'Turn left and exit the freeway.'],
+    'Right Turn': ['Turn right.', 'Turn right. Turning radius of the turn is suitable for planned transportation operation.', 'Turn right. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.',
+      'Turn right. The turn is suitable for planned transportation operation.', 'Concrete blocks must be removed for the right turn.', 'Turn right after exit of factory.', 'Turn right at the roundabout and enter the freeway.'],
+    'Curve': ['Left curve. No action required.', 'Right curve. No action required.', 'S Turn.', 'S Turn. Turning radius is suitable for transportation.'],
+    'U Turn': ['U turn. Turning radius of the turn is suitable for planned transportation operation.', 'U - Turn is suitable for the planned transportation operation.', 'U turn.', 'U Turn by roundabout turn.'],
+    'Roundabout Turn': ['Continue straight at the roundabout.', 'Take the second exit at the roundabout.', 'Enter the roundabout.'],
     'Inclination': ['The degree of the inclination is about %.'],
     'Declination': ['The degree of the declination is about %.'],
-    'Road Condition': ['The road is in poor condition and requires minor civil works.', 'The opposite traffic direction must be used.'],
+    'Road Condition': ['The road is in poor condition and requires minor civil works.', 'The opposite traffic direction must be used.',
+      'Road is good condition. No action required.', 'No action required.',
+      'The road narrows to a single lane due to roadworks.', 'Due to ongoing roadworks, the road narrows to a single lane.', 'The road is reduced to a single lane.',
+      'The road returns to two lanes as the roadworks have been completed.', 'Roadworks have been completed.', 'Start of road works at this point.',
+      'Start of roadworks at this point. The traffic cones will be removed to allow the transport convoy to proceed along the planned route.', 'The traffic cones will be removed.',
+      'Roadworks ahead, use the right lane.', 'Left lane must be used.', 'Move on the opposite direction.',
+      'The road has become a single carriageway with one lane in each direction.', 'The road has become a dual carriageway with two lanes in each direction.',
+      'Connect to the main road.', 'Back onto the main road.', 'Security check point. No action required.',
+      'Trees are extending into the roadway in some sections.', 'Automatic barrier.', 'Concrete barriers.',
+      'Construction of a new bridge has commenced along the route. The height of bridge is currently unknown.',
+      'The road condition is not suitable for the planned operation. The road must be widened up to the main road connection, and filling and compaction work must be carried out.'],
     'Width Obstruction': ['The clearance is sufficient for transport.'],
+    'Railroad Crossing': ['Railroad crossing must be organized based on the train schedule.'],
+    'Port Gate': ['Entrance of the port gate.', 'Width of factory gate is suitable for planned transportation operation.', 'Gate dimensions is suitable for planned transportation operation.',
+      'Jobsite Gate is not suitable for planned transportation operation. Gate must be widened.', 'Exit of the jobsite gate to the opposite direction.', 'Terminal gate entrance.', 'Cargo unloading area.'],
     'Satellite View': ['Satellite view of transportation simulation.'],
     'Drone View': ['Drone view of transportation simulation.'],
   };
@@ -589,11 +617,11 @@
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
-              + rb('', 'ghost', '', '') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '')
+              + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engeller') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + addBtn
-            : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri')
-              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + addBtn)}
+            : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/crit/${sv.id}"`, '', '', 'Kritik Engeller')
+              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + addBtn)}
           </div>
         </div>
       </div>`;
@@ -963,7 +991,7 @@
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
           ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
-          ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].map((p, i) => `<button class="chip" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-ph="${i}">${esc(p)}</button>`).join('')}</div>` : ''}
+          ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].slice(0, 4).map((p, i) => `<button class="chip" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-ph="${i}">${esc(p)}</button>`).join('')}${PHRASES[r.obstacle].length > 4 ? `<button class="chip dash" id="phall" style="font-size:13px;border-radius:10px;min-height:40px">Tüm hazır cümleler (${PHRASES[r.obstacle].length})</button>` : ''}</div>` : ''}
           <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
           <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px">
             ${sw('auto', 'Otomatik', auto ? COLORS.find(c => c[0] === auto)[2] : '#fff', cur == null)}${sw('none', 'Yok', '#fff', cur === 'none')}
@@ -1052,10 +1080,8 @@
         const s = e.target.closest('[data-sub]'), p = e.target.closest('[data-ph]'), c = e.target.closest('[data-col]'), hd = e.target.closest('[data-hdel]'), nav = e.target.closest('[data-go]');
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
-        if (p) { read(); const t = PHRASES[r.obstacle][p.dataset.ph]; r[textKey] = t; if (isOH) r.actionAuto = false; draw();
-          // a standard phrase never opens the keyboard; only Inclination/Declination ("about %") need the degree typed in
-          const tx = document.getElementById('tx'), k = tx.value.lastIndexOf('%');
-          if (k >= 0 && /about %/.test(tx.value)) { tx.focus(); tx.setSelectionRange(k, k + 1); } else if (document.activeElement) document.activeElement.blur(); }
+        if (p) applyPh(+p.dataset.ph);
+        if (e.target.closest('#phall')) { read(); sheet(`${r.obstacle} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) }))); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
         const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
@@ -1101,6 +1127,11 @@
       };
       window.addEventListener('hashchange', () => d.remove(), { once: true });
     }
+    function applyPh(i) {   // a standard phrase replaces the text; it never opens the keyboard, except to type the degree in "about %"
+      read(); r[textKey] = PHRASES[r.obstacle][i]; if (isOH) r.actionAuto = false; draw();
+      const tx = document.getElementById('tx'), k = tx.value.lastIndexOf('%');
+      if (k >= 0 && /about %/.test(tx.value)) { tx.focus(); tx.setSelectionRange(k, k + 1); } else if (document.activeElement) document.activeElement.blur();
+    }
     autoAct(); draw();
     LATE.onfix = rr => {   // position arrived (or gave up) for a photo taken before the GPS had a fix
       const g = i => document.getElementById(i);
@@ -1111,6 +1142,48 @@
       g('lochint').textContent = `${r.lat} · ${r.lon}`; toast(`Konum alındı (±${Math.round(r.acc)} m)`);
     };
     if (q.pick) { history.replaceState(null, '', `#/r/${id}/${rid}`); picker(); }
+  };
+
+  // ----- most critical obstacles: lowest heights (no cables), lowest widths, cables against their clearance -----
+  let CRITF = 'all';
+  V.crit = async id => {
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
+    const P = sv.project, gen = !!P.general, cg = gen ? {} : cargoOf(P), st = settingsOf(sv), ref = R.refs(st);
+    const ST = { route: '', bypass: '<span class="tag sub">BYPASS</span>', info: '<span class="tag ok">INFO</span>', bypassed: '<span class="tag warn">bypass edildi · sayılmaz</span>' };
+    const where = x => x.status === 'bypass' ? 'bypass güzergahında' : x.status === 'bypassed' ? 'yük bu engelin bypass\'ından geçer' : x.status === 'info' ? 'info kaydı' : 'ana güzergahta';
+    const item = (x, top, extra, low) => `<button class="citem ${x.counted ? '' : 'off'} ${top ? 'top' : ''}" data-go="#/r/${sv.id}/${x.rec.id}">
+        <span class="cv ${low ? 'low' : ''}">${fmt(x.value)} m</span>
+        <span class="ct"><b>${esc(x.rec.no)} · ${esc(x.rec.obstacle || 'Tip seçilmedi')}</b>
+          <span class="hint">${esc(x.all.map(h => `${h.label || ''} ${fmt(Number(h.value))}`).join(' · '))}${x.rec.fields && x.rec.fields.type ? ' · ' + esc(x.rec.fields.type) : ''} · ${where(x)}</span>${extra || ''}</span>
+        <span class="cb">${top ? '<span class="tag bad">KRİTİK</span>' : ''}${ST[x.status]}</span></button>`;
+    const col = (list, limit) => { let first = true; return list.map(x => { const top = first && x.counted; if (top) first = false; return item(x, top, '', limit && x.counted && x.value < limit); }).join('') || '<div class="empty">Kayıt yok</div>'; };
+    const hs = dimList(sv, 'heights', r => r.obstacle !== 'Overhead Cable'), ws = dimList(sv, 'widths');
+    // cables: how much each clears its required jump height (AG/OG/YG reference); general survey: plain height order
+    const CLS = { LV: 'AG', MV: 'OG', HV: 'YG' }, kind = r => { const t = (r.fields && r.fields.type) || ''; return /tele/i.test(t) ? 'TEL' : CLS[R.lineClass(t)] || 'NA'; };
+    const cab = dimList(sv, 'heights', r => r.obstacle === 'Overhead Cable').map(x => {
+      const k = kind(x.rec), need = gen ? null : k === 'TEL' || k === 'AG' ? ref.LV : k === 'OG' ? ref.MV : k === 'YG' ? ref.HV : null;
+      return Object.assign(x, { k, need, margin: need != null ? x.value - need : null });
+    });
+    const order = gen ? cab : cab.slice().sort((a, b) => (a.margin ?? 1e9) - (b.margin ?? 1e9) || a.value - b.value);
+    const KN = { all: 'Tümü', AG: 'AG', OG: 'OG', YG: 'YG', TEL: 'Telefon', NA: 'Tipi seçilmemiş' };
+    const kinds = ['all', ...['AG', 'OG', 'YG', 'TEL', 'NA'].filter(k => cab.some(x => x.k === k))];
+    if (!kinds.includes(CRITF)) CRITF = 'all';
+    const shown = order.filter(x => CRITF === 'all' || x.k === CRITF);
+    let firstC = true;
+    const cabHtml = shown.map(x => {
+      const top = firstC && x.counted; if (top) firstC = false;
+      const extra = x.need != null ? `<span class="hint">${KN[x.k]} referansı ${fmt(x.need)} m · fark <b style="color:${x.margin < 0 ? 'var(--badtx)' : 'var(--oktx)'}">${x.margin >= 0 ? '+' : ''}${fmt(Math.round(x.margin * 100) / 100)} m</b></span>`
+        : `<span class="hint">${x.k === 'NA' ? 'Hat tipi seçilmemiş' : KN[x.k]}${gen ? ' · genel etüt: yalnız yüksekliğe göre' : ''}</span>`;
+      return item(x, top, extra, x.margin != null && x.margin < 0 && x.counted);
+    }).join('') || '<div class="empty">Yüksekliği girilmiş kablo yok</div>';
+    $app.innerHTML = `${bar('Kritik Engeller', `#/s/${sv.id}`, minHBox(sv) + cargoBox(P))}
+      <div class="crit3">
+        <div class="pane box"><div class="ch"><b>1 · Kritik H</b><span class="hint">Kablolar hariç · en alçaktan yükseğe · bypass edilen engeller gri</span></div>${col(hs, Number(cg.height) || null)}</div>
+        <div class="pane box"><div class="ch"><b>2 · Kritik W</b><span class="hint">Tüm engeller · en darından genişe</span></div>${col(ws, Number(cg.width) || null)}</div>
+        <div class="pane box"><div class="ch"><b>3 · Kablolar</b><span class="hint">${gen ? 'Genel etüt: en alçaktan yükseğe' : `Atlama referansına göre en kritikten rahata (AG ${fmt(ref.LV)} · OG ${fmt(ref.MV)} · YG ${fmt(ref.HV)} m)`}</span>
+          <div class="chips">${kinds.map(k => `<button class="chip ${CRITF === k ? 'on' : ''}" data-cf="${k}">${KN[k]} · ${k === 'all' ? cab.length : cab.filter(x => x.k === k).length}</button>`).join('')}</div></div>${cabHtml}</div>
+      </div>`;
+    $app.onclick = e => { const c = e.target.closest('[data-cf]'); if (c) { CRITF = c.dataset.cf; V.crit(id); } };
   };
 
   // ----- photo annotation -----
@@ -1288,6 +1361,7 @@
       else if (p[0] === 'cam') await V.camera(p[1], q);
       else if (p[0] === 'r') await V.record(p[1], p[2], q);
       else if (p[0] === 'rep' && FIELD) go(`#/s/${p[1]}`);
+      else if (p[0] === 'crit') await V.crit(p[1]);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);
       else go('#/');

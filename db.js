@@ -115,22 +115,34 @@
     return line.map(x => [x[0], x[1]]);
   }
   g.archivedRecords = archived; g.routeKm = routeKm;
-  /* Critical (lowest) clear height / width along the route the load will actually take. A main obstacle that has a
-     BYPASS is driven round, so its own values do not limit the load; the values met on its bypass do. Otherwise the
-     obstacle's values count, together with values entered on its INFO records. Archived records are left out.
-     key: 'heights' or 'widths'. */
-  function criticalDim(sv, key) {
-    const live = ordered(sv); let best = null, skipped = 0;
-    const has = r => (r[key] || []).some(h => h.value != null && h.value !== '');
-    const take = r => { for (const h of r[key] || []) { const v = Number(h.value); if (h.value == null || h.value === '' || !(v > 0)) continue; if (!best || v < best.value) best = { value: v, rec: r, label: h.label || (key === 'widths' ? 'W' : 'H') }; } };
-    for (const m of live.filter(r => !r.parentId)) {
-      const kids = live.filter(r => r.parentId === m.id), bypass = kids.filter(r => r.flag === 'BYPASS');
-      if (bypass.length) { if (has(m)) skipped += 1; bypass.forEach(take); }
-      else { take(m); kids.filter(r => r.flag !== 'BYPASS').forEach(take); }
+  /* Every record carrying a height ('heights') or width ('widths'), lowest first, with where it lies on the route:
+     'route'    an obstacle on the main route
+     'bypass'   a record on a bypass
+     'info'     an INFO record of an obstacle on the route
+     'bypassed' an obstacle that has a bypass (or its INFO): the load goes round it, so it does not limit the load
+     Archived records are left out. keep(r) narrows the list (e.g. cables only / no cables). */
+  function dimList(sv, key, keep) {
+    const live = ordered(sv), out = [];
+    const byp = new Set(live.filter(r => r.flag === 'BYPASS').map(r => r.parentId));
+    for (const r of live) {
+      if (keep && !keep(r)) continue;
+      const vals = (r[key] || []).filter(h => h.value != null && h.value !== '' && Number(h.value) > 0);
+      if (!vals.length) continue;
+      const lo = vals.reduce((a, b) => Number(b.value) < Number(a.value) ? b : a);
+      const status = !r.parentId ? (byp.has(r.id) ? 'bypassed' : 'route') : r.flag === 'BYPASS' ? 'bypass' : (byp.has(r.parentId) ? 'bypassed' : 'info');
+      out.push({ rec: r, value: Number(lo.value), label: lo.label || (key === 'widths' ? 'W' : 'H'), all: vals, status, counted: status !== 'bypassed' });
     }
-    return best ? Object.assign(best, { skipped }) : (skipped ? { value: null, skipped } : null);
+    return out.sort((a, b) => a.value - b.value);
   }
-  g.criticalDim = criticalDim; g.criticalHeight = sv => criticalDim(sv, 'heights');
+  /* Critical (lowest) clear height / width on the route the load actually takes: bypassed obstacles do not count,
+     their bypass records do. Overhead cables are left out (they are lifted or switched off; see the cable list). */
+  const noCable = r => r.obstacle !== 'Overhead Cable';
+  function criticalDim(sv, key) {
+    const list = dimList(sv, key, noCable), best = list.find(x => x.counted);
+    const skipped = list.filter(x => x.status === 'bypassed' && !x.rec.parentId).length;
+    return best ? { value: best.value, rec: best.rec, label: best.label, skipped } : (skipped ? { value: null, skipped } : null);
+  }
+  g.dimList = dimList; g.criticalDim = criticalDim; g.criticalHeight = sv => criticalDim(sv, 'heights');
   /* photo annotations (arrows, notes, lines) drawn over a 4:3 photo box; shared by the app and the report */
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function annHtml(items, sel) {
