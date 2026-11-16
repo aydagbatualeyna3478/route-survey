@@ -399,13 +399,6 @@
         <div class="g2"><label class="f">Müşteri unvanı<input name="client" value="${esc(p.client)}"></label>
           <label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa müşteri unvanı yazılır"></label></div>
         <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
-        <div class="sec">Rapor başlığı (yeni taslak)</div>
-        <div class="g2"><label class="f">Proje / Project<input name="projectName" value="${esc(p.projectName || '')}" placeholder="ör. Mozambique Inhassoro Project"></label>
-          <label class="f">Ülke / Country<input name="country" value="${esc(p.country || '')}"></label></div>
-        <div class="g3"><label class="f">Doküman No / Doc. No<input name="docNo" value="${esc(p.docNo || '')}" placeholder="ör. RS-102026-MOZ-001-SB"></label>
-          <label class="f">Tarih / Date<input name="reportDate" value="${esc(p.reportDate || longDate(new Date()))}"></label>
-          <label class="f">Revizyon Tarihi<input name="revDate" value="${esc(p.revDate || p.reportDate || longDate(new Date()))}"></label></div>
-        <span class="hint">Güzergah / Route satırına otomatik "${esc(p.start.name || 'A')} - ${esc(p.end.name || 'B')} Arası Yol Etüdü" yazılır.</span>
         </div>
         ${FIELD ? '<div class="note g">Kapak bilgileri, logolar, kapak fotoğrafı, taşıma çizimi ve sonuç bölümü ofiste, bilgisayardaki uygulamada girilir. Etüt bitince "Dışa Aktar" ile dosyayı bilgisayara gönder.</div>' : ''}
       </div>
@@ -459,7 +452,6 @@
       Object.assign(s.project, {
         start: { name: f.start.value.trim() }, end: { name: f.end.value.trim() },
         title: `ROUTE SURVEY REPORT FROM\n${f.start.value.trim().toUpperCase()} TO ${f.end.value.trim().toUpperCase()}`,
-        projectName: f.projectName.value.trim(), country: f.country.value.trim(), docNo: f.docNo.value.trim(), reportDate: f.reportDate.value.trim(), revDate: f.revDate.value.trim(),
         client: f.client.value.trim(), preparedFor: f.preparedFor.value.trim() || f.client.value.trim(), reference: f.reference.value.trim(), rev: f.rev.value.trim(),
         preparedBy: f.preparedBy.value.split('\n').map(x => x.trim()).filter(Boolean), executedBy: s.project.companyShort,
         general, cargo, minHeight: general ? null : cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
@@ -1126,6 +1118,14 @@
     const recs = orderedRecords(sv), c = sv.project.conclusion || (sv.project.conclusion = {});
     const cnt = t => recs.filter(r => t.includes(r.obstacle)).length;
     const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
+    const P = sv.project, last = (await DB.getSetting('headerDefaults')) || {};
+    const H = P.header = Object.assign({ client: P.client || '', project: '', route: `${P.start.name} - ${P.end.name} Arası Yol Etüdü`, country: '', date: longDate(new Date()), docNo: last.docNo || '', rev: P.rev || '00', revDate: last.revDate || '' }, P.header || {});
+    const R2 = sv.r2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
+    const NEED = ['client', 'project', 'country', 'date', 'docNo', 'rev', 'revDate'], missing = NEED.filter(k => !String(H[k] || '').trim());
+    const lg = { company: await blobUrl(await DB.getSetting('companyLogo')) || 'assets/logo_company.jpg', partner: await blobUrl(await DB.getSetting('partnerLogo')) || 'assets/logo_cjicm.jpg', client1: await blobUrl(sv.logos.client1), client2: await blobUrl(sv.logos.client2) };
+    const hf = (k, t, ph) => `<label class="f">${t}<input data-h="${k}" value="${esc(H[k] || '')}" ${ph ? `placeholder="${ph}"` : ''} style="${NEED.includes(k) && !String(H[k] || '').trim() ? 'border:2px solid var(--red)' : ''}"></label>`;
+    const lslot = (k, t) => `<label class="logo" style="cursor:pointer"><b>${t}</b><span class="pv">${lg[k] ? `<img src="${lg[k]}" alt="">` : imgSvg + ' Yükle'}</span><span class="hint">Değiştirmek için dokun</span><input class="hid" type="file" accept="image/*" data-r2logo="${k}"></label>`;
+    const ropt = (name, v, t, cur) => `<label class="row" style="border:${cur === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:8px 10px;font-size:14px;background:#fff"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
     const nf = recs.filter(r => r.flag === 'BYPASS').length, ni = recs.filter(r => r.flag === 'INFO').length;
     const miss = recs.filter(r => !r.photoId).length, nopos = recs.filter(r => r.latDec == null).length;
     c.bridge = c.bridge || 'required'; c.road = c.road || 'paved_ok';
@@ -1133,6 +1133,19 @@
     $app.innerHTML = `${bar('Rapor oluştur', `#/s/${id}`, cargoBox(sv.project))}
     <div class="split even">
       <div class="pane">
+        <div class="card"><b>Antet bilgileri <span class="hint">(engel sayfalarının üst tablosu)</span></b>
+          ${missing.length ? '<div class="note w">Raporu açmadan önce kırmızı alanları doldur.</div>' : ''}
+          <div class="g2">${hf('client', 'Müşteri / Client')}${hf('date', 'Tarih / Date')}</div>
+          <div class="g2">${hf('project', 'Proje / Project', 'ör. Mozambique Inhassoro Project')}${hf('docNo', 'Doküman No / Doc. No', 'ör. RS-102026-MOZ-001-SB')}</div>
+          <div class="g2">${hf('route', 'Güzergah / Route')}${hf('rev', 'Revizyon No / Rev. No')}</div>
+          <div class="g2">${hf('country', 'Ülke / Country')}${hf('revDate', 'Revizyon Tarihi / Date', 'ör. 13 November 2026')}</div></div>
+        <div class="card"><b>Engel sayfası logoları</b>
+          <span class="sec">Sol üst</span>
+          ${ropt('r2head', 'caba', 'Yalnız Çaba Misnak', R2.head)}${ropt('r2head', 'caba_cj', 'Çaba Misnak + CJ ICM', R2.head)}${ropt('r2head', 'cj_caba', 'CJ ICM + Çaba Misnak', R2.head)}
+          <span class="sec">Sol alt (müşteri)</span>
+          ${ropt('r2foot', '0', 'Logo yok', String(R2.foot))}${ropt('r2foot', '1', 'Tek müşteri logosu', String(R2.foot))}${ropt('r2foot', '2', 'İki müşteri logosu', String(R2.foot))}
+          <div class="g4">${lslot('company', 'Çaba Misnak')}${lslot('partner', 'CJ ICM')}${lslot('client1', 'Müşteri-1')}${lslot('client2', 'Müşteri-2')}</div>
+          <span class="hint">Kapak ve dikey sayfaların logoları "Etüt bilgileri"ndeki köşe ve kapak düzeni ayarlarıyla gelir.</span></div>
         <div class="card"><b>1.5 Brief Information <span class="tag ok">Otomatik</span></b>
           <div class="stat4"><div><b>${Math.round(Math.max(0, ...recs.filter(r => !r.flag).map(r => r.km || 0)))}</b><span>km</span></div><div><b>${cnt(['Bridge'])}</b><span>köprü</span></div>
             <div><b>${cnt(['Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn'])}</b><span>dönüş/viraj</span></div><div><b>${cnt(['Overhead Structure'])}</b><span>üst yapı</span></div></div></div>
@@ -1153,12 +1166,32 @@
       </div>
     </div>
     <div class="foot"><button class="btn" id="mkold" style="min-width:0">Eski format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
-    const save = async () => { const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim(); mp.key = document.getElementById('gkey').value.trim(); await DB.setSetting('maps', mp); await DB.putSurvey(sv); };
+    const save = async () => {
+      const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim();
+      mp.key = document.getElementById('gkey').value.trim(); await DB.setSetting('maps', mp);
+      document.querySelectorAll('[data-h]').forEach(i => { H[i.dataset.h] = i.value.trim(); });
+      if (H.client) P.client = H.client; if (H.rev) P.rev = H.rev;
+      await DB.setSetting('headerDefaults', { docNo: H.docNo, revDate: H.revDate });
+      await DB.putSurvey(sv);
+    };
+    document.querySelectorAll('[data-r2logo]').forEach(inp => inp.addEventListener('change', async () => {
+      if (!inp.files[0]) return; await save();
+      const k = inp.dataset.r2logo, blob = await shrink(inp.files[0], 1200);
+      if (k === 'company' || k === 'partner') { const key = k === 'company' ? 'companyLogo' : 'partnerLogo'; await DB.delBlob(await DB.getSetting(key)); await DB.setSetting(key, await DB.putBlob(blob)); }
+      else { await DB.delBlob(sv.logos[k]); sv.logos[k] = await DB.putBlob(blob); await DB.putSurvey(sv); }
+      V.report(id);
+    }));
     $app.onchange = async e => {
+      if (e.target.name === 'r2head' || e.target.name === 'r2foot') { await save(); R2[e.target.name === 'r2head' ? 'head' : 'foot'] = e.target.name === 'r2foot' ? +e.target.value : e.target.value; await DB.putSurvey(sv); return V.report(id); }
       if (e.target.name === 'mapProvider') { await save(); mp.provider = e.target.value; await DB.setSetting('maps', mp); return V.report(id); }
       if (e.target.type === 'radio') { await save(); c[e.target.name] = e.target.value; await DB.putSurvey(sv); V.report(id); }
     };
-    document.getElementById('mk').onclick = async () => { await save(); if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını gir ya da Esri seç'); location.href = `report2.html#${id}`; };
+    document.getElementById('mk').onclick = async () => {
+      await save();
+      if (NEED.some(k => !String(H[k] || '').trim())) { toast('Önce antet bilgilerini doldur'); return V.report(id); }
+      if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını gir ya da Esri seç');
+      location.href = `report2.html#${id}`;
+    };
     document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
 

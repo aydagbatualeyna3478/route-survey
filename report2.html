@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Route Survey Report</title>
+<link rel="stylesheet" href="report.css">
 <link rel="stylesheet" href="report2.css">
 <style>
 #tb{position:sticky;top:0;z-index:10;background:#1E3A5F;color:#fff;display:flex;gap:10px;align-items:center;padding:10px 12px;font:15px system-ui,sans-serif}
@@ -19,9 +20,10 @@
 <script src="db.js"></script>
 <script src="rules.js"></script>
 <script>
-/* New report draft (Nov 2026): summary table, then every record — INFO and BYPASS too — on its own A4 landscape page:
-   header (logos, project table, title band) · # / KM / obstacle / latitude & longitude / details above the photo ·
-   photo on the left · on the right the obstacle's place on the whole route, remarks, and a close satellite view. */
+/* Report with the new draft (Nov 2026):
+   portrait cover, contents, introduction (old letterhead, logos as set in the app)
+   → section 3: landscape summary table + one landscape page per record (INFO and BYPASS each on their own page)
+   → portrait conclusion. report.js builds the portrait pages and slots the landscape ones (window.R2_PAGES) in. */
 (async () => {
   const id = location.hash.slice(1), msg = document.getElementById('msg');
   document.getElementById('bk').href = 'index.html#/rep/' + id;
@@ -29,12 +31,12 @@
   if (!sv) { msg.textContent = 'Etüt bulunamadı.'; return; }
   const P = sv.project, esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
+  const url = async bid => (await DB.blobUrl(bid)) || null;
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
-  const routeLine = routeKm(sv);           // KM of every record from the final order
-  const recs = orderedRecords(sv);          // archived records are left out
-  const blobUrl = async bid => (await DB.blobUrl(bid)) || null;
+  const routeLine = routeKm(sv);            // KM of every record from the final order
+  const recs = orderedRecords(sv);           // archived records are left out
 
-  // ---------- photos: 1400×1050 JPEG with Excel's 2.5 pt soft edge baked in ----------
+  // ---------- photos: 1400×1050 JPEG with Excel's 2.5 pt soft edge baked in (no marks on the photo) ----------
   async function reportPhoto(bid) {
     const blob = await DB.getBlob(bid); if (!blob) return null;
     let bmp; try { bmp = await createImageBitmap(blob); } catch (e) { return URL.createObjectURL(blob); }
@@ -47,21 +49,41 @@
     fade(0, 0, f, 0, 0, 0, f, H); fade(W, 0, W - f, 0, W - f, 0, f, H); fade(0, 0, 0, f, 0, 0, W, f); fade(0, H, 0, H - f, 0, H - f, W, f);
     return new Promise(res => c.toBlob(b => res(URL.createObjectURL(b)), 'image/jpeg', 0.74));
   }
+  msg.textContent = 'Fotoğraflar hazırlanıyor…';
+  let done = 0;
+  for (const r of recs) { r.photo = await reportPhoto(r.photoId); r.crop = null; done++; if (done % 10 === 0) msg.textContent = `Fotoğraflar hazırlanıyor… ${done} / ${recs.length}`; }
+  window.SURVEY = { project: P, records: recs };
 
-  // ---------- maps ----------
-  const MW = 932, MH = 400;   // pixels for a 275 × 118 pt map box
+  // ---------- assets of the portrait pages (as in the old report) ----------
+  const A = window.ASSETS = {
+    logoCompany: (await url(await DB.getSetting('companyLogo'))) || 'assets/logo_company.jpg',
+    logos: [], coverPhoto: (await url(sv.logos.cover)) || 'assets/cover_photo.jpg',
+    iconTurn: 'assets/icon_turn.png', barGreen: 'assets/bar_green.jpg', barRed: 'assets/bar_red.jpg', compassK: 'assets/compass_k.jpg', compassN: 'assets/compass_n.jpg',
+    drawing: await url(sv.logos.drawing), ref: {}, refAR: {},
+  };
+  const L = logosOf(sv);
+  A.logos = [{ key: 'company', src: A.logoCompany, pos: L.pos.company }];
+  for (const k of ['client1', 'client2', 'owner']) { const u = await url(L.ids[k]); if (u) A.logos.push({ key: k, src: u, pos: L.pos[k] }); }
+  const srcOf = k => (A.logos.find(l => l.key === k) || {}).src;
+  A.cover = Object.fromEntries(Object.entries(L.cover).map(([area, keys]) => [area, keys.map(srcOf).filter(Boolean).slice(0, 2)]));
+  if (A.drawing) { const i = await load(A.drawing); A.drawingLandscape = i && i.naturalWidth > i.naturalHeight; }
+  ['r17','r18','r23','r24','r25','r30','r31','r36','r37','r42','r43','r48','r49','r54','r55','r60','r61','r66','r67','r72','r73','r78','r79'].forEach(k => A.ref[k] = 'assets/ref/' + k + '.jpg');
+  await Promise.all(Object.entries(A.ref).map(async ([k, s]) => { const i = await load(s); if (i) A.refAR[k] = i.naturalWidth / i.naturalHeight; }));
+
+  // ---------- map helpers ----------
   const wx = (lon, n) => (lon + 180) / 360 * n, wy = (lat, n) => (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
-  function tiles(g, z, x0, y0, W, H, url) {   // draws web-mercator tiles into a canvas; resolves true if any arrived
+  const ilat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI, ilon = (x, n) => x / n * 360 - 180;
+  function tiles(g, z, x0, y0, W, H, tileUrl) {   // web-mercator tiles into a canvas; resolves true if any arrived
     const jobs = [];
     for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++) for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++) {
       const N = 2 ** z, X = ((tx % N) + N) % N;
-      jobs.push(new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => { g.drawImage(i, tx * 256 - x0, ty * 256 - y0); res(true); }; i.onerror = () => res(false); i.src = url(z, X, ty); }));
+      jobs.push(new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => { g.drawImage(i, tx * 256 - x0, ty * 256 - y0); res(true); }; i.onerror = () => res(false); i.src = tileUrl(z, X, ty); }));
     }
     return Promise.race([Promise.all(jobs), new Promise(res => setTimeout(() => res([]), 15000))]).then(a => a.some(Boolean));
   }
-  const attrib = (g, W, H, t) => { g.font = '600 15px sans-serif'; const tw = g.measureText(t).width; g.fillStyle = 'rgba(0,0,0,.72)'; g.fillRect(W - tw - 14, H - 24, tw + 14, 24); g.fillStyle = '#fff'; g.fillText(t, W - tw - 7, H - 7); };
-  const pinAt = (g, x, y, s) => {   // red map pin with a white dot
-    s = s || 1; g.save(); g.translate(x, y); g.scale(s, s);
+  const attrib = (g, W, H, t, px) => { g.font = `600 ${px || 15}px sans-serif`; const tw = g.measureText(t).width, h = (px || 15) + 9; g.fillStyle = 'rgba(0,0,0,.72)'; g.fillRect(W - tw - 14, H - h, tw + 14, h); g.fillStyle = '#fff'; g.fillText(t, W - tw - 7, H - 7); };
+  const pinAt = (g, x, y, s) => {
+    g.save(); g.translate(x, y); g.scale(s || 1, s || 1);
     g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(-4, -10, -13, -14, -13, -24); g.arc(0, -24, 13, Math.PI, 0); g.bezierCurveTo(13, -14, 4, -10, 0, 0);
     g.fillStyle = '#E02424'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
     g.beginPath(); g.arc(0, -24, 5, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.restore();
@@ -70,7 +92,23 @@
   const ESRI = (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
   const OSM = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
 
-  async function satellite(lat, lon) {   // close satellite view centred on the obstacle
+  // ---------- route map of section 1.3 (portrait, as in the old report) ----------
+  const step = Math.max(1, Math.ceil(routeLine.length / 800)); A.routeLine = routeLine.filter((_, i) => i % step === 0 || i === routeLine.length - 1);
+  { const W = 1186, H = 884; A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: 1, lon: 0 }, b: { x: 1, y: 1, lat: 0, lon: 1 } };
+    if (A.routeLine.length >= 2) {
+      msg.textContent = 'Harita hazırlanıyor…';
+      const las = A.routeLine.map(p => p[0]), los = A.routeLine.map(p => p[1]), b = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
+      let z = 16, n; for (; z > 2; z--) { n = 256 * 2 ** z; if ((wx(b[3], n) - wx(b[2], n)) <= W * 0.62 && (wy(b[0], n) - wy(b[1], n)) <= H * 0.62) break; }
+      n = 256 * 2 ** z;
+      const x0 = (wx(b[2], n) + wx(b[3], n)) / 2 - W / 2, y0 = (wy(b[0], n) + wy(b[1], n)) / 2 - H / 2;
+      A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: ilat(y0, n), lon: ilon(x0, n) }, b: { x: 1, y: 1, lat: ilat(y0 + H, n), lon: ilon(x0 + W, n) } };
+      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#EEF1F4'; g.fillRect(0, 0, W, H);
+      if (await tiles(g, z, x0, y0, W, H, OSM)) { attrib(g, W, H, '© OpenStreetMap contributors', 14); try { A.routeBase = c.toDataURL('image/jpeg', 0.85); } catch (e) { A.routeBase = null; } }
+    } }
+
+  // ---------- maps of the landscape pages ----------
+  const MW = 932, MH = 400;   // pixels for a 275 × 118 pt box
+  async function satellite(lat, lon) {
     if (mp.provider === 'google') return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=18&size=466x200&scale=2&maptype=satellite&markers=color:red%7C${lat},${lon}&key=${encodeURIComponent(mp.key)}`;
     const z = 18, n = 256 * 2 ** z, x0 = wx(lon, n) - MW / 2, y0 = wy(lat, n) - MH / 2;
     const c = document.createElement('canvas'); c.width = MW; c.height = MH; const g = c.getContext('2d'); g.fillStyle = '#C9D2DC'; g.fillRect(0, 0, MW, MH);
@@ -78,9 +116,8 @@
     pinAt(g, MW / 2, MH / 2, 1.3); attrib(g, MW, MH, 'Esri, Maxar, Earthstar Geographics');
     return toUrl(c);
   }
-  // whole route: one base picture (tiles + blue route + start/end), the obstacle is marked on top of it per page
   let routeBase = null, routeProj = null;
-  async function makeRouteBase() {
+  async function makeRouteBase() {   // whole route once: tiles + blue route + start/end; each page marks its record on top
     if (routeLine.length < 2) return;
     const las = routeLine.map(p => p[0]), los = routeLine.map(p => p[1]), b = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
     let z = 17, n; for (; z > 2; z--) { n = 256 * 2 ** z; if (wx(b[3], n) - wx(b[2], n) <= MW * 0.84 && wy(b[0], n) - wy(b[1], n) <= MH * 0.8) break; }
@@ -104,21 +141,24 @@
     for (const [la, lo] of pts) { const a = Math.round(la * 1e5), b = Math.round(lo * 1e5); out += encN(a - plat) + encN(b - plon); plat = a; plon = b; }
     return out;
   }
-  function routeMap(r) {   // returns HTML for the route box
-    if (routeLine.length < 2) return '<div class="none" style="width:100%;height:100%">No route data</div>';
+  function routeMap(r) {
+    if (routeLine.length < 2) return '<div class="none">No route data</div>';
     if (mp.provider === 'google') {
-      const step = Math.max(1, Math.ceil(routeLine.length / 250)), pts = routeLine.filter((_, i) => i % step === 0 || i === routeLine.length - 1);
-      let u = `https://maps.googleapis.com/maps/api/staticmap?size=466x200&scale=2&maptype=roadmap&path=color:0x1E5AFFFF%7Cweight:4%7Cenc:${encodeURIComponent(polyline(pts))}`;
-      u += `&markers=size:tiny%7Ccolor:green%7C${pts[0][0]},${pts[0][1]}`;
+      const st = Math.max(1, Math.ceil(routeLine.length / 250)), pts = routeLine.filter((_, i) => i % st === 0 || i === routeLine.length - 1);
+      let u = `https://maps.googleapis.com/maps/api/staticmap?size=466x200&scale=2&maptype=roadmap&path=color:0x1E5AFFFF%7Cweight:4%7Cenc:${encodeURIComponent(polyline(pts))}&markers=size:tiny%7Ccolor:green%7C${pts[0][0]},${pts[0][1]}`;
       if (r.latDec != null) u += `&markers=color:red%7C${r.latDec},${r.lonDec}`;
       return `<img src="${u}&key=${encodeURIComponent(mp.key)}" alt="">`;
     }
     let pin = '';
     if (r.latDec != null && routeProj) { const [x, y] = routeProj(r.latDec, r.lonDec); pin = `<svg class="pin" viewBox="-13 -38 26 38" style="left:${x / MW * 100}%;top:${y / MH * 100}%;width:13pt;height:19pt;margin:-19pt 0 0 -6.5pt"><path d="M0 0C-4-10-13-14-13-24A13 13 0 0 1 13-24C13-14 4-10 0 0Z" fill="#E02424" stroke="#fff" stroke-width="2"/><circle cx="0" cy="-24" r="5" fill="#fff"/></svg>`; }
-    return (routeBase ? `<img src="${routeBase}" alt="">` : '<div class="none" style="width:100%;height:100%">Map not available</div>') + pin;
+    return (routeBase ? `<img src="${routeBase}" alt="">` : '<div class="none">Map not available</div>') + pin;
   }
+  msg.textContent = 'Haritalar hazırlanıyor…';
+  await makeRouteBase();
+  done = 0;
+  for (const r of recs) { r.sat = r.latDec != null ? await satellite(r.latDec, r.lonDec) : null; done++; if (done % 5 === 0) msg.textContent = `Uydu görüntüleri… ${done} / ${recs.length}`; }
 
-  // ---------- texts ----------
+  // ---------- landscape pages ----------
   const km1 = v => v == null ? '' : Number(v).toFixed(1);
   const num = v => v == null ? '' : String(Math.round(v * 100) / 100);
   function details(r) {
@@ -135,66 +175,54 @@
   const remarks = r => (/^Overhead/.test(r.obstacle) ? [r.actions, r.remarks] : [r.remarks, r.actions]).filter(Boolean).join('\n') || '—';
   const settings = { general: !!P.general, minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV };
   const COL = { red: '#FF0000', yellow: '#FFFF00', magenta: '#FF00FF', purple: '#7030A0', blue: '#4F81BD', green: '#92D050' };
-  const route = `${P.start.name} - ${P.end.name} Arası Yol Etüdü`;
-  const project = P.projectName || P.client || route;
-
-  // ---------- assets ----------
-  msg.textContent = 'Logolar ve fotoğraflar hazırlanıyor…';
-  const L = logosOf(sv);
-  const logoCompany = (await blobUrl(await DB.getSetting('companyLogo'))) || 'assets/logo_company.jpg';
-  const headLogos = [logoCompany, await blobUrl(L.ids.client1), await blobUrl(L.ids.client2)].filter(Boolean);
-  const ownerLogo = await blobUrl(L.ids.owner);
-  let done = 0;
-  for (const r of recs) { r.photo = await reportPhoto(r.photoId); done++; if (done % 10 === 0) msg.textContent = `Fotoğraflar hazırlanıyor… ${done} / ${recs.length}`; }
-  msg.textContent = 'Haritalar hazırlanıyor…';
-  await makeRouteBase();
-  done = 0;
-  for (const r of recs) { r.sat = r.latDec != null ? await satellite(r.latDec, r.lonDec) : null; done++; if (done % 5 === 0) msg.textContent = `Uydu görüntüleri… ${done} / ${recs.length}`; }
-
-  // ---------- pages ----------
-  const header = title => `<div class="a logos ${headLogos.length > 2 ? 'n3' : ''}">${headLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
+  const H = P.header || {}, route = H.route || `${P.start.name} - ${P.end.name} Arası Yol Etüdü`, project = H.project || P.client || route;
+  // logos: top left = Çaba Misnak alone or with CJ ICM; bottom left = one or two customer logos (all chosen in the app)
+  const R2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
+  const partner = (await url(await DB.getSetting('partnerLogo'))) || 'assets/logo_cjicm.jpg';
+  const headLogos = R2.head === 'caba_cj' ? [A.logoCompany, partner] : R2.head === 'cj_caba' ? [partner, A.logoCompany] : [A.logoCompany];
+  const custLogos = [R2.foot >= 1 ? await url(L.ids.client1) : null, R2.foot >= 2 ? await url(L.ids.client2) : null].filter(Boolean);
+  const header = title => `<div class="a logos n${headLogos.length}">${headLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
     <table class="a info"><colgroup><col style="width:140pt"><col style="width:158pt"><col style="width:114pt"><col></colgroup>
-      <tr><td class="l">Müşteri / Client</td><td>${esc(P.client)}</td><td class="l">Tarih / Date</td><td>${esc(P.reportDate || '')}</td></tr>
-      <tr><td class="l">Proje / Project</td><td>${esc(P.projectName || '')}</td><td class="l">Doküman No / Doc. No</td><td>${esc(P.docNo || '')}</td></tr>
-      <tr><td class="l">Güzergah / Route</td><td>${esc(route)}</td><td class="l">Revizyon No / Rev. No</td><td>${esc(P.rev || '')}</td></tr>
-      <tr><td class="l">Ülke / Country</td><td>${esc(P.country || '')}</td><td class="l">Revizyon Tarihi / Date</td><td>${esc(P.revDate || '')}</td></tr></table>
+      <tr><td class="l">Müşteri / Client</td><td>${esc(H.client)}</td><td class="l">Tarih / Date</td><td>${esc(H.date)}</td></tr>
+      <tr><td class="l">Proje / Project</td><td>${esc(H.project)}</td><td class="l">Doküman No / Doc. No</td><td>${esc(H.docNo)}</td></tr>
+      <tr><td class="l">Güzergah / Route</td><td>${esc(route)}</td><td class="l">Revizyon No / Rev. No</td><td>${esc(H.rev)}</td></tr>
+      <tr><td class="l">Ülke / Country</td><td>${esc(H.country)}</td><td class="l">Revizyon Tarihi / Date</td><td>${esc(H.revDate)}</td></tr></table>
     <div class="a title">${esc(title)}</div>`;
-  const footer = () => `<div class="a owner">${ownerLogo ? `<img src="${ownerLogo}" alt="">` : ''}</div>
-    <div class="a conf">Bu doküman gizlidir; izinsiz çoğaltılamaz ve üçüncü kişilerle paylaşılamaz.<br>Confidential – not to be copied or disclosed without permission.</div><div class="a pno"></div>`;
-  let html = '';
-  // summary
-  const ROWS = 24;
+  const footer = `<div class="a cust n${custLogos.length}">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
+    <div class="a conf">Bu doküman gizlidir; izinsiz çoğaltılamaz ve üçüncü kişilerle paylaşılamaz.<br>Confidential – not to be copied or disclosed without permission.</div>`;
+  const pagesHtml = [], ROWS = 24;
   for (let i = 0; i < recs.length || i === 0; i += ROWS) {
     const rows = recs.slice(i, i + ROWS).map(r => `<tr class="${r.parentId ? 'sub' : ''}"><td>${esc(r.no)}</td><td>${km1(r.km)}</td><td>${esc(r.obstacle || (r.flag === 'INFO' ? 'Info' : ''))}${r.flag && r.obstacle !== 'Info' ? ` (${r.flag})` : ''}</td><td>${esc(remarks(r).replace(/\n/g, ' ').replace(/^—$/, ''))}</td></tr>`).join('');
-    html += `<section class="pg">${header(`${project} — OBSTACLE SUMMARY`)}<table class="a sum"><colgroup><col style="width:42pt"><col style="width:48pt"><col style="width:190pt"><col></colgroup><tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>NOTES</th></tr>${rows}</table>${footer()}</section>`;
+    pagesHtml.push(`${header(`${project} — OBSTACLE SUMMARY`)}<table class="a sum"><colgroup><col style="width:42pt"><col style="width:48pt"><col style="width:190pt"><col></colgroup><tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>NOTES</th></tr>${rows}</table>${footer}`);
   }
-  // one page per record
   for (const r of recs) {
     const col = window.SurveyRules.highlightOf(r, settings), bg = col && COL[col] ? COL[col] : null;
     const ll = r.latDec != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latDec},${r.lonDec}">${esc(r.lat)}, ${esc(r.lon)}</a>` : '—';
-    html += `<section class="pg">${header(`ROUTE SURVEY REPORT, ${project}`)}
+    pagesHtml.push(`${header(`ROUTE SURVEY REPORT, ${project}`)}
       <table class="a strip"><colgroup><col style="width:44pt"><col style="width:52pt"><col style="width:170pt"><col style="width:170pt"><col></colgroup>
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>LATITUDE &amp; LONGITUDE</th><th>DETAILS</th></tr>
         <tr><td>${esc(r.no)}</td><td>${km1(r.km)}</td><td>${esc(r.obstacle || (r.flag === 'INFO' ? 'Info' : '—'))}${r.flag ? `<span class="flag">${r.flag}</span>` : ''}</td><td class="ll">${ll}</td><td class="det">${esc(details(r))}</td></tr></table>
-      <div class="a photo">${r.photo ? `<img src="${r.photo}" alt="">${annHtml(r.ann || [], -1)}` : `<div class="none" style="width:100%;height:100%">No photo</div>`}</div>
-      <div class="a map route">${routeMap(r)}<span class="lbl">ROUTE</span></div>
+      <div class="a photo">${r.photo ? `<img src="${r.photo}" alt="">` : '<div class="none">No photo</div>'}</div>
+      <div class="a map route">${routeMap(r)}<span class="tag">ROUTE</span></div>
       <div class="a rmh">REMARKS</div>
       <div class="a rmb" style="${bg ? `background:${bg};${col === 'purple' || col === 'blue' ? 'color:#fff;' : ''}` : ''}">${esc(remarks(r))}</div>
-      <div class="a map sat">${r.sat ? `<img src="${r.sat}" alt="">` : `<div class="none" style="width:100%;height:100%">${r.latDec == null ? 'No location data' : 'Satellite image not available'}</div>`}</div>
-      ${footer()}</section>`;
+      <div class="a map sat">${r.sat ? `<img src="${r.sat}" alt="">` : `<div class="none">${r.latDec == null ? 'No location data' : 'Satellite image not available'}</div>`}</div>
+      ${footer}`);
   }
-  const root = document.getElementById('report'); root.innerHTML = html;
-  const pages = root.querySelectorAll('.pg'); pages.forEach((p, i) => { p.querySelector('.pno').textContent = `${i + 1} / ${pages.length}`; });
+  window.R2_PAGES = pagesHtml;
+
+  // ---------- build: portrait pages from report.js with the landscape ones in section 3 ----------
+  await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
+  await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
+  msg.textContent = 'Sayfalar diziliyor…';
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
-  await Promise.all(['400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
-  // long texts shrink to fit their boxes
-  root.querySelectorAll('.rmb, .strip td.det').forEach(el => { let s = parseFloat(getComputedStyle(el).fontSize); while (el.scrollHeight > el.clientHeight + 1 && s > 5) { s -= 0.4; el.style.fontSize = s + 'px'; } });
+  document.querySelectorAll('.lp .rmb, .lp .strip td.det').forEach(el => { let s = parseFloat(getComputedStyle(el).fontSize); while (el.scrollHeight > el.clientHeight + 1 && s > 5) { s -= 0.4; el.style.fontSize = s + 'px'; } });
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (document.documentElement.clientWidth - 16) / 1123));
   fit(); window.addEventListener('resize', fit);
-  window.REPORT_STATS = { pages: pages.length };
-  msg.textContent = `${pages.length} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç, kenar boşluklarını "Yok" yap.`;
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç, kenar boşluklarını "Yok" yap.`;
   const pr = document.getElementById('pr'); pr.disabled = false; pr.onclick = () => window.print();
 })().catch(e => { document.getElementById('msg').textContent = 'Hata: ' + e.message; console.error(e); });
 </script>
