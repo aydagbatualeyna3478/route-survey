@@ -191,12 +191,13 @@
     if (o.t) rec.t = o.t; if (o.source) rec.source = o.source;
     if (parent) sv.records.push(rec);
     else { sv.records.splice(insertAt(sv), 0, rec); if (sv.insertAfter) sv.insertAfter = rec.id; }   // the next one follows this one
-    sv.selected = rec.id; await DB.putSurvey(sv);
+    sv.selected = rec.id; SCROLLTO = rec.id; await DB.putSurvey(sv);
     if (o.late && rec.latDec == null) waitLate(sv, rec);
     if (o.go !== false) go(`#/r/${sv.id}/${rec.id}`);
     return rec;
   }
   /* where a new obstacle goes: right after the obstacle chosen in the list (after its INFO/BYPASS too), else at the end */
+  let SCROLLTO = null;   // the obstacle the list should show next time it opens (just added)
   function insertAt(sv) {
     let s = sv.insertAfter && sv.records.find(r => r.id === sv.insertAfter);
     if (s && s.parentId) s = sv.records.find(r => r.id === s.parentId);
@@ -571,7 +572,8 @@
   };
 
   // ----- active survey: obstacle list on the left, actions on the right -----
-  const SELST = {};   // per survey: selection mode survives the redraw after a move
+  const SELST = {};
+  const LSCROLL = {};   // list scroll position per survey and tab, kept while the app is open   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const act = sv.status === 'active';
@@ -633,7 +635,13 @@
           </div>
         </div>
       </div>`;
-    const onSel = document.querySelector('.rec.on'); if (onSel) onSel.scrollIntoView({ block: 'nearest' });
+    /* list position: a just-added obstacle is brought into view; otherwise the list opens where it was left;
+       the first time it opens at the bottom (the latest obstacles) */
+    { const lst = document.getElementById('list'), key = id + ':' + tab;
+      const tgt = SCROLLTO && lst.querySelector(`.rec[data-rec="${SCROLLTO}"]`); SCROLLTO = null;
+      if (tgt) tgt.scrollIntoView({ block: 'center' }); else if (LSCROLL[key] != null) lst.scrollTop = LSCROLL[key]; else lst.scrollTop = lst.scrollHeight;
+      LSCROLL[key] = lst.scrollTop;
+      lst.addEventListener('scroll', () => { LSCROLL[key] = lst.scrollTop; }, { passive: true }); }
 
     /* reorder: long press selects the obstacle and lets you drag it; while selecting, a tap adds/removes an
        obstacle. Numbers are not stored — they follow the list order, so a move renumbers everything. */
