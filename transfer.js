@@ -102,18 +102,42 @@
       `Dışa aktarma: ${new Date().toLocaleString('tr-TR')}`, ''].filter(x => x !== null).join('\r\n');
   }
 
-  // ---------- export ----------
-  async function exportSurvey(sv, onStep) {
-    const live = orderedRecords(sv), arc = archivedRecords(sv), root = rootName(sv) + '/';
-    const files = {}, folder = {};
+  // ---------- layout: what goes where (shared by the ZIP export and the live folder backup) ----------
+  /* entries: { path (inside the survey folder), blob: blobId } or { path, text } — in this order:
+     obstacle folders with their photos and bilgiler.txt, logos, then etut.json and etut-bilgileri.txt */
+  function plan(sv, when) {
+    const live = orderedRecords(sv), arc = archivedRecords(sv), all = live.concat(arc);
+    const files = {}, folder = {}, entries = [];
     const place = (list, base) => {
       for (const r of list) {
         const nm = r.parentId && !r.solo ? safe(`${r.no} - ${r.flag || 'INFO'}${r.obstacle && r.obstacle !== r.flag ? ' - ' + r.obstacle : ''}`) : safe(`${r.no} - ${r.obstacle || 'Tip seçilmedi'}`);
         folder[r.id] = (r.parentId && !r.solo && folder[r.parentId] ? folder[r.parentId] : base) + nm + '/';
       }
     };
-    place(live, root); place(arc, root + 'Arşiv/');
-    const fileName = fileNameOf(sv);
+    place(live, ''); place(arc, 'Arşiv/');
+    for (const r of all) {
+      const dir = folder[r.id], f = { dir };
+      if (r.photoId) { f.photo = dir + 'foto.' + (r.photoExt || 'jpg'); entries.push({ path: f.photo, blob: r.photoId, rec: r }); }
+      f.extras = (r.extras || []).map((id, i) => { const pth = dir + `ek-${i + 1}.jpg`; entries.push({ path: pth, blob: id, rec: r }); return pth; });
+      entries.push({ path: dir + 'bilgiler.txt', text: recordText(sv, r), rec: r });
+      files[r.id] = f;
+    }
+    const logoFiles = {};
+    for (const [k, id] of Object.entries(sv.logos || {})) {
+      const pth = k === 'cover' ? 'kapak.jpg' : k === 'drawing' ? 'cizim.png' : `logolar/${k}.png`;
+      logoFiles[k] = pth; entries.push({ path: pth, blob: id, logo: k });
+    }
+    return { live, arc, all, files, logoFiles, entries, json: () => {
+      const data = JSON.parse(JSON.stringify(sv)); delete data.track; delete data.odo;
+      return JSON.stringify({ format: FORMAT, version: VERSION, exportedAt: (when || new Date()).toISOString(), files, logoFiles, survey: data }, null, 1);
+    } };
+  }
+  /* the real file type decides the extension; the planned name is fixed up when the blob is read */
+  const fixExt = (pth, b) => pth.replace(/\.(jpg|png)$/, '.' + extOf(b));
+
+  // ---------- export ----------
+  async function exportSurvey(sv, onStep) {
+    const P = plan(sv), root = rootName(sv) + '/', fileName = fileNameOf(sv);
     let sink, where;
     if (native()) {
       where = 'Belgeler/Etütler/' + fileName;
@@ -121,32 +145,31 @@
       try { await call('Filesystem', 'writeFile', { path: 'Etütler/' + fileName, directory: 'DOCUMENTS', data: '', recursive: true }); sink = androidSink('Etütler/' + fileName, 'DOCUMENTS'); }
       catch (e) { await call('Filesystem', 'writeFile', { path: fileName, directory: 'CACHE', data: '', recursive: true }); sink = androidSink(fileName, 'CACHE'); where = null; }
     } else sink = memorySink();
-    const z = zipWriter(sink), all = live.concat(arc);
+    const z = zipWriter(sink);
     let n = 0;
-    for (const r of all) {
-      n += 1; if (onStep) onStep(n, all.length);
-      const dir = folder[r.id], f = { dir: dir.slice(root.length) };
-      if (r.photoId) { const b = await DB.getBlob(r.photoId); if (b) { f.photo = f.dir + 'foto.' + extOf(b); await z.add(root + f.photo, new Uint8Array(await b.arrayBuffer())); } }
-      f.extras = [];
-      for (let i = 0; i < (r.extras || []).length; i++) { const b = await DB.getBlob(r.extras[i]); if (b) { const pth = f.dir + `ek-${i + 1}.` + extOf(b); f.extras.push(pth); await z.add(root + pth, new Uint8Array(await b.arrayBuffer())); } }
-      await z.add(dir + 'bilgiler.txt', enc.encode(recordText(sv, r)));
-      files[r.id] = f;
+    for (const e of P.entries) {
+      if (e.text != null) { n += 1; if (onStep) onStep(n, P.all.length); await z.add(root + e.path, enc.encode(e.text)); continue; }
+      const b = await DB.getBlob(e.blob); if (!b) { dropPath(P, e); continue; }
+      const pth = fixExt(e.path, b); if (pth !== e.path) renamePath(P, e, pth);
+      await z.add(root + pth, new Uint8Array(await b.arrayBuffer()));
     }
-    const logoFiles = {};
-    for (const [k, id] of Object.entries(sv.logos || {})) {
-      const b = await DB.getBlob(id); if (!b) continue;
-      const pth = k === 'cover' ? 'kapak.' + extOf(b) : k === 'drawing' ? 'cizim.' + extOf(b) : `logolar/${k}.${extOf(b)}`;
-      logoFiles[k] = pth; await z.add(root + pth, new Uint8Array(await b.arrayBuffer()));
-    }
-    const data = JSON.parse(JSON.stringify(sv)); delete data.track; delete data.odo;
-    await z.add(root + 'etut.json', enc.encode(JSON.stringify({ format: FORMAT, version: VERSION, exportedAt: new Date().toISOString(), files, logoFiles, survey: data }, null, 1)));
-    await z.add(root + 'etut-bilgileri.txt', enc.encode(surveyText(sv, live, arc)));
+    await z.add(root + 'etut.json', enc.encode(P.json()));
+    await z.add(root + 'etut-bilgileri.txt', enc.encode(surveyText(sv, P.live, P.arc)));
     const result = await z.close();
     if (native()) {
       try { await call('Share', 'share', { title: fileName, files: [result], dialogTitle: 'Etüt dosyasını gönder' }); } catch (e) { /* closed the share sheet */ }
-      return { fileName, where, count: all.length };
+      return { fileName, where, count: P.all.length };
     }
-    return { fileName, blob: result, count: all.length };
+    return { fileName, blob: result, count: P.all.length };
+  }
+  // keep etut.json's file list in step with what was really written
+  function dropPath(P, e) {
+    if (e.logo) { delete P.logoFiles[e.logo]; return; }
+    const f = P.files[e.rec.id]; if (f.photo === e.path) delete f.photo; f.extras = f.extras.filter(x => x !== e.path);
+  }
+  function renamePath(P, e, pth) {
+    if (e.logo) { P.logoFiles[e.logo] = pth; e.path = pth; return; }
+    const f = P.files[e.rec.id]; if (f.photo === e.path) f.photo = pth; f.extras = f.extras.map(x => x === e.path ? pth : x); e.path = pth;
   }
 
   // ---------- ZIP reader (stored or deflated, so a zip re-made in Windows also opens) ----------
@@ -216,5 +239,5 @@
     return sv;
   }
 
-  g.Transfer = { exportSurvey, readZip, folderSource, readSurvey, saveImported, rootName, fileNameOf };
+  g.Transfer = { exportSurvey, readZip, folderSource, readSurvey, saveImported, rootName, fileNameOf, plan, fixExt, dropPath, renamePath, surveyText, safe, native, call, b64 };
 })(window);

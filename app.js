@@ -393,7 +393,8 @@
     };
     $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
       <div class="full">${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
-      <div class="hint" style="text-align:center;margin-top:auto">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
+      <div class="card bk" id="bkline" style="margin-top:auto"></div>
+      <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
     document.getElementById('acct').onclick = () => Auth.accountSheet();
     /* delete a survey: first tap asks, second tap deletes the survey with all its photos and logos */
     $app.onclick = async e => {
@@ -408,6 +409,37 @@
       for (const x of Object.values(sv.logos || {})) await DB.delBlob(x);
       await DB.delSurvey(sv.id); delete SELST[sv.id]; if (CUR && CUR.id === sv.id) CUR = null;
       toast(`${sv.project.start.name} → ${sv.project.end.name} silindi`); V.home();
+    };
+    // folder backup status and controls (backup.js)
+    const bkl = document.getElementById('bkline');
+    const bkDraw = st => {
+      if (!bkl.isConnected) return off();
+      const t = st.last ? new Date(st.last).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      const tag = st.busy ? '<span class="tag warn">Yedekleniyor…</span>' : st.error ? '<span class="tag bad">Yedek hatası</span>' : st.on && !st.needsPermission ? '<span class="tag ok">Yedek açık</span>' : '<span class="tag warn">Yedek kapalı</span>';
+      let txt, btns = '';
+      if (!st.supported) txt = 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor. Edge ya da Chrome kullan.';
+      else if (st.kind === 'android') {
+        txt = st.on ? `Her etüt Belgeler/Etütler içinde kendi klasöründe, her engel ayrı klasörde tutuluyor.${t ? ' Son yedek: ' + t : ''}` : 'Klasör yedeği kapalı.';
+        btns = `${st.on ? '<button class="btn sm" data-bk="now">Şimdi yedekle</button>' : '<button class="btn sm pri" data-bk="on">Yedeği aç</button>'}<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>`;
+      } else if (!st.on) { txt = 'Etütleri bir klasöre otomatik yedekle. OneDrive içindeki bir klasör seçersen yedek buluta da gider.'; btns = '<button class="btn sm pri" data-bk="pick">Yedek klasörü seç</button>'; }
+      else if (st.needsPermission) { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))}. Tarayıcı yeniden açıldığı için yazma izni gerekiyor.`; btns = '<button class="btn sm pri" data-bk="grant">Yedeğe izin ver</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
+      else { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))} · her etüt kendi klasöründe, her engel ayrı klasörde.${t ? ' Son yedek: ' + t : ''}`; btns = '<button class="btn sm" data-bk="now">Şimdi yedekle</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
+      bkl.innerHTML = `<div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="row" style="gap:8px;min-width:0;flex:1">${tag}<span class="hint" style="font-size:13px">${txt}${st.error ? ' · ' + esc(st.error) : ''}</span></div><div class="row" style="gap:8px">${btns}</div></div>`;
+    };
+    const off = Backup.onChange(bkDraw); bkDraw(Backup.status());
+    bkl.onclick = async e => {
+      const b = e.target.closest('[data-bk]'); if (!b) return; e.stopPropagation();
+      try {
+        if (b.dataset.bk === 'pick') await Backup.chooseFolder();
+        if (b.dataset.bk === 'grant') await Backup.grant();
+        if (b.dataset.bk === 'now') { await Backup.backupAll(); toast('Yedek güncellendi'); }
+        if (b.dataset.bk === 'on') await Backup.setOn(true);
+        if (b.dataset.bk === 'restore') {
+          const L = await Backup.restoreList();
+          if (!L.length) return toast('Belgeler/Etütler içinde yedek bulunamadı');
+          sheet('Yedekten geri yükle', L.map(x => ({ label: x.name, run: () => openEtut(x.source) })));
+        }
+      } catch (er) { if (er && er.name !== 'AbortError') toast(er.message || 'Yedek işlemi yapılamadı'); }
     };
     const ob = document.getElementById('openEtut');
     if (ob) ob.onclick = () => sheet('Etüt dosyası aç', [
@@ -1426,6 +1458,6 @@
     } catch (err) { console.error(err); $app.innerHTML = `${bar('Hata', '#/')}<div class="full"><div class="note w">Beklenmeyen bir hata oluştu: ${esc(err.message)}</div></div>`; }
   }
   // sign-in, authenticator and device approval come first (auth.js); the app starts once this device is allowed
-  Auth.start(() => { window.removeEventListener('hashchange', route); window.addEventListener('hashchange', route); route(); });
+  Auth.start(async () => { try { if (!window.__bk) { window.__bk = 1; await Backup.init(); } } catch (e) { console.error(e); } window.removeEventListener('hashchange', route); window.addEventListener('hashchange', route); route(); });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
