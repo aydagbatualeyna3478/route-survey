@@ -289,11 +289,26 @@
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
         <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Sahada' : 'Tamamlandı'}</span></div>
         <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
-        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button>${FIELD ? '' : `<button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>`}</div></div>`;
+        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button>${FIELD ? '' : `<button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>`}
+          <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
     $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>`)}
       <div class="full">${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="hint" style="text-align:center;margin-top:auto">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
+    /* delete a survey: first tap asks, second tap deletes the survey with all its photos and logos */
+    $app.onclick = async e => {
+      const b = e.target.closest('[data-delsv]'); if (!b) return;
+      if (b.dataset.sure !== '1') {
+        b.dataset.sure = '1'; b.textContent = 'Emin misin? Sil'; b.style.background = 'var(--red)'; b.style.color = '#fff'; b.style.borderColor = 'var(--red)';
+        const card = b.closest('.card'); if (card && !card.querySelector('.delnote')) card.insertAdjacentHTML('beforeend', '<span class="hint delnote" style="color:var(--badtx)">Etüt, bütün fotoğrafları ve logolarıyla bu cihazdan silinir; geri alınamaz. Gerekirse önce etüdü açıp "Dışa Aktar" ile yedek al.</span>');
+        return;
+      }
+      const sv = await DB.getSurvey(b.dataset.delsv); if (!sv) return V.home();
+      for (const r of sv.records) for (const x of [r.photoId, ...(r.extras || [])]) await DB.delBlob(x);
+      for (const x of Object.values(sv.logos || {})) await DB.delBlob(x);
+      await DB.delSurvey(sv.id); delete SELST[sv.id]; if (CUR && CUR.id === sv.id) CUR = null;
+      toast(`${sv.project.start.name} → ${sv.project.end.name} silindi`); V.home();
+    };
     const ob = document.getElementById('openEtut');
     if (ob) ob.onclick = () => sheet('Etüt dosyası aç', [
       { label: 'ZIP dosyası seç', file: true, accept: '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
