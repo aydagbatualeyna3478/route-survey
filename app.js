@@ -6,6 +6,16 @@
   const pn = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; };
   const fmt = (v, d) => v == null || v === '' ? '' : (d == null ? String(v) : Number(v).toFixed(d)).replace('.', ',');
   const R = window.SurveyRules;
+  /* Field = the tablet app (APK): survey only. Office = the same app on a computer: also the report and PDF.
+     For testing in a browser: ?saha=1 switches to field, ?ofis=1 back to office (remembered). */
+  const FIELD = (() => {
+    try {
+      if (/[?&]saha=1/.test(location.search)) localStorage.setItem('rs-mode', 'field');
+      if (/[?&]ofis=1/.test(location.search)) localStorage.removeItem('rs-mode');
+      return !!window.Capacitor || localStorage.getItem('rs-mode') === 'field';
+    } catch (e) { return !!window.Capacitor; }
+  })();
+  document.documentElement.classList.toggle('field', FIELD);
 
   const TYPES = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn',
     'Inclination', 'Declination', 'Road Condition', 'Width Obstruction', 'Railroad Crossing', 'Port Gate', 'Satellite View', 'Drone View'];
@@ -152,7 +162,7 @@
     document.querySelectorAll('.sheet').forEach(x => x.remove());
     const d = document.createElement('div'); d.className = 'sheet';
     d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="${esc(title)}"><b>${esc(title)}</b>
-      ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="image/*" data-i="${i}" ${it.multi ? 'multiple' : ''}></label>`
+      ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="${it.accept || 'image/*'}" data-i="${i}" ${it.multi ? 'multiple' : ''} ${it.dir ? 'webkitdirectory' : ''}></label>`
         : `<button class="btn ${it.cls || ''}" data-i="${i}">${it.icon || ''}${esc(it.label)}</button>`).join('')}
       <button class="btn dash" data-x="1">Vazgeç</button></div>`;
     document.body.appendChild(d);
@@ -278,12 +288,57 @@
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
         <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Sahada' : 'Tamamlandı'}</span></div>
         <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
-        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button></div></div>`;
+        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button>${FIELD ? '' : `<button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>`}</div></div>`;
     };
-    $app.innerHTML = `${bar('Etütlerim', null, `<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>`)}
+    $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button>`)}
       <div class="full">${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
-      <div class="hint" style="text-align:center;margin-top:auto">Veriler bu cihazda saklanır, internetsiz de çalışır.</div></div>`;
+      <div class="hint" style="text-align:center;margin-top:auto">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
+    const ob = document.getElementById('openEtut');
+    if (ob) ob.onclick = () => sheet('Etüt dosyası aç', [
+      { label: 'ZIP dosyası seç', file: true, accept: '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
+      { label: 'Açılmış klasör seç', file: true, dir: true, multi: true, accept: '*/*', run: fs => openEtut(async () => Transfer.folderSource(fs)) },
+    ]);
   };
+
+  /* ----- moving a survey: tablet "Dışa Aktar" -> one ZIP -> computer "Etüt dosyası aç" ----- */
+  async function exportNow(sv, btn) {
+    let handle = null;   // computer (Edge/Chrome): ask where to save first, e.g. the OneDrive folder
+    if (!window.Capacitor && window.showSaveFilePicker) {
+      try { handle = await window.showSaveFilePicker({ suggestedName: Transfer.fileNameOf(sv), types: [{ description: 'Etüt dosyası', accept: { 'application/zip': ['.zip'] } }] }); }
+      catch (e) { if (e && e.name === 'AbortError') return; handle = null; }
+    }
+    if (btn) btn.disabled = true;
+    const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; document.body.appendChild(tt);
+    try {
+      const r = await Transfer.exportSurvey(sv, (i, n) => { tt.textContent = `Dosya hazırlanıyor… ${i} / ${n}`; });
+      tt.remove();
+      if (r.blob && handle) { const w = await handle.createWritable(); await w.write(r.blob); await w.close(); toast(`Kaydedildi: ${handle.name}`); }
+      else if (r.blob) {   // browser without a save dialog: download
+        const a = document.createElement('a'); a.href = URL.createObjectURL(r.blob); a.download = r.fileName; document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+        toast(`${r.fileName} indirildi`);
+      } else toast(r.where ? `Kaydedildi: ${r.where}` : 'Dosya hazırlandı');
+    } catch (e) { tt.remove(); toast('Dışa aktarılamadı: ' + (e && e.message || e)); }
+    if (btn) btn.disabled = false;
+  }
+  async function openEtut(getSource) {
+    const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; tt.textContent = 'Dosya okunuyor…'; document.body.appendChild(tt);
+    try {
+      const pkg = await Transfer.readSurvey(await getSource());
+      tt.remove();
+      const sv = pkg.doc.survey, old = await DB.getSurvey(sv.id), name = `${sv.project.start.name} → ${sv.project.end.name}`;
+      const run = async mode => {
+        const t2 = document.createElement('div'); t2.className = 'toast'; t2.style.bottom = '50%'; document.body.appendChild(t2);
+        const s2 = await Transfer.saveImported(pkg, mode, (i, n) => { t2.textContent = `Etüt açılıyor… ${i} / ${n}`; });
+        t2.remove(); toast(`${name}: ${s2.records.length} kayıt açıldı`); go(`#/s/${s2.id}`);
+      };
+      if (!old) return run('replace');
+      sheet(`${name} bu bilgisayarda zaten var`, [
+        { label: 'Üzerine yaz (dosyadaki hali geçerli)', cls: 'pri', run: () => run('replace') },
+        { label: 'Ayrı kopya olarak aç', run: () => run('copy') },
+      ]);
+    } catch (e) { tt.remove(); toast(e && e.message || 'Dosya açılamadı'); }
+  }
 
   // ----- project form (new / edit) -----
   V.form = async (id) => {
@@ -338,12 +393,15 @@
             <label class="f">OG (m)<input name="refMV" inputmode="decimal" value="${esc(fmt(p.refMV))}" id="rMV"></label>
             <label class="f">YG (m)<input name="refHV" inputmode="decimal" value="${esc(fmt(p.refHV))}" id="rHV"></label></div></details>
         </div>
+        <div class="office-only" style="display:flex;flex-direction:column;gap:14px">
         <div class="sec">Kapak bilgileri</div>
         <div class="g2"><label class="f">Müşteri unvanı<input name="client" value="${esc(p.client)}"></label>
           <label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa müşteri unvanı yazılır"></label></div>
         <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
+        </div>
+        ${FIELD ? '<div class="note g">Kapak bilgileri, logolar, kapak fotoğrafı, taşıma çizimi ve sonuç bölümü ofiste, bilgisayardaki uygulamada girilir. Etüt bitince "Dışa Aktar" ile dosyayı bilgisayara gönder.</div>' : ''}
       </div>
-      <div class="pane">
+      <div class="pane office-only">
         <label class="f">Hazırlayanlar (her satıra bir isim)<textarea name="preparedBy" rows="3">${esc((p.preparedBy || []).join('\n'))}</textarea></label>
         <div class="sec">Logolar · PDF'te duracağı köşe</div>
         <div class="g4">${await lslot('company', '1 · İşi yapan', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">', 'Her etütte hazır')}
@@ -464,10 +522,11 @@
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
-              + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '')
+              + rb('', 'ghost', '', '') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/cam/${sv.id}"`, 'red', camSvg, 'Yeni Engel Ekle')
-            : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor')}
+            : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri')
+              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar'))}
           </div>
         </div>
       </div>`;
@@ -590,6 +649,7 @@
         delete SELST[id]; return go(`#/r/${sv.id}/${rc.dataset.rec}`);
       }
       const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'export') return exportNow(sv, a);
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
       if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } sv.status = 'done'; sv.bypassParent = null; }
@@ -1110,6 +1170,7 @@
       else if (p[0] === 'add') await V.add(p[1], q);
       else if (p[0] === 'cam') await V.camera(p[1], q);
       else if (p[0] === 'r') await V.record(p[1], p[2], q);
+      else if (p[0] === 'rep' && FIELD) go(`#/s/${p[1]}`);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);
       else go('#/');

@@ -115,6 +115,9 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .ltabs{display:flex;gap:6px;position:sticky;top:-12px;z-index:2;margin:-12px -12px 6px;padding:8px;background:var(--card);border-bottom:1px solid var(--line);border-radius:14px 14px 0 0}
 .ltabs button{flex:1;min-width:0;min-height:42px;border:1px solid var(--line2);background:#fff;border-radius:10px;font-weight:600;font-size:14px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 10px}
 .ltabs button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+/* field (tablet APK): report material lives in the office version */
+html.field .office-only{display:none!important}
+html.field #pf{grid-template-columns:minmax(0,1fr);max-width:860px;margin:0 auto;width:100%}
 .selhint{font-size:12px;color:var(--mut);text-align:center;padding:8px 0 2px}
 /* round action buttons (survey screen) */
 .acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(8px,calc(var(--vh,7.2px)*2.2),22px) 18px;justify-items:center;align-content:center;flex:1;min-height:0}
@@ -195,6 +198,7 @@ html.narrow .photo-stage .photo{height:auto;width:100%}
 <body>
 <div id="app"></div>
 <script src="db.js"></script>
+<script src="transfer.js"></script>
 <script src="rules.js"></script>
 <script src="app.js"></script>
 </body>

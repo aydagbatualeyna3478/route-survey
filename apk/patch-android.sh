@@ -10,6 +10,10 @@ for P in CAMERA ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION; do
 done
 grep -q 'android.hardware.camera"' "$M" || sed -i 's#</manifest>#    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>#' "$M"
 
+# "Dışa Aktar" writes the survey ZIP to Documents/Etütler (Android 10 and older need storage permission)
+grep -q 'WRITE_EXTERNAL_STORAGE' "$M" || sed -i 's#</manifest>#    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n</manifest>#' "$M"
+grep -q requestLegacyExternalStorage "$M" || sed -i 's#<application#<application android:requestLegacyExternalStorage="true"#' "$M"
+
 # the app is used in landscape
 grep -q screenOrientation "$M" || sed -i 's#android:name=".MainActivity"#android:name=".MainActivity"\n            android:screenOrientation="sensorLandscape"#' "$M"
 
