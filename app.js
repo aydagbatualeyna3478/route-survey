@@ -81,12 +81,17 @@
       if (!navigator.geolocation) { this.err = 'yok'; this.cb && this.cb(); return; }
       if (this.watch == null) this.watch = navigator.geolocation.watchPosition(p => this.got(p), e => { this.err = e.code === 1 ? 'izin' : 'sinyal'; this.cb && this.cb(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
     },
-    off() { if (this.watch != null) navigator.geolocation.clearWatch(this.watch); this.watch = null; this.cb = null; },
+    off() {   // camera closed; keeps watching only while a photo still waits for its position
+      this.cb = null;
+      if (LATE.job) return;
+      if (this.watch != null) navigator.geolocation.clearWatch(this.watch); this.watch = null;
+    },
     got(p) {
       this.err = null;
       const fix = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
       this.last = fix;   // always the newest fix: the vehicle may be moving
       this.cb && this.cb();
+      lateTick();
     },
     fresh(maxAge) { return this.last && Date.now() - this.last.t < (maxAge || 30000) ? this.last : null; },
     current() {   // one-off position (photo-less record, "update position")
@@ -120,6 +125,32 @@
   };
 
 
+  /* A photo taken before the GPS has a fix is saved at once (no waiting on the camera screen). The GPS keeps
+     listening in the background; the first usable fix (≤30 m) is written to that obstacle with its KM. */
+  let CUR = null;   // the survey object the open screen is editing, so a late fix lands in it and is not overwritten
+  const LATE = { job: null, onfix: null };
+  async function placeLate(f) {
+    const j = LATE.job; if (!j) return; LATE.job = null; clearTimeout(j.timer);
+    const sv = CUR && CUR.id === j.svId ? CUR : await DB.getSurvey(j.svId);
+    const r = sv && sv.records.find(x => x.id === j.recId);
+    if (r && r.latDec == null && f) {
+      r.latDec = f.lat; r.lonDec = f.lon; r.acc = f.acc; r.lat = Geo.dms(f.lat, true); r.lon = Geo.dms(f.lon, false);
+      if (sv.status === 'active') { GPS.extend(sv, f, { bypass: r.flag === 'BYPASS' }); r.km = Math.round(sv.odo) / 1000; }
+      await DB.putSurvey(sv);
+      if (LATE.onfix) LATE.onfix(r); else toast(`${r.no || ''} konumu alındı (±${Math.round(f.acc)} m)`);
+    }
+    if (!GPS.cb) GPS.off();
+  }
+  function lateTick() {
+    const f = GPS.last;
+    if (LATE.job && f && f.acc <= 30 && f.t >= LATE.job.since) placeLate(f);
+  }
+  function waitLate(sv, rec) {
+    if (GPS.watch == null) GPS.on(null);   // the camera already stopped it
+    LATE.job = { svId: sv.id, recId: rec.id, since: Date.now() - 1000,
+      timer: setTimeout(() => { if (LATE.job && LATE.job.recId === rec.id) { LATE.job = null; if (!GPS.cb) GPS.off(); toast('Konum alınamadı; engel ekranında "Konumu güncelle" ile alabilirsin'); if (LATE.onfix) LATE.onfix(null); } }, 120000) };
+  }
+
   /* new record from a photo (or none). Camera photos take the current GPS position; INFO images take the parent's. */
   async function createRecord(sv, o) {
     toast('Kaydediliyor…');
@@ -127,7 +158,7 @@
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
     if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
-    if (o.file) { rec.photoId = await DB.putBlob(await to43(o.file)); rec.aspect = 4 / 3; }
+    if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
     if (pos) {
       rec.latDec = pos.lat; rec.lonDec = pos.lon; rec.acc = pos.acc;
@@ -137,7 +168,8 @@
     else { const prevRec = sv.records[sv.records.length - 1]; rec.km = prevRec ? prevRec.km : Math.round(sv.odo) / 1000; }
     if (rec.latDec != null) { rec.lat = Geo.dms(rec.latDec, true); rec.lon = Geo.dms(rec.lonDec, false); }
     if (name && PHRASES[name] && PHRASES[name].length === 1 && !/%/.test(PHRASES[name][0]) && !/Overhead|Bridge|Culvert/.test(name)) rec.remarks = PHRASES[name][0];
-    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv); 
+    sv.records.push(rec); sv.selected = rec.id; await DB.putSurvey(sv);
+    if (o.late && rec.latDec == null) waitLate(sv, rec);
     go(`#/r/${sv.id}/${rec.id}`);
   }
 
@@ -411,7 +443,7 @@
   // ----- active survey: obstacle list on the left, actions on the right -----
   const SELST = {};   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const act = sv.status === 'active';
     const st = settingsOf(sv), recs = orderedRecords(sv);
     const last = sv.selected;
@@ -578,7 +610,7 @@
   const PRECISE = 10, OK = 30;   // metres: green / yellow
   V.camera = async (id, q) => {
     q = q || {};
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const recs = orderedRecords(sv), bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
     const infoParent = q.info ? recs.find(r => r.id === q.info) : null, target = q.replace ? sv.records.find(r => r.id === q.replace) : null;
     const extraFor = q.extra ? recs.find(r => r.id === q.extra) : null;   // extra photos: camera stays open, shot after shot
@@ -623,32 +655,33 @@
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
       vid.srcObject = stream; await vid.play().catch(() => {});
     } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
-    async function save(blob, fromGallery) {
+    async function save(blob, fromGallery, fromCam) {
       if (extraFor) {   // keep shooting; each photo is kept as a candidate for this obstacle
         const rr = sv.records.find(x => x.id === extraFor.id);
         rr.extras = rr.extras || []; rr.extras.push(await DB.putBlob(await to43(blob)));
         await DB.putSurvey(sv); shots += 1; document.getElementById('xc').textContent = shots; return;
       }
       if (busy) return; busy = true;
-      let pos = GPS.fresh(8000);
-      if (!pos && !fromGallery) { sact.textContent = 'Konum bekleniyor…'; pos = await new Promise(res => { const t0 = Date.now(), iv = setInterval(() => { const f = GPS.fresh(8000); if (f || Date.now() - t0 > 8000) { clearInterval(iv); res(f); } }, 300); }); }
+      const ready = !fromGallery && fromCam;   // camera shots are already cropped 4:3 at final size
+      const pos = GPS.fresh(8000);            // no waiting: without a fresh fix the position follows in the background
+      if (pos) await placeLate(pos);          // an earlier photo still waiting gets this fix first (keeps the KM order)
       stop();
       if (target) {   // replace the photo, keep the record's position (fill it in if it had none)
         await DB.delBlob(target.photoId); urls.delete(target.photoId);
-        target.photoId = await DB.putBlob(await to43(blob)); target.pendingImage = null;
+        target.photoId = await DB.putBlob(ready ? blob : await to43(blob)); target.pendingImage = null;
         if (target.latDec == null && pos) { target.latDec = pos.lat; target.lonDec = pos.lon; target.lat = Geo.dms(pos.lat, true); target.lon = Geo.dms(pos.lon, false); }
         await DB.putSurvey(sv); return go(back);
       }
-      if (infoParent) return createRecord(sv, { file: blob, parent: infoParent, flag: 'INFO', name: infoParent.obstacle === 'Satellite View' ? 'Satellite View' : '' });
-      createRecord(sv, { file: blob, pos: fromGallery ? null : pos, useGps: false, parent: bp || null, flag: bp ? 'BYPASS' : '' });
+      if (infoParent) return createRecord(sv, { file: blob, ready, parent: infoParent, flag: 'INFO', name: infoParent.obstacle === 'Satellite View' ? 'Satellite View' : '' });
+      createRecord(sv, { file: blob, ready, pos: fromGallery ? null : pos, useGps: false, late: !fromGallery && !pos, parent: bp || null, flag: bp ? 'BYPASS' : '' });
     }
     document.getElementById('shut').onclick = () => {
       if (!stream || !vid.videoWidth) return;
       const w = vid.videoWidth, h = vid.videoHeight; let cw = w, ch = w * 3 / 4; if (ch > h) { ch = h; cw = h * 4 / 3; }
-      const c = document.createElement('canvas'); c.width = Math.round(cw); c.height = Math.round(ch);
+      const c = document.createElement('canvas'); c.width = Math.min(1600, Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
       c.getContext('2d').drawImage(vid, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height);
       document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
-      c.toBlob(b => save(b), 'image/jpeg', 0.9);
+      c.toBlob(b => save(b, false, true), 'image/jpeg', 0.82);
     };
     document.getElementById('cgal').onchange = async e => { for (const f of [...e.target.files]) await save(f, false); };
     document.getElementById('cclose').onclick = () => go(extraFor && shots ? back + '?pick=1' : back);
@@ -656,7 +689,7 @@
 
   // ----- add record: pick type, take photo -----
   V.add = async (id, q) => {
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const recs = orderedRecords(sv), mode = q.mode || 'photo';
     const mains = recs.filter(r => !r.parentId);
     let parent = q.parent ? recs.find(r => r.id === q.parent) : mode === 'sat' ? mains[mains.length - 1] : (sv.bypassParent ? recs.find(r => r.id === sv.bypassParent) : null);
@@ -732,7 +765,7 @@
   // ----- record form: photo on the left, details on the right -----
   V.record = async (id, rid, q) => {
     q = q || {};
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const recs = orderedRecords(sv), r = recs.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
     if (sv.selected !== r.id) { sv.selected = r.id; }
     const st = settingsOf(sv), refs = R.refs(st);
@@ -766,23 +799,21 @@
       };
       const sw = (key, name, col, on) => `<button class="sw ${on ? 'on' : ''}" data-col="${key}"><i style="background:${col}"></i>${name}</button>`;
       $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
-      <div class="split even">
+      <div class="split rec3">
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
             <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button></div>
           ${u ? `<div class="thumbs" aria-label="Bu engelin fotoğrafları">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
             <button class="th add" id="xadd">${camSvg}<span>Ek fotoğraf</span></button></div>` : ''}
-          <div class="card"><div class="g3">
+          <div class="loc"><div class="g3">
             <label class="f">KM<input id="km" inputmode="decimal" value="${esc(fmt(r.km, 1))}"></label>
             <label class="f">Enlem<input id="la" inputmode="decimal" value="${r.latDec == null ? '' : r.latDec.toFixed(6)}"></label>
             <label class="f">Boylam<input id="lo" inputmode="decimal" value="${r.lonDec == null ? '' : r.lonDec.toFixed(6)}"></label></div>
-            <div class="row" style="justify-content:space-between"><span class="hint">${r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum alınamadı, elle girilebilir'}</span><button class="btn sm" id="here">Konumu güncelle</button></div></div>
-          <div class="g3"><button class="btn grn" id="infq">+ Info ekle</button>
-            <button class="btn grn" id="simq">+ Simülasyon ekle</button>
-            ${r.parentId ? `<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>` : `<button class="btn grn" id="bypq">+ Bypass ekle</button>`}</div>
-          <span class="hint">Info: fotoğraf çek ya da galeriden seç. Simülasyon: boş görselli kayıt, görüntü ofiste eklenir. Bypass: alternatif yolun ilk engelinin fotoğrafını çek; sonraki engeller de bypass'a eklenir.</span>
-          ${r.parentId ? '' : '<button class="btn dash" id="del" style="color:var(--badtx)">Kaydı sil</button>'}
+            <div class="row" style="justify-content:space-between;gap:8px"><span class="hint" id="lochint">${LATE.job && LATE.job.recId === r.id ? '<b style="color:var(--warntx)">Konum bekleniyor… gelince kendiliğinden yazılır</b>' : r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum yok, elle girilebilir'}</span><button class="btn sm" id="here">Konumu güncelle</button></div></div>
+          <div class="g3"><button class="btn grn sm" id="infq">+ Info</button>
+            <button class="btn grn sm" id="simq">+ Simülasyon</button>
+            ${r.parentId ? '' : `<button class="btn grn sm" id="bypq">+ Bypass</button>`}</div>
         </div>
         <div class="pane">
           <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel tipi' : 'Engel tipini seç'}</div>
@@ -794,6 +825,8 @@
             <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
           ${isBr ? `<div class="g2"><label class="f">Bridge name<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label><label class="f">Bridge spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label></div>` : ''}
           ${isCu ? `<label class="f">Culvert spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 1x5m"></label>` : ''}
+        </div>
+        <div class="pane">
           ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
           ${isOH ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
@@ -806,7 +839,7 @@
             ${COLORS.map(c => sw(c[0], c[1], `linear-gradient(180deg,#fff,${c[2]},#fff)`, cur === c[0])).join('')}</div>
         </div>
       </div>
-      <div class="foot"><button class="btn" id="cancel">${r.obstacle ? 'Vazgeç' : 'Kaydı iptal et'}</button><button class="btn pri" id="ok">Kaydet</button></div>`;
+      <div class="foot"><button class="btn dash" id="del" style="margin-right:auto;min-width:0;color:var(--badtx)">Kaydı sil</button><button class="btn" id="cancel">${r.obstacle ? 'Vazgeç' : 'Kaydı iptal et'}</button><button class="btn pri" id="ok">Kaydet</button></div>`;
       bind();
     };
     const read = () => {
@@ -928,6 +961,14 @@
       window.addEventListener('hashchange', () => d.remove(), { once: true });
     }
     autoAct(); draw();
+    LATE.onfix = rr => {   // position arrived (or gave up) for a photo taken before the GPS had a fix
+      const g = i => document.getElementById(i);
+      if (!g('la') || !location.hash.includes(rid)) { LATE.onfix = null; if (rr) toast(`${rr.no || ''} konumu alındı`); return; }
+      if (!rr) { g('lochint').textContent = 'Konum alınamadı, "Konumu güncelle" ya da elle gir'; return; }
+      if (rr.id !== r.id) return toast(`${rr.no || ''} konumu alındı`);
+      g('km').value = fmt(r.km, 1); g('la').value = r.latDec.toFixed(6); g('lo').value = r.lonDec.toFixed(6);
+      g('lochint').textContent = `${r.lat} · ${r.lon}`; toast(`Konum alındı (±${Math.round(r.acc)} m)`);
+    };
     if (q.pick) { history.replaceState(null, '', `#/r/${id}/${rid}`); picker(); }
   };
 
@@ -956,7 +997,7 @@
     });
   }
   V.annotate = async (id, rid) => {
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const r = sv.records.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
     const u = await blobUrl(r.photoId), items = JSON.parse(JSON.stringify(r.ann || [])); let sel = -1;
     $app.innerHTML = `${bar('Fotoğrafı işaretle', `#/r/${id}/${rid}`)}
@@ -1021,7 +1062,7 @@
 
   // ----- report setup -----
   V.report = async (id) => {
-    const sv = await DB.getSurvey(id); if (!sv) return go('#/');
+    const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const recs = orderedRecords(sv), c = sv.project.conclusion || (sv.project.conclusion = {});
     const cnt = t => recs.filter(r => t.includes(r.obstacle)).length;
     const nf = recs.filter(r => r.flag === 'BYPASS').length, ni = recs.filter(r => r.flag === 'INFO').length;
@@ -1055,7 +1096,7 @@
   // ---------- router ----------
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
   async function route() {
-    $app.onclick = null; $app.onchange = null; window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach(t => t.remove());
+    LATE.onfix = null; $app.onclick = null; $app.onchange = null; window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach(t => t.remove());
     const [path, qs] = (location.hash.slice(1) || '/').split('?'), p = path.split('/').filter(Boolean), q = Object.fromEntries(new URLSearchParams(qs || ''));
     try {
       if (!p.length) await V.home();

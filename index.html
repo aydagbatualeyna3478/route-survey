@@ -44,6 +44,23 @@ button{cursor:pointer}
 .split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;padding:20px}
 .split.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .split.wide{grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr)}
+/* obstacle screen: three columns so every field is visible without scrolling (photo kept smaller on the left) */
+.split.rec3{grid-template-columns:minmax(0,.9fr) minmax(0,1fr) minmax(0,1fr);gap:16px;padding:10px 16px}
+.rec3 .pane{gap:7px}
+/* photo shrinks with the screen height (keeps 4:3) so the column below it still fits */
+.rec3 .photo{flex-shrink:0;align-self:center;width:min(100%,max(220px,calc((var(--vh,7.2px)*100 - 450px)*4/3)))}
+.rec3 .thumbs .th{width:72px}
+.rec3 .loc{display:flex;flex-direction:column;gap:6px}
+.rec3 .sec{font-size:12px}
+.rec3 label.f{gap:3px;font-size:12px}
+.rec3 label.f input,.rec3 label.f textarea{padding:7px 10px;font-size:15px}
+.rec3 .chip{min-height:32px;padding:4px 10px;font-size:13.5px}
+.rec3 .chips{gap:6px}
+.rec3 .hrow{padding:4px 8px}
+.rec3 .hrow input,.rec3 .hrow select{padding:5px 8px!important}
+.rec3 .sw{min-height:40px;padding:4px 0}
+.rec3 .btn.sm{min-height:40px;padding:6px 8px;font-size:13.5px}
+.rec3 + .foot{padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
 .pane{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding-right:4px}
 .pane.box{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:12px}
 .full{flex:1;min-height:0;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
@@ -162,7 +179,7 @@ input[type=file].hid{position:absolute;width:1px;height:1px;opacity:0;pointer-ev
 /* portrait (or a very narrow window): stack the panes. html.narrow is set by the fit script in <head>. */
 html.narrow,html.narrow body{overflow:auto}
 html.narrow #app{height:auto;min-height:100%}
-html.narrow .split,html.narrow .split.even,html.narrow .split.wide{display:flex;flex-direction:column;padding:16px}
+html.narrow .split,html.narrow .split.even,html.narrow .split.wide,html.narrow .split.rec3{display:flex;flex-direction:column;padding:16px}
 html.narrow .pane,html.narrow .side{overflow:visible}
 html.narrow .acts{flex:none;grid-template-columns:repeat(3,minmax(0,1fr))}
 html.narrow .cargo{min-width:0}
