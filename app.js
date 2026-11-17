@@ -414,7 +414,7 @@
         <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
         ${sv.project.region || pkey(sv.project) || sv.project.client || surveyorsOf(sv.project).length ? `<div class="hint" style="color:var(--ink)">${[sv.project.region, pkey(sv.project), sv.project.client, surveyorsOf(sv.project).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
         ${critSummary(sv)}
-        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button>${FIELD ? '' : `<button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>`}
+        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
     $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
@@ -587,7 +587,6 @@
         <div class="g2"><label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa firma adı yazılır"></label><span></span></div>
         <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
         </div>
-        ${FIELD ? '<div class="note g">Kapak bilgileri, logolar, kapak fotoğrafı, taşıma çizimi ve sonuç bölümü ofiste, bilgisayardaki uygulamada girilir. Etüt bitince "Dışa Aktar" ile dosyayı bilgisayara gönder.</div>' : ''}
       </div>
       <div class="pane office-only">
         <label class="f">Hazırlayanlar (her satıra bir isim)<textarea name="preparedBy" rows="3">${esc((p.preparedBy || []).join('\n'))}</textarea></label>
@@ -724,11 +723,11 @@
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
-              + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engeller') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '')
+              + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engeller') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb(`data-go="#/rep/${sv.id}"`, '', '', 'Rapor')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + addBtn
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/crit/${sv.id}"`, '', '', 'Kritik Engeller')
-              + (FIELD ? rb('data-act="export"', 'navy', '', 'Dışa Aktar') : rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + addBtn)}
+              + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + (FIELD ? rb('', 'ghost', '', '') : addBtn)}
           </div>
         </div>
       </div>`;
@@ -866,7 +865,7 @@
         if (k === 'del') {
           if (!delSure) { delSure = true; return paintSel(); }
           const gone = sv.records.filter(x => sel.has(x.id) || sel.has(x.parentId));
-          for (const x of gone) for (const b of [x.photoId, ...(x.extras || [])]) await DB.delBlob(b);
+          for (const x of gone) for (const b of [x.photoId, ...(x.extras || []), ...Object.values(x.insets || {})]) await DB.delBlob(b);
           sv.records = sv.records.filter(x => !gone.includes(x));
           if (gone.some(x => x.id === sv.bypassParent)) sv.bypassParent = null;
           if (gone.some(x => x.id === sv.selected)) sv.selected = null;
@@ -898,14 +897,37 @@
   // ----- in-app camera: live view, satellite icon top right (green = precise position) -----
   const satSvg = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>';
   const PRECISE = 10, OK = 30;   // metres: green / yellow
+  /* corner photos: up to 4 extra photos laid over the corners of the obstacle photo (r.insets = { tl, tr, bl, br: blobId }) */
+  const CORNERS = [['tl', 'Sol üst'], ['tr', 'Sağ üst'], ['bl', 'Sol alt'], ['br', 'Sağ alt']];
+  async function insetHtml(r) {
+    let h = '';
+    for (const [k] of CORNERS) {
+      const b = (r.insets || {})[k]; if (!b) continue;
+      const x = await blobUrl(b); if (!x) continue;
+      h += `<img src="${x}" alt="" style="position:absolute;inset:auto;${k[0] === 't' ? 'top' : 'bottom'}:3%;${k[1] === 'l' ? 'left' : 'right'}:3%;width:30%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff;box-shadow:0 1px 4px #0006">`;
+    }
+    return h;
+  }
+  function insetSheet(sv, r, read) {
+    const ins = r.insets || {};
+    sheet(`${r.no} · Engel için ek fotoğraf (en fazla 4, fotoğrafın köşelerine)`, CORNERS.map(([k, l]) => ({
+      label: `${l}${ins[k] ? ' · dolu (değiştir / kaldır)' : ''}`, cls: ins[k] ? '' : 'pri',
+      run: () => sheet(`${r.no} · ${l} köşe fotoğrafı`, [
+        { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { if (read) read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?inset=${r.id}:${k}`); } },
+        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { if (read) read(); r.insets = r.insets || {}; await DB.delBlob(r.insets[k]); r.insets[k] = await DB.putBlob(await to43(f)); await DB.putSurvey(sv); V.record(sv.id, r.id); } },
+        ...(ins[k] ? [{ label: 'Kaldır', run: async () => { if (read) read(); await DB.delBlob(r.insets[k]); delete r.insets[k]; await DB.putSurvey(sv); V.record(sv.id, r.id); } }] : []),
+      ]),
+    })));
+  }
   V.camera = async (id, q) => {
     q = q || {};
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const recs = orderedRecords(sv), bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
     const infoParent = q.info ? recs.find(r => r.id === q.info) : null, target = q.replace ? sv.records.find(r => r.id === q.replace) : null;
     const extraFor = q.extra ? recs.find(r => r.id === q.extra) : null;   // extra photos: camera stays open, shot after shot
+    const [insId, insPos] = (q.inset || '').split(':'), insetFor = insId ? sv.records.find(r => r.id === insId) : null;
     let shots = 0;
-    const back = target ? `#/r/${sv.id}/${target.id}` : infoParent ? `#/r/${sv.id}/${infoParent.id}` : extraFor ? `#/r/${sv.id}/${extraFor.id}` : `#/s/${sv.id}`;
+    const back = insetFor ? `#/r/${sv.id}/${insetFor.id}` : target ? `#/r/${sv.id}/${target.id}` : infoParent ? `#/r/${sv.id}/${infoParent.id}` : extraFor ? `#/r/${sv.id}/${extraFor.id}` : `#/s/${sv.id}`;
     document.body.style.background = '#000';
     $app.innerHTML = `<div style="flex:1;min-height:0;display:flex;background:#000;color:#fff;position:relative">
       <div style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:12px">
@@ -914,6 +936,7 @@
           <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(#fff3,#fff3) 33.33% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 66.66% 0/1px 100% no-repeat,linear-gradient(#fff3,#fff3) 0 33.33%/100% 1px no-repeat,linear-gradient(#fff3,#fff3) 0 66.66%/100% 1px no-repeat"></div>
           <div id="cmsg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:15px;color:#E5E7EB"></div>
           ${extraFor ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${extraFor.no} · ek fotoğraf: <b id="xc">0</b></span>`
+            : insetFor ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${insetFor.no} · köşe fotoğrafı (${(CORNERS.find(c => c[0] === insPos) || [, ''])[1]})</span>`
             : target ? `<span class="tag" style="position:absolute;left:12px;top:12px;font-size:13px;background:#fff;color:#111">${target.no} · fotoğrafı değiştir</span>`
             : infoParent ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${infoParent.no} → INFO</span>`
             : bp ? `<span class="tag sub" style="position:absolute;left:12px;top:12px;font-size:13px">${bp.no} BYPASS</span>` : ''}
@@ -935,7 +958,7 @@
       sat.style.color = col;
       sact.textContent = GPS.err === 'izin' ? 'Konum izni yok' : GPS.err === 'yok' ? 'Konum yok' : !f ? 'Konum aranıyor…' : f.acc <= PRECISE ? `Hassas konum ±${Math.round(f.acc)} m` : `±${Math.round(f.acc)} m`;
     };
-    if (!extraFor) { GPS.last = null; GPS.on(paint); paint(); }
+    if (!extraFor && !insetFor) { GPS.last = null; GPS.on(paint); paint(); }
     const tick = setInterval(paint, 2000);
     const stop = () => { clearInterval(tick); GPS.off(); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; document.body.style.background = ''; window.removeEventListener('hashchange', stop); };
     window.addEventListener('hashchange', stop);
@@ -948,7 +971,11 @@
         await DB.putSurvey(sv); shots += 1; document.getElementById('xc').textContent = shots; return;
       }
       if (busy) return; busy = true;
-      const ready = !fromGallery && fromCam;   // camera shots are already cropped 4:3 at final size
+      const ready = !fromGallery && fromCam;
+      if (insetFor) {   // a corner photo: no position, back to the obstacle
+        stop(); insetFor.insets = insetFor.insets || {}; await DB.delBlob(insetFor.insets[insPos]);
+        insetFor.insets[insPos] = await DB.putBlob(ready ? blob : await to43(blob)); await DB.putSurvey(sv); return go(back);
+      }   // camera shots are already cropped 4:3 at final size
       const pos = GPS.fresh(8000);            // no waiting: without a fresh fix the position follows in the background
       if (pos) await placeLate(pos);          // an earlier photo still waiting gets this fix first (keeps the KM order)
       stop();
@@ -971,7 +998,7 @@
     };
     document.getElementById('cgal').onchange = async e => {
       const fs = [...e.target.files]; if (!fs.length) return;
-      if (!extraFor && !target && !infoParent) { stop(); return addPhotos(sv, fs); }   // new obstacles: position from each photo
+      if (!extraFor && !target && !infoParent && !insetFor) { stop(); return addPhotos(sv, fs); }   // new obstacles: position from each photo
       if (extraFor) { for (const f of fs) await save(f, false); return; }
       save(fs[0], false);
     };
@@ -1064,7 +1091,7 @@
     const par = r.parentId && sv.records.find(x => x.id === r.parentId), inArc = !!(r.archived || (par && par.archived));
     if (sv.selected !== r.id) { sv.selected = r.id; }
     const st = settingsOf(sv), refs = R.refs(st);
-    const u = await blobUrl(r.photoId);
+    const u = await blobUrl(r.photoId), INS = await insetHtml(r);
     r.extras = r.extras || [];
     const thumbs = [];   // [blobId, url] — the photo used in the report first, then the extra shots
     for (const b of [r.photoId, ...r.extras].filter(Boolean)) thumbs.push([b, await blobUrl(b)]);
@@ -1097,7 +1124,7 @@
       $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `${inArc ? '<span class="tag warn" style="font-size:13px">Arşivde · rapora girmez</span>' : ''}<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split rec3">
         <div class="pane">
-          <div class="photo">${u ? `<img src="${u}" alt="">` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
+          <div class="photo">${u ? `<img src="${u}" alt="">${INS}` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
             <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button></div>
           ${u ? `<div class="thumbs" aria-label="Bu engelin fotoğrafları">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
@@ -1110,6 +1137,7 @@
           <div class="g3"><button class="btn grn sm" id="infq">+ Info</button>
             <button class="btn grn sm" id="simq">+ Simülasyon</button>
             ${r.parentId ? '' : `<button class="btn grn sm" id="bypq">+ Bypass</button>`}</div>
+          ${u ? `<button class="btn sm" id="insq">${imgSvg} Engel için ek fotoğraf (köşeye) · ${Object.values(r.insets || {}).filter(Boolean).length}/4</button>` : ''}
         </div>
         <div class="pane">
           <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel tipi' : 'Engel tipini seç'}</div>
@@ -1172,6 +1200,7 @@
         { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { await keep(); go(`#/cam/${sv.id}?info=${mainRec.id}`); } },
         { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { await keep(); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: '' }); } },
       ]);
+      if (g('insq')) g('insq').onclick = () => insetSheet(sv, r, read);
       g('simq').onclick = async () => { await keep(); createRecord(sv, { parent: mainRec, flag: 'INFO', name: 'Satellite View', pending: 'sat' }); };
       if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
       if (g('hadd')) g('hadd').onclick = () => { read(); r.heights.push({ label: '', value: null }); draw(); };
@@ -1197,7 +1226,7 @@
         const b = e.target.closest('button');
         if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Kaydı ve alt kayıtlarını sil'; return; }
         const gone = sv.records.filter(x => x.id === r.id || x.parentId === r.id);
-        for (const x of gone) for (const b of [x.photoId, ...(x.extras || [])]) await DB.delBlob(b);
+        for (const x of gone) for (const b of [x.photoId, ...(x.extras || []), ...Object.values(x.insets || {})]) await DB.delBlob(b);
         sv.records = sv.records.filter(x => !gone.includes(x)); if (sv.bypassParent === r.id) sv.bypassParent = null; sv.selected = null;
         await DB.putSurvey(sv); go(`#/s/${sv.id}`);
       };
@@ -1391,7 +1420,9 @@
         <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
         ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Yassılaştır</button><button class="btn sm" data-c="tall">Diklet</button>' : ''}
         ${o.k === 'garrow' ? ['straight', 'left', 'right'].map(d => `<button class="btn sm ${o.dir === d ? 'pri' : ''}" data-c="dir:${d}">${annGArrow(d)}</button>`).join('') : ''}
-        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}
+        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}</div>
+        ${o.k === 'text' || o.k === 'line' ? `<div class="sec">Renk</div><div class="tools">${Object.entries(ANNCOL).map(([k, [c, bg]]) => `<button class="btn sm" data-c="col:${k}" aria-label="${k}" title="${({ red: 'Kırmızı', black: 'Siyah', blue: 'Mavi', green: 'Yeşil', yellow: 'Sarı', white: 'Beyaz' })[k]}" style="min-width:44px;${(o.color || 'red') === k ? 'outline:3px solid var(--navy);outline-offset:2px;' : ''}background:${bg};"><span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${c};border:1px solid #0003"></span></button>`).join('')}</div>` : ''}
+        <div class="tools">
         ${o.k !== 'line' ? '<button class="btn sm" data-c="big">Büyüt</button><button class="btn sm" data-c="small">Küçült</button>' : ''}<button class="btn sm" data-c="del" style="color:var(--badtx)">Sil</button></div></div>`;
       const tv = document.getElementById('tv'); if (tv) tv.oninput = () => { o.text = tv.value; lay.innerHTML = annHtml(items, sel); };
     };
@@ -1440,6 +1471,7 @@
         if (k === 'flat') o.h *= 0.85; if (k === 'tall') o.h /= 0.85;
         if (k.startsWith('dir:')) o.dir = k.slice(4);
         if (k === 'both') o.both = !o.both;
+        if (k.startsWith('col:')) o.color = k.slice(4);
         if (k === 'del') { items.splice(sel, 1); sel = -1; }
         paint();
       }
@@ -1527,7 +1559,10 @@
       await save();
       if (NEED.some(k => !String(H[k] || '').trim())) { toast('Önce antet bilgilerini doldur'); return V.report(id); }
       if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını gir ya da Esri seç');
-      location.href = `report2.html#${id}`;
+      sheet('Etüt raporu hangi paftayla çıksın?', [
+        { label: 'Dikey pafta (A4 dikey, her engel bir sayfa)', cls: 'pri', run: () => { location.href = `report2.html?o=p#${id}`; } },
+        { label: 'Yatay pafta (A4 yatay, her engel bir sayfa)', cls: 'pri', run: () => { location.href = `report2.html?o=l#${id}`; } },
+      ]);
     };
     document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
@@ -1546,7 +1581,6 @@
       else if (p[0] === 'add') await V.add(p[1], q);
       else if (p[0] === 'cam') await V.camera(p[1], q);
       else if (p[0] === 'r') await V.record(p[1], p[2], q);
-      else if (p[0] === 'rep' && FIELD) go(`#/s/${p[1]}`);
       else if (p[0] === 'crit') await V.crit(p[1]);
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);

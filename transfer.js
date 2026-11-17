@@ -88,6 +88,7 @@
     if (r.actions) L.push(`Actions: ${r.actions}`);
     if (r.highlight && r.highlight !== 'none') L.push(`Renk: ${r.highlight}`);
     if (!r.photoId) L.push(r.pendingImage ? 'Görsel: ofiste eklenecek' : 'Görsel: yok');
+    const ins = Object.keys(r.insets || {}).filter(k => r.insets[k]); if (ins.length) L.push('Köşe fotoğrafları: ' + ins.map(k => ({ tl: 'sol üst', tr: 'sağ üst', bl: 'sol alt', br: 'sağ alt' }[k])).join(', '));
     if (r.archived) L.push('Arşivde: evet (rapora girmez)');
     if (r.t) L.push(`Kayıt zamanı: ${new Date(r.t).toLocaleString('tr-TR')}`);
     return L.join('\r\n') + '\r\n';
@@ -121,6 +122,8 @@
       const dir = folder[r.id], f = { dir };
       if (r.photoId) { f.photo = dir + 'foto.' + (r.photoExt || 'jpg'); entries.push({ path: f.photo, blob: r.photoId, rec: r }); }
       f.extras = (r.extras || []).map((id, i) => { const pth = dir + `ek-${i + 1}.jpg`; entries.push({ path: pth, blob: id, rec: r }); return pth; });
+      f.insets = {};
+      for (const [k, id] of Object.entries(r.insets || {})) if (id) { const pth = dir + `kose-${k}.jpg`; f.insets[k] = pth; entries.push({ path: pth, blob: id, rec: r }); }
       entries.push({ path: dir + 'bilgiler.txt', text: recordText(sv, r), rec: r });
       files[r.id] = f;
     }
@@ -168,10 +171,13 @@
   function dropPath(P, e) {
     if (e.logo) { delete P.logoFiles[e.logo]; return; }
     const f = P.files[e.rec.id]; if (f.photo === e.path) delete f.photo; f.extras = f.extras.filter(x => x !== e.path);
+    for (const k of Object.keys(f.insets || {})) if (f.insets[k] === e.path) delete f.insets[k];
   }
   function renamePath(P, e, pth) {
     if (e.logo) { P.logoFiles[e.logo] = pth; e.path = pth; return; }
-    const f = P.files[e.rec.id]; if (f.photo === e.path) f.photo = pth; f.extras = f.extras.map(x => x === e.path ? pth : x); e.path = pth;
+    const f = P.files[e.rec.id]; if (f.photo === e.path) f.photo = pth; f.extras = f.extras.map(x => x === e.path ? pth : x);
+    for (const k of Object.keys(f.insets || {})) if (f.insets[k] === e.path) f.insets[k] = pth;
+    e.path = pth;
   }
 
   // ---------- ZIP reader (stored or deflated, so a zip re-made in Windows also opens) ----------
@@ -233,6 +239,7 @@
       const f = doc.files[r.id] || {};
       r.photoId = await blobAt(f.photo); r.extras = [];
       for (const pth of f.extras || []) { const id = await blobAt(pth); if (id) r.extras.push(id); }
+      r.insets = {}; for (const [k, pth] of Object.entries(f.insets || {})) { const id = await blobAt(pth); if (id) r.insets[k] = id; }
     }
     sv.logos = {};
     for (const [k, pth] of Object.entries(doc.logoFiles || {})) { const id = await blobAt(pth); if (id) sv.logos[k] = id; }

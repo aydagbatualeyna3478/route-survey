@@ -38,7 +38,7 @@
   function newPage(kind) {
     const pg = el(`<section class="page ${kind || ''}"></section>`);
     const isCover = kind === 'cover';
-    if (!isCover && kind !== 'a3' && kind !== 'lp') {   // landscape record pages carry their own header and logos
+    if (!isCover && kind !== 'a3' && !/\blp\b/.test(kind || '')) {   // landscape record pages carry their own header and logos
       // two logos: company left, client right. three logos: company left, partner right, client bottom right
       // up to four logos, each in the corner chosen in the app (tl / tr / bl / br); scaled to fit, never past the margins
       for (const pos of ['tl', 'tr', 'bl', 'br']) {
@@ -272,7 +272,7 @@
     return `<div class="tb">${h}</div>`;
   }
   // new draft: the landscape summary and record pages built by report2.html go here, numbered with the rest
-  if (window.R2_PAGES) for (const html of window.R2_PAGES) newPage('lp').insertAdjacentHTML('afterbegin', html);
+  if (window.R2_PAGES) for (const html of window.R2_PAGES) newPage(window.R2_MODE === 'p' ? 'lp pp' : 'lp').insertAdjacentHTML('afterbegin', html);
   else for (let i = 0; i < R.length; i += 3) {
     const pg = newPage('pg-survey');
     if (i === 0) pg.querySelector('.hdr') && (pg.dataset.toc3 = '1');

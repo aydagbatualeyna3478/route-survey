@@ -166,22 +166,26 @@
     const txt = (o.t === 'up' || o.t === 'down') && o.text ? `<text x="${o.t === 'up' ? 40 : 60}" y="54" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="17" fill="#000">${esc(o.text)}</text>` : '';
     return `<svg viewBox="0 0 100 88" style="width:100%;height:100%;display:block"><path d="M50 6 L95 83 H5 Z" fill="#fff" stroke="#E30613" stroke-width="9" stroke-linejoin="round"/>${SIGNS[o.t] || ''}${txt}</svg>`;
   }
+  // colours of notes and red arrows (palette in the marking screen); yellow and white text sit on a dark box
+  const ACOL = { red: ['#FF0000', 'rgba(255,255,255,.92)'], black: ['#111111', 'rgba(255,255,255,.92)'], blue: ['#1E5AFF', 'rgba(255,255,255,.92)'], green: ['#15803D', 'rgba(255,255,255,.92)'], yellow: ['#FFE500', 'rgba(0,0,0,.72)'], white: ['#FFFFFF', 'rgba(0,0,0,.72)'] };
+  const acol = o => ACOL[o.color] || ACOL.red;
   function annHtml(items, sel) {
-    let h = '', lines = '';
+    let h = '', lines = ''; const used = new Set();
     const box = (o, i, extra) => `class="ov ${i === sel ? 'sel' : ''}" data-i="${i}" style="position:absolute;left:${o.x * 100}%;top:${o.y * 100}%;${o.w != null ? `width:${o.w * 100}%;` : ''}${o.h != null ? `height:${o.h * 100}%;` : ''}transform:rotate(${o.rot || 0}deg);touch-action:none;${extra || ''}"`;
     items.forEach((o, i) => {
       if (o.k === 'arrow') h += `<div ${box(o, i)}><svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block"><polygon points="50,0 100,50 75,50 75,100 25,100 25,50 0,50" fill="#FFFF00" stroke="#8a7a00" stroke-width="2"/></svg></div>`;
       if (o.k === 'garrow') h += `<div ${box(o, i)}><svg viewBox="0 0 100 60" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible"><g fill="#FFE500" stroke="#9A8600" stroke-width="1.6" stroke-linejoin="round">${GARROW[o.dir] || GARROW.straight}</g></svg></div>`;
       if (o.k === 'sign') h += `<div ${box(o, i, 'aspect-ratio:100/88;height:auto')}>${signSvg(o)}</div>`;
-      if (o.k === 'text') h += `<div ${box({ ...o, w: null }, i, `width:max-content;max-width:${Math.max(30, (1 - o.x) * 100)}%;border:.45cqw solid #FF0000;background:rgba(255,255,255,.9);color:#FF0000;font-weight:700;font-size:${(3.7 * (o.fs || 1)).toFixed(2)}cqw;line-height:1.15;padding:.6cqw 1cqw;white-space:pre-wrap`)}>${esc(o.text) || 'Not'}</div>`;
+      if (o.k === 'text') h += `<div ${box({ ...o, w: null }, i, `width:max-content;max-width:${Math.max(30, (1 - o.x) * 100)}%;border:.45cqw solid ${acol(o)[0]};background:${acol(o)[1]};color:${acol(o)[0]};font-weight:700;font-size:${(3.7 * (o.fs || 1)).toFixed(2)}cqw;line-height:1.15;padding:.6cqw 1cqw;white-space:pre-wrap`)}>${esc(o.text) || 'Not'}</div>`;
       if (o.k === 'line') {
-        lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="#FF0000" stroke-width="0.8" marker-end="url(#ah)"${o.both ? ' marker-start="url(#ahs)"' : ''}/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
+        const ck = ACOL[o.color] ? o.color : 'red'; used.add(ck);
+        lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="${ACOL[ck][0]}" stroke-width="0.8" marker-end="url(#ah-${ck})"${o.both ? ` marker-start="url(#ahs-${ck})"` : ''}/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
         if (i === sel) h += `<span class="hd" data-i="${i}" data-h="1" style="left:${o.x1 * 100}%;top:${o.y1 * 100}%"></span><span class="hd" data-i="${i}" data-h="2" style="left:${o.x2 * 100}%;top:${o.y2 * 100}%"></span>`;
       }
     });
-    return (lines ? `<svg viewBox="0 0 100 75" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FF0000"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#FF0000"/></marker></defs>${lines}</svg>` : '') + h;
+    return (lines ? `<svg viewBox="0 0 100 75" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"><defs>${[...used].map(k => `<marker id="ah-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${ACOL[k][0]}"/></marker><marker id="ahs-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${ACOL[k][0]}"/></marker>`).join('')}</defs>${lines}</svg>` : '') + h;
   }
-  g.annHtml = annHtml; g.annSign = signSvg; g.annGArrow = dir => `<svg viewBox="0 0 100 60" width="34" height="20"><g fill="#FFE500" stroke="#9A8600" stroke-width="3">${GARROW[dir]}</g></svg>`;
+  g.annHtml = annHtml; g.annSign = signSvg; g.ANNCOL = ACOL; g.annGArrow = dir => `<svg viewBox="0 0 100 60" width="34" height="20"><g fill="#FFE500" stroke="#9A8600" stroke-width="3">${GARROW[dir]}</g></svg>`;
   /* logo slots: 1 company (kept in settings) · 2 client 1 · 3 client 2 · 4 owner; each placed in a page corner */
   const LOGO_POS = { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' };
   function logosOf(sv) {
