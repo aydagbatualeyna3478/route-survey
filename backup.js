@@ -163,7 +163,18 @@
     const keep = dirsOf(Object.keys(next));
     const gone = [...dirsOf(Object.keys(old))].filter(d => !keep.has(d)).sort((a, b) => a.length - b.length);
     const done = []; for (const d of gone) { if (done.some(x => d.startsWith(x))) continue; await t.removeDir(root + d); done.push(d); }
-    await DB.setSetting(mkey(sv.id), { files: next, at: Date.now() });
+    await DB.setSetting(mkey(sv.id), { files: next, recs: recSigs(sv, P), at: Date.now() });
+  }
+
+  /* per obstacle: a fingerprint of its data + folder at the time it was written, so the list can show which obstacles
+     are safely in the backup and which changed since */
+  function recSigs(sv, P) { const o = {}; for (const r of sv.records) o[r.id] = hash(JSON.stringify(r) + '|' + ((P.files[r.id] || {}).dir || '')); return o; }
+  async function recordStatus(sv) {   // { state: 'off'|'error'|'on', recs: { id: 'ok'|'pending' } }
+    const st = status(), recs = {};
+    if (!st.supported || !st.on || st.needsPermission) { sv.records.forEach(r => recs[r.id] = 'off'); return { state: 'off', recs }; }
+    const man = (await DB.getSetting(mkey(sv.id))) || {}, now = recSigs(sv, T().plan(sv)), was = man.recs || {};
+    for (const id of Object.keys(now)) recs[id] = was[id] === now[id] ? 'ok' : 'pending';
+    return { state: st.error ? 'error' : 'on', recs };
   }
 
   // ---------- controls used by the app ----------
@@ -218,5 +229,5 @@
     return out;
   }
 
-  g.Backup = { init, status, useDefault, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, grant, setOn, backupAll, restoreList, schedule, supported };
+  g.Backup = { init, status, useDefault, recordStatus, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, grant, setOn, backupAll, restoreList, schedule, supported };
 })(window);

@@ -236,7 +236,8 @@
   function photo(r) {
     const c = r.crop || {}; const l = c.l || 0, t = c.t || 0, rr = c.r || 0, b = c.b || 0;
     const w = 100 / (1 - l - rr), h = 100 / (1 - t - b);
-    return `<div class="crop">${r.photo ? `<img src="${r.photo}" style="width:${w}%;height:${h}%;left:${-l * w}%;top:${-t * h}%" alt="">` : ''}</div>${overlays(r)}`;
+    const marks = (r.ann || []).length && window.annHtml ? `<div style="position:absolute;inset:0;container-type:inline-size;pointer-events:none">${annHtml(r.ann, -1)}</div>` : overlays(r);
+    return `<div class="crop">${r.photo ? `<img src="${r.photo}" style="width:${w}%;height:${h}%;left:${-l * w}%;top:${-t * h}%" alt="">` : ''}</div>${marks}`;
   }
   const cell = (row, col, cls, html, span) => `<div class="${cls}" style="grid-row:${row}${span ? ' / span ' + span : ''};grid-column:${col}">${html}</div>`;
   function table(r) {

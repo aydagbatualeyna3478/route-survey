@@ -95,6 +95,8 @@
   function surveyText(sv, live, arc) {
     const p = sv.project, c = p.cargo || {};
     return [`${p.start.name} - ${p.end.name} Arası Etüt Raporu`, '',
+      p.region ? `Bölge: ${p.region}` : null, p.projectCode || p.projectName ? `Proje: ${[p.projectCode, p.projectName].filter(Boolean).join(' – ')}` : null,
+      p.client ? `Firma: ${p.client}` : null, (p.surveyors || []).length ? `Etüdü yapan: ${p.surveyors.join(', ')}` : null,
       `Etüt türü: ${p.general ? 'Genel etüt' : 'Belirli bir yük için'}`,
       p.general ? '' : `Yük: uzunluk ${fmt(c.length)} m, genişlik ${fmt(c.width)} m, yükseklik ${fmt(c.height)} m, ağırlık ${fmt(c.weight)} t`,
       `Durum: ${sv.status === 'done' ? 'tamamlandı' : 'devam ediyor'}`,

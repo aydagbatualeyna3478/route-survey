@@ -380,22 +380,51 @@
       <span>Yükseklik: <b>${m(c.height)}</b></span><span>Ağırlık: <b>${c.weight == null || c.weight === '' ? '–' : fmt(c.weight) + ' t'}</b></span></div></div>`;
   };
 
+  /* survey identity: region, project code/name, surveyors, company — filled in the form, used by the home filters */
+  const REGIONS = ['Afrika', 'Orta Asya', 'Orta Doğu', 'Avrupa'];
+  const pkey = p => [p.projectCode, p.projectName].filter(Boolean).join(' – ');
+  const surveyorsOf = p => (p.surveyors && p.surveyors.length ? p.surveyors : p.preparedBy || []).filter(Boolean);
+  async function dataLists() {
+    const all = await DB.listSurveys(), known = (await DB.getSetting('projects')) || [];   // projects: [{code, name}] (list from the team, later)
+    const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'tr'));
+    const codes = uniq(known.map(x => x.code).concat(all.map(s => s.project.projectCode))), names = uniq(known.map(x => x.name).concat(all.map(s => s.project.projectName)));
+    const o = a => a.map(v => `<option value="${esc(v)}">`).join('');
+    return `<datalist id="dlPcode">${o(codes)}</datalist><datalist id="dlPname">${o(names)}</datalist><datalist id="dlClient">${o(uniq(all.map(s => s.project.client)))}</datalist>`;
+  }
+  let FILT = (() => { try { return JSON.parse(localStorage.getItem('rs-filter')) || {}; } catch (e) { return {}; } })();
+  const saveFilt = () => { try { localStorage.setItem('rs-filter', JSON.stringify(FILT)); } catch (e) {} };
+
   V.home = async () => {
-    const list = (await DB.listSurveys()).sort((a, b) => b.createdAt - a.createdAt);
+    const every = (await DB.listSurveys()).sort((a, b) => b.createdAt - a.createdAt);
+    const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'tr'));
+    const opts = { proj: uniq(every.map(s => pkey(s.project))), who: uniq(every.flatMap(s => surveyorsOf(s.project))), firm: uniq(every.map(s => s.project.client)) };
+    for (const k of ['proj', 'who', 'firm']) if (FILT[k] && !opts[k].includes(FILT[k])) delete FILT[k];
+    const list = every.filter(s => (!FILT.region || s.project.region === FILT.region) && (!FILT.proj || pkey(s.project) === FILT.proj)
+      && (!FILT.who || surveyorsOf(s.project).includes(FILT.who)) && (!FILT.firm || s.project.client === FILT.firm));
+    const sel = (k, label) => `<label class="f" style="min-width:180px;flex:1"><span>${label}</span><select data-filt="${k}"><option value="">Tümü</option>${opts[k].map(v => `<option ${FILT[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
+    const nf = ['region', 'proj', 'who', 'firm'].filter(k => FILT[k]).length;
+    const filters = every.length ? `<div class="card filt" style="gap:10px"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><b style="font-size:14px;color:var(--navy);margin-right:4px">Bölge</b>
+        <button class="chip ${!FILT.region ? 'on' : ''}" data-freg="">Tümü</button>${REGIONS.map(g => `<button class="chip ${FILT.region === g ? 'on' : ''}" data-freg="${g}">${g}</button>`).join('')}
+        <span class="hint" style="margin-left:auto">${list.length} / ${every.length} etüt${nf ? ' · <button class="btn sm" data-fclear="1" style="min-height:30px">Filtreleri temizle</button>' : ''}</span></div>
+      <div class="row" style="flex-wrap:wrap;gap:10px">${sel('proj', 'Proje kodu / adı')}${sel('who', 'Etüdü yapan')}${sel('firm', 'Firma')}</div></div>` : '';
     const card = sv => {
       const n = sv.records.length, act = sv.status === 'active', c = cargoOf(sv.project);
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
         <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Sahada' : 'Tamamlandı'}</span></div>
         <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
+        ${sv.project.region || pkey(sv.project) || sv.project.client || surveyorsOf(sv.project).length ? `<div class="hint" style="color:var(--ink)">${[sv.project.region, pkey(sv.project), sv.project.client, surveyorsOf(sv.project).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
         ${critSummary(sv)}
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button>${FIELD ? '' : `<button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>`}
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
     $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
-      <div class="full">${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
+      <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Bu filtrelere uyan etüt yok.</div>' : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="card bk" id="bkline" style="margin-top:auto"></div>
       <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
     document.getElementById('acct').onclick = () => Auth.accountSheet();
+    $app.querySelectorAll('[data-filt]').forEach(x => x.onchange = () => { if (x.value) FILT[x.dataset.filt] = x.value; else delete FILT[x.dataset.filt]; saveFilt(); V.home(); });
+    $app.querySelectorAll('[data-freg]').forEach(x => x.onclick = () => { if (x.dataset.freg) FILT.region = x.dataset.freg; else delete FILT.region; saveFilt(); V.home(); });
+    const fc = $app.querySelector('[data-fclear]'); if (fc) fc.onclick = () => { FILT = {}; saveFilt(); V.home(); };
     /* delete a survey: first tap asks, second tap deletes the survey with all its photos and logos */
     $app.onclick = async e => {
       const b = e.target.closest('[data-delsv]'); if (!b) return;
@@ -529,6 +558,13 @@
         <div class="sec">Güzergah</div>
         <div class="g2"><label class="f">Başlangıç noktası<input name="start" required value="${esc(p.start.name)}" placeholder="Fabrika / saha adı"></label>
           <label class="f">Varış noktası<input name="end" required value="${esc(p.end.name)}" placeholder="Liman / saha adı"></label></div>
+        <div class="sec">Etüt künyesi</div>
+        <div class="row" role="radiogroup" aria-label="Bölge" style="flex-wrap:wrap;gap:8px">${REGIONS.map(g => `<button type="button" class="chip ${p.region === g ? 'on' : ''}" data-region="${g}" style="border-radius:12px">${g}</button>`).join('')}</div>
+        <div class="g2"><label class="f">Proje kodu<input name="projectCode" list="dlPcode" value="${esc(p.projectCode || '')}" placeholder="ör. P-2026-014"></label>
+          <label class="f">Proje adı<input name="projectName" list="dlPname" value="${esc(p.projectName || '')}"></label></div>
+        <div class="g2"><label class="f">Etüdü yapan(lar)<input name="surveyors" value="${esc((p.surveyors || (sv ? [] : [(Auth.user() || {}).name].filter(Boolean))).join(', '))}" placeholder="Ad Soyad, virgülle ayır"></label>
+          <label class="f">Firma (etüdün yapıldığı)<input name="client" list="dlClient" value="${esc(p.client)}" placeholder="Müşteri firma"></label></div>
+        ${await dataLists()}
         <div class="sec">Taşıma bilgileri</div>
         <div class="g2" role="radiogroup" aria-label="Etüt türü">
           <button type="button" class="chip ${p.general ? '' : 'on'}" data-kind="cargo" style="border-radius:12px">Belirli bir yük için</button>
@@ -548,8 +584,7 @@
         </div>
         <div class="office-only" style="display:flex;flex-direction:column;gap:14px">
         <div class="sec">Kapak bilgileri</div>
-        <div class="g2"><label class="f">Müşteri unvanı<input name="client" value="${esc(p.client)}"></label>
-          <label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa müşteri unvanı yazılır"></label></div>
+        <div class="g2"><label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa firma adı yazılır"></label><span></span></div>
         <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
         </div>
         ${FIELD ? '<div class="note g">Kapak bilgileri, logolar, kapak fotoğrafı, taşıma çizimi ve sonuç bölümü ofiste, bilgisayardaki uygulamada girilir. Etüt bitince "Dışa Aktar" ile dosyayı bilgisayara gönder.</div>' : ''}
@@ -569,7 +604,8 @@
     const f = document.getElementById('pf'), pending = {};
     const showRefs = () => { const h = pn(f.height.value); [['rLV', 1], ['rMV', 3], ['rHV', 4]].forEach(([k, d]) => { document.getElementById(k).placeholder = h == null ? '' : fmt(h + d, 2); }); };
     f.height.addEventListener('input', showRefs); showRefs();
-    let general = !!p.general;
+    let general = !!p.general, region = p.region || '';
+    f.querySelectorAll('[data-region]').forEach(b => b.onclick = () => { region = region === b.dataset.region ? '' : b.dataset.region; f.querySelectorAll('[data-region]').forEach(x => x.classList.toggle('on', x.dataset.region === region)); });
     f.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
       general = b.dataset.kind === 'general';
       f.querySelectorAll('[data-kind]').forEach(x => x.classList.toggle('on', x === b));
@@ -606,6 +642,8 @@
         title: `ROUTE SURVEY REPORT FROM\n${f.start.value.trim().toUpperCase()} TO ${f.end.value.trim().toUpperCase()}`,
         client: f.client.value.trim(), preparedFor: f.preparedFor.value.trim() || f.client.value.trim(), reference: f.reference.value.trim(), rev: f.rev.value.trim(),
         preparedBy: f.preparedBy.value.split('\n').map(x => x.trim()).filter(Boolean), executedBy: s.project.companyShort,
+        region, projectCode: f.projectCode.value.trim(), projectName: f.projectName.value.trim(),
+        surveyors: f.surveyors.value.split(',').map(x => x.trim()).filter(Boolean),
         general, cargo, minHeight: general ? null : cargo.height, refLV: pn(f.refLV.value), refMV: pn(f.refMV.value), refHV: pn(f.refHV.value),
       });
       if (!sv) { s.project.date = `${months[now.getMonth()]} ${now.getFullYear()}`; s.project.surveyDate = `${full[now.getMonth()]}, ${now.getFullYear()}`; }
@@ -625,6 +663,12 @@
   };
 
   // ----- active survey: obstacle list on the left, actions on the right -----
+  const BKICON = {
+    ok: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1F7A3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="m9 13.2 2.1 2.1 4-4"/></svg>',
+    pending: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#C26A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M12 16v-5m-2.3 2.2L12 11l2.3 2.2"/></svg>',
+    off: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#8A93A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M4 4l16 16"/></svg>',
+  };
+  const BKTITLE = { ok: 'Yedeklendi', pending: 'Yedeklenmeyi bekliyor', off: 'Yedek kapalı' };
   const SELST = {};
   const LSCROLL = {};   // list scroll position per survey and tab, kept while the app is open   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
@@ -644,7 +688,7 @@
       return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">${r.latDec == null ? '<b style="color:var(--warntx)">konum yok</b>' : r.kmManual != null ? 'KM ' + fmt(r.kmManual, 1) : ''}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
-        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
+        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<span class="bkic" data-bkr="${r.id}" aria-hidden="true"></span><button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
     };
     const keep = SELST[id] || { on: false, ids: [], tab: 's' }, tab = keep.tab || 's';
     const arch = archivedRecords(sv);
@@ -695,6 +739,20 @@
       if (tgt) tgt.scrollIntoView({ block: 'center' }); else if (LSCROLL[key] != null) lst.scrollTop = LSCROLL[key]; else lst.scrollTop = lst.scrollHeight;
       LSCROLL[key] = lst.scrollTop;
       lst.addEventListener('scroll', () => { LSCROLL[key] = lst.scrollTop; }, { passive: true }); }
+
+    /* backup mark on every obstacle: green cloud = in the backup folder, orange = changed since / waiting, grey = backup off */
+    { const lst = document.getElementById('list');
+      const paintBk = async () => {
+        if (!lst.isConnected) return offBk();
+        const cur = await DB.getSurvey(id); if (!cur) return;
+        const { state, recs } = await Backup.recordStatus(cur);
+        lst.querySelectorAll('[data-bkr]').forEach(el => {
+          const k = state === 'off' ? 'off' : recs[el.dataset.bkr] || 'pending';
+          if (el.dataset.k === k) return; el.dataset.k = k;
+          el.innerHTML = BKICON[k]; el.title = BKTITLE[k];
+        });
+      };
+      const offBk = Backup.onChange(st => { if (!st.busy) paintBk(); }); paintBk(); }
 
     /* reorder: long press selects the obstacle and lets you drag it; while selecting, a tap adds/removes an
        obstacle. Numbers are not stored — they follow the list order, so a move renumbers everything. */
@@ -1289,8 +1347,9 @@
         const el = stage && stage.querySelector(`.ov[data-i="${i}"]`); const hh = el ? el.getBoundingClientRect().height / stage.getBoundingClientRect().height : 0.12;
         return { kind: 'sp', geom: 'rect', x: o.x, y: o.y, w: o.w, h: hh, line: '#FF0000', lw: 1.5, fill: '#FFFFFF', text: [[{ t: o.text || '', b: true, sz: 11, color: '#FF0000' }]] };
       }
-      return { kind: 'cxnSp', x: Math.min(o.x1, o.x2), y: Math.min(o.y1, o.y2), w: Math.abs(o.x2 - o.x1), h: Math.abs(o.y2 - o.y1), flipH: o.x1 > o.x2, flipV: o.y1 > o.y2, line: '#FF0000', lw: 2.25, head: 'none', tail: 'triangle' };
-    });
+      if (o.k !== 'line') return null;   // road arrows and signs: the reports draw them from r.ann
+      return { kind: 'cxnSp', x: Math.min(o.x1, o.x2), y: Math.min(o.y1, o.y2), w: Math.abs(o.x2 - o.x1), h: Math.abs(o.y2 - o.y1), flipH: o.x1 > o.x2, flipV: o.y1 > o.y2, line: '#FF0000', lw: 2.25, head: o.both ? 'triangle' : 'none', tail: 'triangle' };
+    }).filter(Boolean);
   }
   V.annotate = async (id, rid) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
@@ -1300,9 +1359,15 @@
       <div class="split wide">
         <div class="pane photo-stage" style="overflow:hidden"><div class="photo" id="stage">${u ? `<img src="${u}" alt="">` : ''}<div id="lay" style="position:absolute;inset:0"></div></div></div>
         <div class="pane">
-          <div class="sec">Ekle</div>
-          <div class="tools"><button class="btn" data-add="arrow">+ Yön oku</button><button class="btn" data-add="text">+ Not kutusu</button><button class="btn" data-add="line">+ Kırmızı ok</button><button class="btn" data-add="h">+ Yükseklik</button></div>
-          <div class="hint">Öğeye dokunup sürükle. Kırmızı okun iki ucunu ayrı ayrı taşıyabilirsin.</div>
+          <div class="sec">Yön oku (zemine yatık, sarı)</div>
+          <div class="tools"><button class="btn sm" data-add="g:straight">${annGArrow('straight')} Düz</button><button class="btn sm" data-add="g:left">${annGArrow('left')} Sola</button><button class="btn sm" data-add="g:right">${annGArrow('right')} Sağa</button></div>
+          <div class="sec">Ölçü</div>
+          <div class="tools"><button class="btn sm" data-add="h">↕ Yükseklik (H:)</button><button class="btn sm" data-add="w">↔ Genişlik (W:)</button></div>
+          <div class="sec">Tabela</div>
+          <div class="tools signs">${[['turnL', 'Sola dönüş'], ['turnR', 'Sağa dönüş'], ['uturn', 'U dönüşü'], ['up', 'Yokuş %'], ['down', 'İniş %']].map(([t, l]) => `<button class="btn sm" data-add="s:${t}" title="${l}"><span style="width:26px;height:23px;display:inline-block">${annSign({ t, text: '' })}</span> ${l}</button>`).join('')}</div>
+          <div class="sec">Diğer</div>
+          <div class="tools"><button class="btn sm" data-add="text">+ Not kutusu</button><button class="btn sm" data-add="line">+ Kırmızı ok</button></div>
+          <div class="hint">Öğeye dokunup sürükle. Okların iki ucunu ayrı ayrı taşıyabilirsin.</div>
           <div id="ctl"></div>
         </div>
       </div>
@@ -1311,8 +1376,13 @@
     const paint = () => {
       lay.innerHTML = annHtml(items, sel);
       const o = items[sel];
+      const slope = o && o.k === 'sign' && (o.t === 'up' || o.t === 'down');
       ctl.innerHTML = !o ? '' : `<div class="card"><div class="sec">Seçili öğe</div>${o.k === 'text' ? `<label class="f">Not metni<textarea id="tv" rows="2">${esc(o.text)}</textarea></label>` : ''}
-        <div class="tools">${o.k === 'arrow' ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
+        ${slope ? `<label class="f">Tabeladaki eğim<input id="tv" value="${esc(o.text)}" placeholder="%8"></label>` : ''}
+        <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
+        ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Yassılaştır</button><button class="btn sm" data-c="tall">Diklet</button>' : ''}
+        ${o.k === 'garrow' ? ['straight', 'left', 'right'].map(d => `<button class="btn sm ${o.dir === d ? 'pri' : ''}" data-c="dir:${d}">${annGArrow(d)}</button>`).join('') : ''}
+        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}
         ${o.k !== 'line' ? '<button class="btn sm" data-c="big">Büyüt</button><button class="btn sm" data-c="small">Küçült</button>' : ''}<button class="btn sm" data-c="del" style="color:var(--badtx)">Sil</button></div></div>`;
       const tv = document.getElementById('tv'); if (tv) tv.oninput = () => { o.text = tv.value; lay.innerHTML = annHtml(items, sel); };
     };
@@ -1338,16 +1408,29 @@
         if (k === 'arrow') items.push({ k, x: 0.46, y: 0.62, w: 0.08, h: 0.17, rot: 0 });
         if (k === 'text') items.push({ k, x: 0.08, y: 0.08, w: 0.45, text: '' });
         if (k === 'line') items.push({ k, x1: 0.3, y1: 0.3, x2: 0.45, y2: 0.5 });
+        const minOf = list => { const v = (list || []).map(h => pn(h.value)).filter(x => x != null); return v.length ? Math.min(...v) : null; };
         if (k === 'h') {
-          const hs = (r.heights || []).map(h => pn(h.value)).filter(v => v != null), v = hs.length ? Math.min(...hs) : null;
-          items.push({ k: 'line', x1: 0.6, y1: 0.75, x2: 0.6, y2: 0.3 }); items.push({ k: 'text', x: 0.38, y: 0.5, w: 0.2, text: v == null ? 'H:  m' : `H: ${v.toFixed(2)} m` });
+          const v = minOf(r.heights);
+          items.push({ k: 'line', both: true, x1: 0.6, y1: 0.78, x2: 0.6, y2: 0.3 }); items.push({ k: 'text', x: 0.63, y: 0.48, w: 0.2, text: v == null ? 'H:  m' : `H: ${fmt(v, 2)} m` });
+        }
+        if (k === 'w') {
+          const v = minOf(r.widths);
+          items.push({ k: 'line', both: true, x1: 0.3, y1: 0.6, x2: 0.7, y2: 0.6 }); items.push({ k: 'text', x: 0.42, y: 0.63, w: 0.2, text: v == null ? 'W:  m' : `W: ${fmt(v, 2)} m` });
+        }
+        if (k.startsWith('g:')) items.push({ k: 'garrow', dir: k.slice(2), x: 0.14, y: 0.8, w: 0.26, h: 0.12, rot: 0 });
+        if (k.startsWith('s:')) {
+          const t = k.slice(2), m = /(\d+(?:[.,]\d+)?)\s*%|%\s*(\d+(?:[.,]\d+)?)/.exec(r.remarks || '');
+          items.push({ k: 'sign', t, x: Math.max(0.02, 0.78 - 0.18 * items.filter(z => z.k === 'sign').length), y: 0.06, w: 0.16, rot: 0, text: (t === 'up' || t === 'down') ? (m ? '%' + (m[1] || m[2]) : '%') : '' });
         }
         sel = items.length - 1; paint();
       }
       if (c && items[sel]) {
         const o = items[sel], k = c.dataset.c;
         if (k === 'rl') o.rot = ((o.rot || 0) - 15) % 360; if (k === 'rr') o.rot = ((o.rot || 0) + 15) % 360;
-        if (k === 'big' || k === 'small') { const f = k === 'big' ? 1.2 : 1 / 1.2; o.w *= f; if (o.h) o.h *= f; }
+        if (k === 'big' || k === 'small') { const f = k === 'big' ? 1.2 : 1 / 1.2; if (o.k === 'text') o.fs = (o.fs || 1) * f; else { o.w *= f; if (o.h) o.h *= f; } }
+        if (k === 'flat') o.h *= 0.85; if (k === 'tall') o.h /= 0.85;
+        if (k.startsWith('dir:')) o.dir = k.slice(4);
+        if (k === 'both') o.both = !o.both;
         if (k === 'del') { items.splice(sel, 1); sel = -1; }
         paint();
       }
