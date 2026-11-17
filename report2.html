@@ -17,11 +17,11 @@
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=39"></script>
+<script src="auth.js?v=41"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=39"></script>
-<script src="rules.js?v=39"></script>
-<script src="catalog.js?v=39"></script>
+<script src="db.js?v=41"></script>
+<script src="rules.js?v=41"></script>
+<script src="catalog.js?v=41"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -114,8 +114,13 @@
       n = 256 * 2 ** z;
       const x0 = (wx(b[2], n) + wx(b[3], n)) / 2 - W / 2, y0 = (wy(b[0], n) + wy(b[1], n)) / 2 - H / 2;
       A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: ilat(y0, n), lon: ilon(x0, n) }, b: { x: 1, y: 1, lat: ilat(y0 + H, n), lon: ilon(x0 + W, n) } };
+      if (mp.provider === 'google' && mp.key) {   // same centre and scale as computed above: half the size at one zoom less, scale 2
+        const cLat = ilat(y0 + H / 2, n), cLon = ilon(x0 + W / 2, n);
+        A.routeBase = `https://maps.googleapis.com/maps/api/staticmap?center=${cLat.toFixed(6)},${cLon.toFixed(6)}&zoom=${Math.max(0, z - 1)}&size=${W / 2}x${H / 2}&scale=2&maptype=${mp.routeType === 'satellite' ? 'hybrid' : 'roadmap'}&key=${encodeURIComponent(mp.key)}`;
+      } else {
       const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#EEF1F4'; g.fillRect(0, 0, W, H);
       if (await tiles(g, z, x0, y0, W, H, OSM)) { attrib(g, W, H, '© OpenStreetMap contributors', 14); try { A.routeBase = c.toDataURL('image/jpeg', 0.85); } catch (e) { A.routeBase = null; } }
+      }
     } }
 
   // ---------- pafta (Nov 17): dikey "p" or yatay "l", chosen when the report is opened ----------
@@ -191,6 +196,16 @@
     return toUrl(c);
   }
   msg.textContent = 'Haritalar hazırlanıyor…';
+  /* Google: try one picture first; with a wrong key or no billing account Google sends an error instead of a map,
+     then this report uses Esri / OpenStreetMap and says so */
+  let MAPNOTE = '';
+  if (mp.provider === 'google') {
+    const at = recs.find(r => r.latDec != null);
+    const okG = !mp.key ? false : !at ? true : await new Promise(res => { const i = new Image(); i.onload = () => res(i.naturalWidth > 100); i.onerror = () => res(false); i.src = `https://maps.googleapis.com/maps/api/staticmap?center=${at.latDec},${at.lonDec}&zoom=17&size=200x150&maptype=satellite&key=${encodeURIComponent(mp.key)}`; setTimeout(() => res(false), 15000); });
+    if (!okG) { mp.provider = 'esri'; MAPNOTE = mp.key ? ' Google haritası alınamadı (API anahtarı geçersiz ya da Google Cloud fatura hesabı etkin değil); Esri / OpenStreetMap kullanıldı.' : ' Google API anahtarı girilmemiş; Esri / OpenStreetMap kullanıldı.'; }
+  }
+  const noLoc = recs.filter(r => r.latDec == null).length;
+  if (noLoc) MAPNOTE += ` ${noLoc} kayıtta konum yok; onların uydu görüntüsü çıkmaz.`;
   await makeRouteBase();
   done = 0;
   for (const r of recs) {
@@ -240,12 +255,14 @@
         <tr><td class="l">Ülke / Country</td><td>${esc(H.country)}</td><td class="l">Revizyon Tarihi / Date</td><td>${esc(H.revDate)}</td></tr></table>
       <div class="a title">${esc(title)}</div>`;
   const footer = MODE === 'p'
-    ? `<div class="a" style="left:50pt;top:766pt;width:300pt;font-size:6.3pt;line-height:1.35;color:#333"><b style="font-size:6.8pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>
-       <div class="a conf" style="left:345pt;top:768pt;width:200pt;text-align:left">${CONF}</div>`
+    ? `${custLogos.length ? `<div class="a cust n${custLogos.length}" style="left:50pt;top:763pt;height:30pt;width:120pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>` : ''}
+       <div class="a" style="left:${custLogos.length ? 178 : 50}pt;top:766pt;width:${custLogos.length ? 215 : 300}pt;font-size:${custLogos.length ? 5.6 : 6.3}pt;line-height:1.35;color:#333"><b style="font-size:${custLogos.length ? 6.1 : 6.8}pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>
+       <div class="a conf" style="left:${custLogos.length ? 400 : 345}pt;top:768pt;width:${custLogos.length ? 145 : 200}pt;text-align:left">${CONF}</div>`
     : `<div class="a cust n${custLogos.length}" style="top:540pt;height:28pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
        <div class="a conf" style="top:547pt">${CONF}</div>`;
   const ll = r => r.latDec != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latDec},${r.lonDec}">${esc(r.lat)}${MODE === 'p' ? '<br>' : ', '}${esc(r.lon)}</a>` : '—';
-  const obst = r => `${esc(OL(r.obstacle) || (r.flag === 'INFO' ? 'Info' : '—'))}${r.flag ? `<span class="flag">${r.flag}</span>` : ''}`;
+  const obst = r => esc(OL(r.obstacle) || (r.flag === 'INFO' ? 'Info' : '—'));
+  const noCell = r => r.flag ? `<span style="display:block;font-size:6.6pt;font-weight:700;letter-spacing:.02em;line-height:1.1">${esc(r.flag.toUpperCase())}</span><span style="display:block;font-size:8.6pt;line-height:1.15;white-space:nowrap">${esc(r.no)}</span>` : esc(r.no);
   const photoBox = r => `<div class="a photo" style="${box(G.photo)};container-type:inline-size">${r.photo ? `<img src="${r.photo}" alt="">` : '<div class="none">No photo</div>'}
       ${r.photo && (r.ann || []).length ? `<div style="position:absolute;inset:0">${annHtml(r.ann, -1)}</div>` : ''}
       ${Object.entries(r.ins || {}).filter(([, u]) => u).map(([k, u]) => `<img src="${u}" alt="" style="position:absolute;inset:auto;${k[0] === 't' ? 'top' : 'bottom'}:2.5%;${k[1] === 'l' ? 'left' : 'right'}:2.5%;width:31%;height:auto;aspect-ratio:4/3;object-fit:cover;border:1.5pt solid #fff;box-shadow:0 0 2pt rgba(0,0,0,.5)">`).join('')}</div>`;
@@ -257,7 +274,7 @@
     const det = details(r), rm = remarks(r);
     if (MODE === 'p') return `${header(TITLE)}
       <table class="a strip" style="left:50pt;top:121pt;width:220pt"><colgroup><col style="width:34pt"><col style="width:44pt"><col></colgroup>
-        <tr><th>#</th><th>KM</th><th>OBSTACLE</th></tr><tr><td style="height:22pt">${esc(r.no)}</td><td style="height:22pt">${km1(r.km)}</td><td style="height:22pt;font-size:9pt">${obst(r)}</td></tr></table>
+        <tr><th>#</th><th>KM</th><th>OBSTACLE</th></tr><tr><td style="height:22pt;padding:0 1pt">${noCell(r)}</td><td style="height:22pt">${km1(r.km)}</td><td style="height:22pt;font-size:9pt">${obst(r)}</td></tr></table>
       <table class="a strip" style="left:50pt;top:161pt;width:220pt"><colgroup><col style="width:92pt"><col></colgroup>
         <tr><th style="height:27pt">COORDINATES</th><td class="ll" style="height:27pt;font-size:8pt;line-height:1.2">${ll(r)}</td></tr></table>
       <div class="a rmh" style="left:276pt;top:121pt;width:269.28pt;height:14pt">REMARKS</div>
@@ -266,7 +283,7 @@
     return `${header(TITLE)}
       <table class="a strip" style="left:36pt;top:116pt;width:492pt"><colgroup><col style="width:30pt"><col style="width:40pt"><col style="width:118pt"><col style="width:124pt"><col></colgroup>
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>LATITUDE &amp; LONGITUDE</th><th>DETAILS</th></tr>
-        <tr><td style="height:29pt">${esc(r.no)}</td><td style="height:29pt">${km1(r.km)}</td><td style="height:29pt;font-size:9pt">${obst(r)}</td><td class="ll" style="height:29pt;font-size:8pt">${ll(r)}</td><td class="det" style="height:29pt">${esc(det.join('  |  ') || '—')}</td></tr></table>
+        <tr><td style="height:29pt;padding:0 1pt">${noCell(r)}</td><td style="height:29pt">${km1(r.km)}</td><td style="height:29pt;font-size:9pt">${obst(r)}</td><td class="ll" style="height:29pt;font-size:8pt">${ll(r)}</td><td class="det" style="height:29pt">${esc(det.join('  |  ') || '—')}</td></tr></table>
       ${photoBox(r)}
       <div class="a rmh" style="left:536pt;top:116pt;width:270pt;height:15pt">REMARKS</div>
       <div class="a rmb" style="left:536pt;top:131pt;width:270pt;height:88.25pt;${rmStyle}">${esc(rm) || '—'}</div>
@@ -285,14 +302,16 @@
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=39'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=41'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
   document.querySelectorAll('.lp .rmb, .lp .strip td.det').forEach(el => { let s = parseFloat(getComputedStyle(el).fontSize); while (el.scrollHeight > el.clientHeight + 1 && s > 5) { s -= 0.4; el.style.fontSize = s + 'px'; } });
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (document.documentElement.clientWidth - 16) / (MODE === 'p' ? 794 : 1123)));
   fit(); window.addEventListener('resize', fit);
-  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç, kenar boşluklarını "Yok" yap.`;
+  const noSat = recs.filter(r => r.latDec != null && !r.sat).length;
+  if (noSat) MAPNOTE += ` ${noSat} engelin uydu görüntüsü indirilemedi (internet bağlantısını kontrol et).`;
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç, kenar boşluklarını "Yok" yap.${MAPNOTE}`;
   const pr = document.getElementById('pr'); pr.disabled = false; pr.onclick = () => { if (window.AndroidPrint) AndroidPrint.print(document.title); else window.print(); };   // tablet app: Android print dialog → Save as PDF
 })().catch(e => { document.getElementById('msg').textContent = 'Hata: ' + e.message; console.error(e); });
 </script>
