@@ -34,7 +34,8 @@
     delSurvey: id => tx('surveys', 'readwrite', s => s.delete(id)),
     getBlob: id => id ? tx('blobs', 'readonly', s => s.get(id)) : Promise.resolve(null),
     putBlob: async blob => { const id = uid(); await tx('blobs', 'readwrite', s => s.put(blob, id)); return id; },
-    delBlob: id => id ? tx('blobs', 'readwrite', s => s.delete(id)) : Promise.resolve(),
+    putBlobAt: async (id, blob) => { await tx('blobs', 'readwrite', s => s.put(blob, id)); return id; },
+    delBlob: id => id ? tx('blobs', 'readwrite', s => { s.delete('th:' + id); return s.delete(id); }) : Promise.resolve(),   // a photo's list thumbnail goes with it
     getSetting: k => tx('settings', 'readonly', s => s.get(k)),
     setSetting: (k, v) => tx('settings', 'readwrite', s => s.put(v, k)),
     async blobUrl(id) { const b = await DB.getBlob(id); return b ? URL.createObjectURL(b) : null; },
@@ -231,12 +232,18 @@
       if (o.k === 'garrow') h += `<div ${box(o, i)}><svg viewBox="0 0 100 60" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible"><g fill="#FFE500" stroke="#9A8600" stroke-width="1.6" stroke-linejoin="round">${GARROW[o.dir] || GARROW.straight}</g></svg></div>`;
       if (o.k === 'sign') h += `<div ${box(o, i, 'aspect-ratio:100/88;height:auto')}>${signSvg(o)}</div>`;
       if (o.k === 'text') h += `<div ${box({ ...o, w: null }, i, `width:max-content;max-width:${Math.max(30, (1 - o.x) * 100)}%;border:.45cqw solid ${acol(o)[0]};background:${acol(o)[1]};color:${acol(o)[0]};font-weight:700;font-size:${(3.7 * (o.fs || 1)).toFixed(2)}cqw;line-height:1.15;padding:.6cqw 1cqw;white-space:pre-wrap`)}>${esc(o.text) || 'Not'}</div>`;
-      if (o.k === 'yarrow') {   // yellow flat direction arrow from (x1,y1) to (x2,y2); both ends can be dragged
-        const ax = o.x1 * 100, ay = o.y1 * 75, bx = o.x2 * 100, by = o.y2 * 75, L = Math.hypot(bx - ax, by - ay) || 1;
-        const dx = (bx - ax) / L, dy = (by - ay) / L, nx = -dy, ny = dx, hw = (o.w || 0.05) * 50, hl = Math.min(L * 0.5, hw * 3.2), H = hw * 2.3;
-        const P = (x, y) => `${x.toFixed(2)},${y.toFixed(2)}`, cx = bx - dx * hl, cy = by - dy * hl;
-        const pts = [P(ax + nx * hw, ay + ny * hw), P(cx + nx * hw, cy + ny * hw), P(cx + nx * H, cy + ny * H), P(bx, by), P(cx - nx * H, cy - ny * H), P(cx - nx * hw, cy - ny * hw), P(ax - nx * hw, ay - ny * hw)].join(' ');
-        lines += `<polygon data-i="${i}" points="${pts}" fill="#FFE500" stroke="#9A8600" stroke-width="0.3" stroke-linejoin="round" style="pointer-events:visiblePainted;touch-action:none"/>`;
+      if (o.k === 'yarrow') {   // yellow arrow painted flat on the road from (x1,y1) to (x2,y2): drawn on the ground plane and
+        // seen in perspective (narrower and shorter the farther it is); both ends can be dragged
+        const HY = 33, F = 60;   // horizon line (viewBox units, 0–75) and focal length of the assumed road camera
+        const toG = (x, y) => { const z = F / Math.max(1.5, y - HY); return [(x - 50) * z / F, z]; };   // image → ground (X, Z), camera height 1
+        const toI = (X, Z) => [50 + X * F / Z, HY + F / Z];
+        const A = toG(o.x1 * 100, o.y1 * 75), B = toG(o.x2 * 100, o.y2 * 75);
+        const gx = B[0] - A[0], gz = B[1] - A[1], GL = Math.hypot(gx, gz) || 1e-6, dx = gx / GL, dz = gz / GL, nx = -dz, nz = dx;
+        const hw = (o.w || 0.05) * 50 * A[1] / F;   // half width on the ground: o.w is the width seen at the start end
+        const hl = Math.min(GL * 0.6, hw * 5), H = hw * 2.5, cx = B[0] - dx * hl, cz = B[1] - dz * hl;
+        const P = (X, Z) => { const [x, y] = toI(X, Z); return `${x.toFixed(2)},${y.toFixed(2)}`; };
+        const pts = [P(A[0] + nx * hw, A[1] + nz * hw), P(cx + nx * hw, cz + nz * hw), P(cx + nx * H, cz + nz * H), P(B[0], B[1]), P(cx - nx * H, cz - nz * H), P(cx - nx * hw, cz - nz * hw), P(A[0] - nx * hw, A[1] - nz * hw)].join(' ');
+        lines += `<polygon data-i="${i}" points="${pts}" fill="#FFE500" fill-opacity="0.92" stroke="#9A8600" stroke-width="0.3" stroke-linejoin="round" style="pointer-events:visiblePainted;touch-action:none"/>`;
         if (i === sel) h += `<span class="hd" data-i="${i}" data-h="1" style="left:${o.x1 * 100}%;top:${o.y1 * 100}%"></span><span class="hd" data-i="${i}" data-h="2" style="left:${o.x2 * 100}%;top:${o.y2 * 100}%"></span>`;
       }
       if (o.k === 'line') {

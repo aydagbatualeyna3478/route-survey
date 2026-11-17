@@ -1,4 +1,5 @@
-/* Live folder backup: every survey is kept as a folder, one sub-folder per obstacle, updated a few seconds after each change.
+/* Folder backup, on demand: the user picks the surveys and the place, then "Yedekle" writes each survey as a folder,
+   one sub-folder per obstacle (nothing runs in the background while a survey is being worked on).
      <A>-<B> Arası Etüt Raporu/  1 - Bridge/ foto.jpg, ek-1.jpg, bilgiler.txt   1-1 - INFO/ …   Arşiv/ …   etut.json
    Tablet (APK): Belgeler/Etütler/ on the tablet itself.  Computer (Edge/Chrome): a folder the user picks once — a folder
    inside OneDrive goes to the cloud by itself. The folder is the same layout as the ZIP, so "Etüt dosyası aç" → folder
@@ -66,44 +67,45 @@
   const supported = () => (T() && T().native()) || typeof window.showDirectoryPicker === 'function';
 
   // ---------- state ----------
-  const ST = { on: false, busy: false, last: null, error: '', queue: new Set(), timer: null, listeners: new Set() };
+  const ST = { busy: false, last: null, error: '', listeners: new Set() };
   const emit = () => ST.listeners.forEach(f => { try { f(status()); } catch (e) {} });
-  const status = () => ({ supported: supported(), canPick: !T().native() || !!AF(), kind: target().kind, label: target().label, on: ST.on, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: ST.needsPermission, pending: ST.queue.size });
+  /* has: a place to write is known (tablet: always, Belgeler/Etütler by default; computer: once a folder is chosen) */
+  const status = () => ({ supported: supported(), canPick: !T().native() || !!AF(), kind: target().kind, label: target().label, has: target().kind !== 'desktop' || !!HANDLE, on: true, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: !!ST.needsPermission });
   const mkey = id => `bk:${target().kind}:${id}`;
 
   async function init() {
     if (!supported()) return;
     const cfg = (await DB.getSetting('backup')) || {};
     if (T().native()) readSaf();
-    if (target().kind === 'saf') { ST.on = cfg.android !== false; if (!SAF.ok) ST.needsPermission = true; }
-    else if (target().kind === 'android') { ST.on = cfg.android !== false; try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }   // on by default on the tablet
-    else { HANDLE = (await DB.getSetting('backupDir')) || null; ST.on = !!HANDLE && cfg.desktop !== false; if (ST.on && !(await desktop.ready(false))) ST.needsPermission = true; }
+    if (target().kind === 'saf' && !SAF.ok) ST.needsPermission = true;
+    if (target().kind === 'desktop') HANDLE = (await DB.getSetting('backupDir')) || null;
     ST.last = cfg.last || null;
-    // every save of a survey schedules its folder update
-    const put = DB.putSurvey;
-    DB.putSurvey = async sv => { const r = await put(sv); schedule(sv.id); return r; };
     emit();
-    if (ST.on && !ST.needsPermission) for (const sv of await DB.listSurveys()) schedule(sv.id, 4000);
   }
-  function schedule(id, delay) {
-    if (!ST.on) return;
-    ST.queue.add(id); clearTimeout(ST.timer); ST.timer = setTimeout(run, delay || 2500); emit();
-  }
-  async function run() {
-    if (ST.busy) { ST.timer = setTimeout(run, 1500); return; }
-    if (ST.needsPermission || !ST.on) return;
-    ST.busy = true; emit();
+  function schedule() { /* backups run only when asked for */ }
+  /* back up the chosen surveys now; onStep(text) shows the progress */
+  async function backupSurveys(ids, onStep) {
+    if (ST.busy) throw new Error('Yedekleme zaten sürüyor');
+    const t = target();
+    if (t.kind === 'desktop' && !(await desktop.ready(true))) { ST.needsPermission = true; emit(); throw new Error(HANDLE ? 'Klasöre yazma izni verilmedi' : 'Önce yedek konumunu seç'); }
+    if (t.kind === 'saf' && !(await saf.ready())) { ST.needsPermission = true; emit(); throw new Error('Yedek klasörüne yazılamıyor; konumu yeniden seç'); }
+    if (t.kind === 'android') { try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }
+    ST.busy = true; ST.needsPermission = false; ST.error = ''; emit();
+    let n = 0;
     try {
-      while (ST.queue.size) {
-        const id = ST.queue.values().next().value; ST.queue.delete(id);
-        const sv = await DB.getSurvey(id); if (sv) await syncSurvey(sv);
+      for (let i = 0; i < ids.length; i++) {
+        const sv = await DB.getSurvey(ids[i]); if (!sv) continue;
+        const nm = `${sv.project.start.name} - ${sv.project.end.name}`;
+        await syncSurvey(sv, (j, m) => onStep && onStep(`${ids.length > 1 ? `Etüt ${i + 1} / ${ids.length} · ` : ''}${nm} · ${j} / ${m} dosya`));
+        n++;
       }
-      ST.error = ''; ST.last = Date.now();
-      const cfg = (await DB.getSetting('backup')) || {}; cfg.last = ST.last; await setCfg(cfg);
+      ST.last = Date.now(); const cfg = (await DB.getSetting('backup')) || {}; cfg.last = ST.last; await setCfg(cfg);
     } catch (e) {
       console.error('backup', e); ST.error = (e && e.message) || 'Yedek yazılamadı';
-      if (/permission|izin|NotAllowed/i.test(ST.error) && target().kind === 'desktop') ST.needsPermission = true;
+      if (/permission|izin|NotAllowed/i.test(ST.error)) ST.needsPermission = true;
+      throw e;
     } finally { ST.busy = false; emit(); }
+    return n;
   }
   const setCfg = cfg => DB.setSetting('backup', cfg);
 
@@ -119,7 +121,7 @@
     return name;
   }
 
-  async function syncSurvey(sv) {
+  async function syncSurvey(sv, step) {
     const t = target(), root = (await rootFor(sv)) + '/';
     const P = T().plan(sv);
     const man = (await DB.getSetting(mkey(sv.id))) || { files: {} };   // { files: { path: sig } }
@@ -143,7 +145,10 @@
       writes.push(m.e);
     }
     if (moves.length) await t.removeDir(root + '.tasima/');
+    const total = writes.length + P.entries.filter(x => x.text != null).length + 2; let k = 0;
+    const tick = () => { k++; if (step && (k % 3 === 0 || k === total)) step(Math.min(k, total), total); };
     for (const e of writes) {
+      tick();
       const b = await DB.getBlob(e.blob); if (!b) { T().dropPath(P, e); delete next[e.path]; continue; }
       const pth = T().fixExt(e.path, b); if (pth !== e.path) { delete next[e.path]; T().renamePath(P, e, pth); }
       await t.write(root + e.path, new Uint8Array(await b.arrayBuffer()));
@@ -153,6 +158,7 @@
     const texts = P.entries.filter(x => x.text != null).map(x => [x.path, x.text]);
     texts.push(['etut-bilgileri.txt', T().surveyText(sv, P.live, P.arc).replace(/Dışa aktarma: [^\r\n]*/, 'Son yedek: ' + new Date().toLocaleString('tr-TR'))]);
     for (const [pth, txt] of texts) {
+      tick();
       const sig = 't:' + hash(txt.replace(/Son yedek: [^\r\n]*/, ''));
       if (old[pth] !== sig) await t.write(root + pth, enc.encode(txt));
       next[pth] = sig;
@@ -169,25 +175,25 @@
   /* per obstacle: a fingerprint of its data + folder at the time it was written, so the list can show which obstacles
      are safely in the backup and which changed since */
   function recSigs(sv, P) { const o = {}; for (const r of sv.records) o[r.id] = hash(JSON.stringify(r) + '|' + ((P.files[r.id] || {}).dir || '')); return o; }
-  async function recordStatus(sv) {   // { state: 'off'|'error'|'on', recs: { id: 'ok'|'pending' } }
-    const st = status(), recs = {};
-    if (!st.supported || !st.on || st.needsPermission) { sv.records.forEach(r => recs[r.id] = 'off'); return { state: 'off', recs }; }
-    const man = (await DB.getSetting(mkey(sv.id))) || {}, now = recSigs(sv, T().plan(sv)), was = man.recs || {};
+  async function recordStatus(sv) {   // { state: 'off'|'on', at, recs: { id: 'ok'|'pending' } } — ok: in the backup and unchanged since
+    const recs = {};
+    if (!supported()) { sv.records.forEach(r => recs[r.id] = 'off'); return { state: 'off', recs }; }
+    const man = (await DB.getSetting(mkey(sv.id))) || {}, was = man.recs || {};
+    if (!man.recs) { sv.records.forEach(r => recs[r.id] = 'pending'); return { state: 'on', recs, at: null }; }
+    const now = recSigs(sv, T().plan(sv));
     for (const id of Object.keys(now)) recs[id] = was[id] === now[id] ? 'ok' : 'pending';
-    return { state: st.error ? 'error' : 'on', recs };
+    return { state: 'on', recs, at: man.at || null };
   }
 
-  // ---------- controls used by the app ----------
-  async function chooseFolder() {   // must run from a click
+  // ---------- where the backup goes ----------
+  async function chooseFolder() {   // must run from a click; only sets the place, the backup runs with backupSurveys
     if (T().native()) return pickTablet();
     const h = await window.showDirectoryPicker({ id: 'rs-backup', mode: 'readwrite', startIn: 'documents' });
     if ((await h.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Klasöre yazma izni verilmedi');
     const changed = !HANDLE || !(await HANDLE.isSameEntry(h));
     HANDLE = h; await DB.setSetting('backupDir', h);
-    if (changed) for (const sv of await DB.listSurveys()) await DB.setSetting(mkey(sv.id), null);   // new folder: write everything
-    const cfg = (await DB.getSetting('backup')) || {}; cfg.desktop = true; await DB.setSetting('backup', cfg);
-    ST.on = true; ST.needsPermission = false; ST.error = '';
-    await backupAll();
+    if (changed) await resetManifests();   // new folder: everything is written again there
+    ST.needsPermission = false; ST.error = ''; emit(); return true;
   }
   // tablet: pick a folder with Android's folder picker; Belgeler/Etütler again with useDefault()
   function pickTablet() {
@@ -197,26 +203,14 @@
         if (error) return rej(new Error(error));
         if (!uri) return res(false);
         readSaf(); await resetManifests();
-        const cfg = (await DB.getSetting('backup')) || {}; cfg.android = true; await DB.setSetting('backup', cfg);
-        ST.on = true; ST.needsPermission = false; ST.error = ''; emit();
-        await backupAll(); res(true);
+        ST.needsPermission = false; ST.error = ''; emit(); res(true);
       };
       AF().pick();
     });
   }
-  async function useDefault() { if (AF()) AF().clear(); SAF = null; ST.needsPermission = false; ST.error = ''; await resetManifests(); emit(); if (ST.on) await backupAll(); }
+  async function useDefault() { if (AF()) AF().clear(); SAF = null; ST.needsPermission = false; ST.error = ''; await resetManifests(); emit(); }
   async function resetManifests() { for (const sv of await DB.listSurveys()) await DB.setSetting(mkey(sv.id), null); await DB.setSetting('bkRoots:' + target().kind, null); }
-  async function grant() { if (await desktop.ready(true)) { ST.needsPermission = false; ST.error = ''; await backupAll(); } emit(); }
-  async function setOn(on) {
-    const cfg = (await DB.getSetting('backup')) || {}; cfg[target().kind] = !!on; await DB.setSetting('backup', cfg);
-    ST.on = !!on && (target().kind === 'android' || !!HANDLE); emit(); if (ST.on) await backupAll();
-  }
-  async function backupAll(full) {
-    const list = await DB.listSurveys();
-    if (full) for (const sv of list) await DB.setSetting(mkey(sv.id), null);
-    for (const sv of list) ST.queue.add(sv.id);
-    clearTimeout(ST.timer); await run();
-  }
+  async function backupAll() { return backupSurveys((await DB.listSurveys()).map(s => s.id)); }
   // tablet: backup folders that hold an etut.json, to open again
   async function restoreList() {
     const t = target(); if (!t.list) return [];
@@ -229,5 +223,5 @@
     return out;
   }
 
-  g.Backup = { init, status, useDefault, recordStatus, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, grant, setOn, backupAll, restoreList, schedule, supported };
+  g.Backup = { init, status, useDefault, recordStatus, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, backupSurveys, backupAll, restoreList, schedule, supported };
 })(window);

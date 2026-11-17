@@ -64,17 +64,38 @@
   const camSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
   const bar = (title, back, extra) => `<div class="bar">${back ? `<button class="back" data-go="${back}" aria-label="Geri">${backSvg}</button>` : ''}<h1>${esc(title)}</h1>${extra || ''}</div>`;
 
-  // image -> 4:3 JPEG (centre crop), max 1600 px wide
+  /* small copy of a photo for the obstacle list (kept as blob 'th:<photo id>'), so a long list does not decode every full photo */
+  const THQ = [];   // thumbnails still to make, one at a time in the background
+  const thumbLater = id => { if (THQ.includes(id)) return; THQ.push(id); if (THQ.length === 1) (async () => { while (THQ.length) { await thumbUrl(THQ[0]); THQ.shift(); await new Promise(r => setTimeout(r, 30)); } })(); };
+  async function thumbUrl(id, lazy) {
+    if (!id) return null;
+    const k = 'th:' + id; if (urls.has(k)) return urls.get(k);
+    let b = await DB.getBlob(k);
+    if (!b && lazy) { thumbLater(id); return blobUrl(id); }   // first time: the full photo now, the small copy next time
+    if (!b) {
+      const full = await DB.getBlob(id); if (!full) return null;
+      try {
+        const bmp = await createImageBitmap(full, { resizeWidth: 320, resizeQuality: 'medium' });
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+        b = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.72)); if (b) await DB.putBlobAt(k, b);
+      } catch (e) { b = null; }
+      if (!b) return blobUrl(id);
+    }
+    const u = URL.createObjectURL(b); urls.set(k, u); return u;
+  }
+  // image -> 4:3 JPEG (centre crop), max 1400 px wide
   async function to43(file) {
     let bmp;
     try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
     catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
     const sw = bmp.width, sh = bmp.height, ar = 4 / 3;
     let cw = sw, ch = sw / ar; if (ch > sh) { ch = sh; cw = sh * ar; }
-    const W = Math.min(1600, Math.round(cw)), H = Math.round(W / ar);
+    const W = Math.min(1400, Math.round(cw)), H = Math.round(W / ar);   // the report prints photos at 1400×1050: more only slows the tablet
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     c.getContext('2d').drawImage(bmp, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
-    return new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+    if (bmp.close) bmp.close();
+    const out = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.8));
+    c.width = c.height = 0; return out;
   }
   async function shrink(file, max) { // logos / drawings: keep aspect, PNG keeps transparency
     const bmp = await createImageBitmap(file);
@@ -247,13 +268,41 @@
     if (m) res.t = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
     return res;
   }
+  /* the chosen photos are made ready (4:3, 1400 px JPEG) in the background while the survey form is filled in;
+     a bar at the bottom shows how far it got */
+  function prepBar() {
+    const P = IMPORT && IMPORT.prep; let el = document.getElementById('prepbar');
+    if (!P) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'prepbar'; document.body.appendChild(el); }
+    const done = P.done >= P.total;
+    el.innerHTML = `<span>${done ? `${P.total} fotoğraf hazır` : `Fotoğraflar arka planda hazırlanıyor… ${P.done} / ${P.total}`}</span><i><b style="width:${P.total ? Math.round(P.done / P.total * 100) : 0}%"></b></i>`;
+    if (done) setTimeout(() => { if (el.isConnected && IMPORT && IMPORT.prep === P) el.remove(); }, 2500);
+  }
+  function startPrep(items) {
+    const old = IMPORT && IMPORT.prep; if (old) { old.stop = true; for (const it of old.items) if (it.blobId && !it.used) DB.delBlob(it.blobId); }
+    const P = { items, done: 0, total: items.length, stop: false };
+    P.promise = (async () => {
+      for (const it of items) {
+        if (P.stop) return;
+        try { it.blobId = await DB.putBlob(await to43(it.file)); } catch (e) { it.blobId = null; it.bad = true; }
+        P.done++; prepBar();
+        await new Promise(r => setTimeout(r, 0));   // let the form stay responsive
+      }
+    })();
+    return P;
+  }
   async function importInto(sv, items) {   // one main obstacle per photo, in capture order; KM like in the field
     const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
+    const P = IMPORT && IMPORT.prep;
+    if (P && P.done < P.total) {   // the rest of the photos first; the bar shows the count
+      const iv = setInterval(() => { ov.textContent = `Fotoğraflar hazırlanıyor… ${P.done} / ${P.total}`; }, 250);
+      ov.textContent = `Fotoğraflar hazırlanıyor… ${P.done} / ${P.total}`; await P.promise; clearInterval(iv);
+    }
 
     for (let i = 0; i < items.length; i++) {
       const it = items[i]; ov.textContent = `Fotoğraflar ekleniyor… ${i + 1} / ${items.length}`;
       const rec = { id: DB.uid(), parentId: null, flag: '', obstacle: '', t: it.t || Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [], source: it.file.name };
-      try { rec.photoId = await DB.putBlob(await to43(it.file)); rec.aspect = 4 / 3; } catch (e) { rec.pendingImage = 'sat'; }
+      try { rec.photoId = it.blobId || (it.bad ? null : await DB.putBlob(await to43(it.file))); if (!rec.photoId) throw 0; it.used = true; rec.aspect = 4 / 3; } catch (e) { rec.pendingImage = 'sat'; }
       if (it.lat != null) {
         rec.latDec = it.lat; rec.lonDec = it.lon; rec.lat = Geo.dms(it.lat, true); rec.lon = Geo.dms(it.lon, false);
       }
@@ -261,7 +310,7 @@
       if (i % 10 === 9) await DB.putSurvey(sv);
     }
     sv.status = 'done'; sv.imported = { at: Date.now(), count: items.length };
-    await DB.putSurvey(sv); ov.remove();
+    await DB.putSurvey(sv); ov.remove(); const pb = document.getElementById('prepbar'); if (pb) pb.remove();
     toast(`${items.length} fotoğraf eklendi. Engel tiplerini seç; sıra yanlışsa basılı tutup sürükle.`);
   }
   const importerView = async () => {
@@ -281,25 +330,29 @@
         </div>
         <div class="pane">
           ${items.length ? `<div class="card"><b>${items.length} fotoğraf</b>
-              <div class="stat4" style="color:var(--ink)"><div><b>${withPos}</b><span style="color:var(--mut)">konumlu</span></div><div><b>${items.length - withPos}</b><span style="color:var(--mut)">konumsuz</span></div>
-                <div><b>${items.length - noT}</b><span style="color:var(--mut)">çekim saatli</span></div></div>
+              <div class="stat4" style="color:var(--ink);grid-template-columns:1fr 1fr"><div><b>${withPos}</b><span style="color:var(--mut)">Konum bilgisi olan fotoğraf</span></div><div><b>${items.length}</b><span style="color:var(--mut)">Toplam fotoğraf</span></div></div>
               ${items[0].t ? `<span class="hint">${tf(items[0].t)} → ${tf(items[items.length - 1].t)}</span>` : ''}
-              ${withPos < items.length ? `<span class="note w">${items.length - withPos} fotoğrafta konum yok: bunların KM'si bir önceki fotoğraftan alınır, konumu sonra elle girilebilir.</span>` : ''}
               ${noT ? `<span class="note w">${noT} fotoğrafta çekim saati yok: dosya tarihine göre sıralandı.</span>` : ''}
               <div style="max-height:260px;overflow:auto;font-size:13px;border:1px solid var(--line);border-radius:10px">${items.map((x, i) => `<div class="row" style="padding:6px 10px;border-bottom:1px solid var(--line);gap:8px"><b style="width:34px">${i + 1}</b><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.file.name)}</span><span class="hint">${x.t ? tf(x.t) : ''}</span>${x.lat != null ? '<span class="tag ok">konum</span>' : '<span class="tag warn">konum yok</span>'}</div>`).join('')}</div>
             </div>
-            <button class="btn pri" id="inext" style="min-height:64px;font-size:17px">Devam: etüt bilgilerini gir</button>`
+            <button class="btn pri" id="inext" style="min-height:64px;font-size:17px">Devam: etüt bilgilerini gir</button><span class="hint">Fotoğraflar sen etüt bilgilerini girerken arka planda hazırlanır; ilerleme en altta görünür.</span>`
           : '<div class="empty">Henüz fotoğraf seçilmedi.</div>'}
         </div>
       </div>`;
       const take = async fl => {
         const fs = [...fl].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic)$/i.test(f.name));
         if (!fs.length) return toast('Fotoğraf bulunamadı');
-        toast('Fotoğraflar okunuyor…');
+        document.querySelectorAll('.toast').forEach(t => t.remove());
+        const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
         const out = [];
-        for (const f of fs) { const x = await exifOf(f); out.push({ file: f, lat: x.lat, lon: x.lon, exifT: x.t || null, t: x.t || f.lastModified || null }); }
+        for (let i = 0; i < fs.length; i++) {
+          const f = fs[i]; if (i % 5 === 0 || i === fs.length - 1) { ov.textContent = `Fotoğraflar okunuyor… ${i + 1} / ${fs.length}`; await new Promise(r => setTimeout(r, 0)); }
+          const x = await exifOf(f); out.push({ file: f, lat: x.lat, lon: x.lon, exifT: x.t || null, t: x.t || f.lastModified || null });
+        }
+        ov.remove();
         out.sort((a, b) => (a.t || 0) - (b.t || 0) || a.file.name.localeCompare(b.file.name, 'tr', { numeric: true }));
-        items = out; IMPORT = { items }; draw();
+        const prep = startPrep(out);   // start making them ready now; the form can be filled meanwhile
+        items = out; IMPORT = { items, prep }; draw(); prepBar();
       };
       document.getElementById('ifiles').onchange = e => take(e.target.files);
       const d = document.getElementById('idir'); if (d) d.onchange = e => take(e.target.files);
@@ -307,6 +360,54 @@
     };
     draw();
   };
+
+  /* ---------- backup dialog: pick the surveys and the place, then write them (backup.js) ---------- */
+  const bkWhere = st => st.kind === 'saf' ? st.label.replace('Klasör · ', '') : st.kind === 'android' ? 'Belgeler/Etütler (tablet)' : st.label.replace('Klasör · ', '');
+  async function backupDialog(pre) {
+    document.querySelectorAll('.sheet').forEach(x => x.remove());
+    if (!Backup.supported()) return toast('Bu tarayıcı klasöre yedeklemeyi desteklemiyor (Edge ya da Chrome kullan)');
+    const all = (await DB.listSurveys()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const info = {};
+    for (const sv of all) { const { recs, at } = await Backup.recordStatus(sv), v = Object.values(recs); info[sv.id] = { k: v.length && v.every(x => x === 'ok') ? 'ok' : 'pending', at }; }
+    const chosen = new Set(pre || all.filter(sv => info[sv.id].k !== 'ok').map(sv => sv.id));
+    const d = document.createElement('div'); d.className = 'sheet';
+    const tf = t => new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const draw = () => {
+      const st = Backup.status();
+      d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" style="width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 40px)">
+        <b>Yedekle</b>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><span class="hint" style="flex:1;min-width:0">Konum: <b style="font-size:14px">${esc(st.has ? bkWhere(st) : 'seçilmedi')}</b></span>
+          ${st.canPick ? `<button class="btn sm" data-b="pick" style="min-height:40px;font-size:14px">${st.has && st.kind !== 'android' ? 'Konumu değiştir' : 'Konum seç'}</button>` : ''}${st.kind === 'saf' ? '<button class="btn sm" data-b="def" style="min-height:40px;font-size:14px">Belgeler/Etütler</button>' : ''}</div>
+        <div class="row" style="justify-content:space-between"><span class="hint">${chosen.size} etüt seçili</span><button class="btn sm" data-b="all" style="min-height:36px;font-size:14px">${chosen.size === all.length ? 'Seçimi temizle' : 'Hepsini seç'}</button></div>
+        <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:46vh">${all.map(sv => `<label class="row" style="padding:10px 12px;border-bottom:1px solid var(--line);gap:10px;cursor:pointer"><input type="checkbox" data-sv="${sv.id}" ${chosen.has(sv.id) ? 'checked' : ''} style="width:22px;height:22px">
+          <span style="flex:1;min-width:0"><b style="font-size:15px;margin:0">${esc(sv.project.start.name)} – ${esc(sv.project.end.name)}</b><br><span class="hint">${sv.records.length} kayıt${info[sv.id].at ? ' · son yedek ' + tf(info[sv.id].at) : ' · hiç yedeklenmedi'}</span></span>
+          <span class="bkic" title="${info[sv.id].k === 'ok' ? 'Yedeklendi' : 'Yedeklenmemiş değişiklik var'}">${BKICON[info[sv.id].k]}</span></label>`).join('') || '<div class="empty">Etüt yok.</div>'}</div>
+        <div class="hint" id="bkprog" style="min-height:18px"></div>
+        <button class="btn pri" data-b="go" ${chosen.size && st.has ? '' : 'disabled'}>Yedekle</button>
+        <button class="btn dash" data-x="1">Kapat</button></div>`;
+    };
+    draw(); document.body.appendChild(d);
+    let busy = false;
+    d.addEventListener('change', e => { const c = e.target.closest('[data-sv]'); if (!c) return; c.checked ? chosen.add(c.dataset.sv) : chosen.delete(c.dataset.sv); draw(); });
+    d.addEventListener('click', async e => {
+      if (busy) return;
+      if (e.target.closest('[data-x]')) return d.remove();
+      const b = e.target.closest('[data-b]'); if (!b) return;
+      const k = b.dataset.b;
+      try {
+        if (k === 'all') { if (chosen.size === all.length) chosen.clear(); else all.forEach(x => chosen.add(x.id)); return draw(); }
+        if (k === 'pick') { await Backup.chooseFolder(); return draw(); }
+        if (k === 'def') { await Backup.useDefault(); return draw(); }
+        if (k === 'go') {
+          busy = true; b.disabled = true; b.textContent = 'Yedekleniyor…';
+          const pr = d.querySelector('#bkprog');
+          const n = await Backup.backupSurveys([...chosen], txt => { pr.textContent = txt; });
+          busy = false; d.remove(); toast(`${n} etüt yedeklendi → ${bkWhere(Backup.status())}`);
+          if (location.hash.startsWith('#/s/')) V.survey(location.hash.split('/')[2].split('?')[0]); else if (!location.hash || location.hash === '#/') V.home();
+        }
+      } catch (er) { busy = false; if (er && er.name !== 'AbortError') toast(er.message || 'Yedek alınamadı'); draw(); }
+    });
+  }
 
   // ---------- views ----------
   const V = {};
@@ -397,7 +498,7 @@
           const sv2 = await DB.getSurvey(el.dataset.bksv); if (!sv2) continue;
           const { state, recs } = await Backup.recordStatus(sv2), v = Object.values(recs);
           const k = state === 'off' ? 'off' : v.every(x => x === 'ok') ? 'ok' : 'pending';
-          if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = BKICON[k]; el.title = k === 'ok' ? 'Etüt yedeklendi' : k === 'pending' ? 'Yedeklenmemiş değişiklik var' : 'Yedek kapalı'; }
+          if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = BKICON[k]; el.title = k === 'ok' ? 'Etüt yedeklendi (dokun: yedekle)' : k === 'pending' ? 'Yedeklenmemiş değişiklik var (dokun: yedekle)' : 'Klasöre yedek bu tarayıcıda yok'; }
         }
       };
       const offSv = Backup.onChange(st => { if (!st.busy) paintSv(); }); paintSv(); }
@@ -418,42 +519,32 @@
       await DB.delSurvey(sv.id); delete SELST[sv.id]; if (CUR && CUR.id === sv.id) CUR = null;
       toast(`${sv.project.start.name} → ${sv.project.end.name} silindi`); V.home();
     };
-    // folder backup status and controls (backup.js)
+    // folder backup: on demand — "Yedekle" asks which surveys and where (backupDialog)
     const bkl = document.getElementById('bkline');
     const bkDraw = st => {
       if (!bkl.isConnected) return off();
       const t = st.last ? new Date(st.last).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-      const tag = st.busy ? '<span class="tag warn">Yedekleniyor…</span>' : st.error ? '<span class="tag bad">Yedek hatası</span>' : st.on && !st.needsPermission ? '<span class="tag ok">Yedek açık</span>' : '<span class="tag warn">Yedek kapalı</span>';
       let txt, btns = '';
-      if (!st.supported) txt = 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor. Edge ya da Chrome kullan.';
-      else if (st.kind === 'android' || st.kind === 'saf') {
-        const where = st.kind === 'saf' ? esc(st.label.replace('Klasör · ', '')) : 'Belgeler/Etütler';
-        if (st.needsPermission) { txt = `Yedek klasörüne (${where}) artık yazılamıyor. Klasörü yeniden seç.`; btns = '<button class="btn sm pri" data-bk="pick">Klasörü yeniden seç</button><button class="btn sm" data-bk="default">Belgeler/Etütler kullan</button>'; }
-        else {
-          txt = st.on ? `Yedek klasörü: ${where} · her etüt kendi klasöründe, her engel ayrı klasörde.${t ? ' Son yedek: ' + t : ''}` : 'Klasör yedeği kapalı.';
-          btns = `${st.on ? '<button class="btn sm" data-bk="now">Şimdi yedekle</button>' : '<button class="btn sm pri" data-bk="on">Yedeği aç</button>'}${st.canPick ? `<button class="btn sm" data-bk="pick">${st.kind === 'saf' ? 'Klasörü değiştir' : 'Klasör seç'}</button>` : ''}${st.kind === 'saf' ? '<button class="btn sm" data-bk="default">Belgeler/Etütler kullan</button>' : ''}<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>`;
-        }
-      } else if (!st.on) { txt = 'Etütleri bir klasöre otomatik yedekle. OneDrive içindeki bir klasör seçersen yedek buluta da gider.'; btns = '<button class="btn sm pri" data-bk="pick">Yedek klasörü seç</button>'; }
-      else if (st.needsPermission) { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))}. Tarayıcı yeniden açıldığı için yazma izni gerekiyor.`; btns = '<button class="btn sm pri" data-bk="grant">Yedeğe izin ver</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
-      else { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))} · her etüt kendi klasöründe, her engel ayrı klasörde.${t ? ' Son yedek: ' + t : ''}`; btns = '<button class="btn sm" data-bk="now">Şimdi yedekle</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
-      bkl.innerHTML = `<div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="row" style="gap:8px;min-width:0;flex:1">${tag}<span class="hint" style="font-size:13px">${txt}${st.error ? ' · ' + esc(st.error) : ''}</span></div><div class="row" style="gap:8px">${btns}</div></div>`;
+      if (!st.supported) txt = 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor. Edge ya da Chrome kullan; "Dışa Aktar" ile ZIP alınabilir.';
+      else {
+        txt = `Yedek konumu: <b>${esc(bkWhere(st))}</b>${t ? ' · Son yedek: ' + t : ''}${st.busy ? ' · <span class="tag warn">Yedekleniyor…</span>' : ''}`;
+        btns = `<button class="btn sm pri" data-bk="open">Yedekle</button>${FIELD ? '<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>' : ''}`;
+      }
+      bkl.innerHTML = `<div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="row" style="gap:8px;min-width:0;flex:1"><span class="hint" style="font-size:13px">${txt}</span></div><div class="row" style="gap:8px">${btns}</div></div>`;
     };
     const off = Backup.onChange(bkDraw); bkDraw(Backup.status());
     bkl.onclick = async e => {
       const b = e.target.closest('[data-bk]'); if (!b) return; e.stopPropagation();
       try {
-        if (b.dataset.bk === 'pick') await Backup.chooseFolder();
-        if (b.dataset.bk === 'grant') await Backup.grant();
-        if (b.dataset.bk === 'now') { await Backup.backupAll(); toast('Yedek güncellendi'); }
-        if (b.dataset.bk === 'on') await Backup.setOn(true);
-        if (b.dataset.bk === 'default') { await Backup.useDefault(); toast('Yedek Belgeler/Etütler klasörüne yazılıyor'); }
+        if (b.dataset.bk === 'open') return backupDialog();
         if (b.dataset.bk === 'restore') {
           const L = await Backup.restoreList();
-          if (!L.length) return toast('Belgeler/Etütler içinde yedek bulunamadı');
+          if (!L.length) return toast('Yedek konumunda etüt bulunamadı');
           sheet('Yedekten geri yükle', L.map(x => ({ label: x.name, run: () => openEtut(x.source) })));
         }
       } catch (er) { if (er && er.name !== 'AbortError') toast(er.message || 'Yedek işlemi yapılamadı'); }
     };
+    $app.addEventListener('click', e => { const ic = e.target.closest('[data-bksv]'); if (ic) { e.stopPropagation(); backupDialog([ic.dataset.bksv]); } }, true);
     const ob = document.getElementById('openEtut');
     if (ob) ob.onclick = () => sheet('Etüt dosyası aç', [
       { label: 'ZIP dosyası seç', file: true, accept: FIELD ? '.zip,application/zip,application/x-zip-compressed,application/octet-stream' : '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
@@ -537,7 +628,7 @@
     $app.innerHTML = `${bar(sv ? 'Etüt bilgileri' : imp ? 'Fotoğraflardan etüt · bilgiler' : 'Yeni etüt raporu', sv ? `#/s/${sv.id}` : imp ? '#/import' : '#/')}
     <form class="split even" id="pf" autocomplete="off">
       <div class="pane">
-        ${imp ? `<div class="note g">${imp.items.length} fotoğraf, çekim saatine göre sıralanıp engel olarak eklenecek${imp.items.some(x => x.lat == null) ? ` (${imp.items.filter(x => x.lat == null).length} tanesinde konum yok)` : ''}. Etüt bilgilerini girip kaydet.</div>` : ''}
+        ${imp ? `<div class="note g">${imp.items.length} fotoğraf, çekim saatine göre sıralanıp engel olarak eklenecek${` (konum bilgisi olan: ${imp.items.filter(x => x.lat != null).length})`}. Etüt bilgilerini girip kaydet.</div>` : ''}
         <div class="sec">Güzergah</div>
         <div class="g2"><label class="f">Başlangıç noktası<input name="start" required value="${esc(p.start.name)}" placeholder="Fabrika / saha adı"></label>
           <label class="f">Varış noktası<input name="end" required value="${esc(p.end.name)}" placeholder="Liman / saha adı"></label></div>
@@ -652,7 +743,7 @@
     pending: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#C26A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M12 16v-5m-2.3 2.2L12 11l2.3 2.2"/></svg>',
     off: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#8A93A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M4 4l16 16"/></svg>',
   };
-  const BKTITLE = { ok: 'Yedeklendi', pending: 'Yedeklenmeyi bekliyor', off: 'Yedek kapalı' };
+  const BKTITLE = { ok: 'Yedeklendi', pending: 'Yedeklenmedi ya da yedekten sonra değişti (dokun: yedekle)', off: 'Klasöre yedek bu tarayıcıda yok' };
   const SELST = {};
   const LSCROLL = {};   // list scroll position per survey and tab, kept while the app is open   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
@@ -667,9 +758,9 @@
       return '';
     };
     const line = async (r, sub) => {
-      const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
+      const u = await thumbUrl(r.photoId, true), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
-      return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
+      return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="" decoding="async">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(OL(r.obstacle)) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">${r.latDec == null ? '<b style="color:var(--warntx)">konum yok</b>' : r.kmManual != null ? 'KM ' + fmt(r.kmManual, 1) : ''}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<span class="bkic" data-bkr="${r.id}" aria-hidden="true"></span><button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
@@ -702,17 +793,17 @@
             ${act ? '<span class="hint">Konum fotoğraf çekerken alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM'ler rapor oluşturulurken son sıraya göre hesaplanır</span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
-          <div class="hint">Engele dokununca seçilir: yeni engeller seçili engelin arkasına eklenir. Düzenlemek, Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
+          <div class="hint">Engele dokununca seçilir: yeni engeller seçili engelin arkasına, "Uydu Fotoğrafı Ekle" ise doğrudan seçili engelin altına INFO olarak eklenir. Düzenlemek, Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
           ${pick ? (() => { const pr = recs.find(r => r.id === pick) || archivedRecords(sv).find(r => r.id === pick); return pr ? `<div class="note w row" style="justify-content:space-between;gap:10px"><span>Yeni engeller <b>${pr.no} · ${esc(OL(pr.obstacle) || 'Tip seçilmedi')}</b> engelinin arkasına eklenecek.</span><button class="btn sm" data-act="toend" style="min-width:0">Sona ekle</button></div>` : ''; })() : ''}
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(OL(bp.obstacle))}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
-              + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
+              + rb('data-act="sat"', '', imgSvg, 'Uydu Fotoğrafı Ekle')
               + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engeller') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb(`data-go="#/rep/${sv.id}"`, '', '', 'Rapor')
               + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + addBtn
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/crit/${sv.id}"`, '', '', 'Kritik Engeller')
-              + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + (FIELD ? rb('', 'ghost', '', '') : addBtn)}
+              + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('data-act="sat"', '', imgSvg, 'Uydu Fotoğrafı Ekle') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + (FIELD ? rb('', 'ghost', '', '') : addBtn)}
           </div>
         </div>
       </div>`;
@@ -756,7 +847,7 @@
       if (!sb) { sb = document.createElement('div'); sb.className = 'selbar'; list.appendChild(sb); }   // fixed over the top bar: the list does not shift
       const n = sel.size;
       const pool = list.querySelectorAll('.rec').length, all = n && n >= pool;
-      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
+      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="bypass" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin bypass'ı olarak tanımla">Bypass olarak tanımla</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
         <button class="btn" data-sel="arc" ${n ? '' : 'disabled'}>Arşive gönder</button>` : `<button class="btn" data-sel="unarc" ${n ? '' : 'disabled'}>Etüde geri al</button>`}
         <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi bırak, sırayı seçimden önceki haline getir">İptal</button><button class="btn" data-sel="done">Bitti</button>`;
       remember();
@@ -854,6 +945,30 @@
             { label: 'Yatay pafta (A4 yatay)', cls: 'pri', run: () => open('l') },
           ]);
         }
+        if (k === 'bypass') {   // the selected obstacles become BYPASS records of the obstacle chosen next
+          const after = (t) => { let i = sv.records.indexOf(t); sv.records.forEach((r, j) => { if (r.parentId === t.id && j > i) i = j; }); return i + 1; };
+          const done = async msg => { SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv); toast(msg); return V.survey(id); };
+          const makeBypass = async t => {
+            const moving = sv.records.filter(r => sel.has(r.id) || (r.parentId && sel.has(r.parentId)));
+            for (const r of moving) { if (sel.has(r.id)) r.flag = 'BYPASS'; r.parentId = t.id; delete r.solo; }
+            if (moving.some(r => r.id === sv.bypassParent)) sv.bypassParent = null;
+            sv.records = sv.records.filter(r => !moving.includes(r)); sv.records.splice(after(t), 0, ...moving);
+            return done(`${sel.size} engel ${t.no} numaralı engelin bypass'ı oldu`);
+          };
+          const unBypass = async () => {
+            const subs = sv.records.filter(r => sel.has(r.id) && r.parentId);
+            for (const r of subs) {
+              const par = sv.records.find(x => x.id === r.parentId); r.parentId = null; r.flag = ''; delete r.solo;
+              sv.records = sv.records.filter(x => x !== r); sv.records.splice(par ? after(par) : sv.records.length, 0, r);
+            }
+            return done(`${subs.length} kayıt ana engel yapıldı`);
+          };
+          const targets = recs.filter(r => !r.parentId && !sel.has(r.id));
+          const items = targets.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''}`, run: () => makeBypass(t) }));
+          if (sv.records.some(r => sel.has(r.id) && r.parentId)) items.unshift({ label: 'Bypass / Info tanımını kaldır (ana engel yap)', run: unBypass });
+          if (!items.length) return toast('Bypass olarak bağlanacak başka engel yok');
+          return sheet(`Seçilen ${sel.size} engel hangi engelin bypass'ı olsun?`, items);
+        }
         if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
         if (k === 'arc' || k === 'unarc') {   // archive: kept with the survey, left out of the report, numbering and KM
           const on = k === 'arc', hit = sv.records.filter(x => sel.has(x.id));
@@ -872,6 +987,7 @@
           delete SELST[id]; await DB.putSurvey(sv); toast(`${gone.length} kayıt silindi`); return V.survey(id);
         }
       }
+      if (e.target.closest('[data-bkr]') && !selMode) return backupDialog([sv.id]);   // backup mark: back this survey up
       const tb = e.target.closest('[data-tab]');
       if (tb) { SELST[id] = { on: false, ids: [], tab: tb.dataset.tab }; return V.survey(id); }
       const op = e.target.closest('[data-open]');
@@ -885,6 +1001,13 @@
       }
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'export') return exportNow(sv, a);
+      if (a.dataset.act === 'sat') {   // satellite view goes straight under the obstacle chosen in the list (as INFO)
+        let p = pick && sv.records.find(r => r.id === pick); if (p && p.parentId) p = sv.records.find(r => r.id === p.parentId);
+        if (!p) return go(`#/add/${sv.id}?mode=sat`);
+        await createRecord(sv, { parent: p, flag: 'INFO', name: 'Satellite View', pending: 'sat', go: false });
+        orderedRecords(sv); const nr = sv.records.find(r => r.id === sv.selected);
+        toast(`Uydu görüntüsü ${p.no} numaralı engelin altına ${nr && nr.no ? nr.no + ' ' : ''}INFO olarak eklendi`); return V.survey(id);
+      }
       if (a.dataset.act === 'toend') { sv.insertAfter = null; await DB.putSurvey(sv); return V.survey(id); }
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;

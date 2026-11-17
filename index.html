@@ -111,6 +111,9 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .grp{border-bottom:1px solid var(--line);padding-bottom:6px;display:flex;flex-direction:column;gap:4px}
 /* reorder / multi-select in the obstacle list */
 .rec{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#prepbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--navy);color:#fff;border-radius:12px;padding:10px 16px;display:flex;flex-direction:column;gap:6px;min-width:min(420px,calc(100vw - 32px));box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px;font-weight:600;pointer-events:none}
+#prepbar i{display:block;height:6px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden}
+#prepbar i b{display:block;height:100%;background:#4CC38A;transition:width .2s}
 .selbar{position:fixed;top:0;left:0;right:0;min-height:68px;z-index:6;padding:8px 20px;background:var(--navy);color:#fff;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 .selbar b{flex:1;font-size:15px;min-width:120px}
 .selbar .btn{min-height:40px;padding:6px 12px;font-size:14px;background:#fff;color:var(--navy);border-color:#fff}
@@ -197,6 +200,7 @@ input[type=file].hid{position:absolute;width:1px;height:1px;opacity:0;pointer-ev
 .sheet{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center}
 .sheet-bg{position:absolute;inset:0;background:rgba(17,24,39,.45)}
 .sheet-box{position:relative;background:var(--card);border-radius:16px;padding:18px;width:min(420px,calc(var(--vw,12.8px)*92));display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.sheet-box{max-height:calc(100vh - 32px);overflow:auto}
 .sheet-box b{font-size:17px;margin-bottom:4px}
 .sheet-box .btn{min-height:56px;font-size:16px}
 .sheet-box{max-height:calc(var(--vh,7.2px)*90);overflow:auto}
@@ -230,18 +234,19 @@ html.narrow .rb{width:96px;height:96px;font-size:12px}
 html.narrow .g4{grid-template-columns:repeat(2,minmax(0,1fr))}
 html.narrow .foot .btn{min-width:0;flex:1}
 html.narrow .photo-stage .photo{height:auto;width:100%}
+.bkic[data-bkr],.bkic[data-bksv]{cursor:pointer}
 .bkic{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none}
 </style>
 </head>
 <body>
 <div id="app"></div>
-<script src="db.js?v=48"></script>
-<script src="transfer.js?v=48"></script>
-<script src="backup.js?v=48"></script>
-<script src="rules.js?v=48"></script>
-<script src="catalog.js?v=48"></script>
-<script src="qr.js?v=48"></script>
-<script src="auth.js?v=48"></script>
-<script src="app.js?v=48"></script>
+<script src="db.js?v=49"></script>
+<script src="transfer.js?v=49"></script>
+<script src="backup.js?v=49"></script>
+<script src="rules.js?v=49"></script>
+<script src="catalog.js?v=49"></script>
+<script src="qr.js?v=49"></script>
+<script src="auth.js?v=49"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
