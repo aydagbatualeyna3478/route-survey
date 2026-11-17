@@ -1,0 +1,26 @@
+name: Vendor pdf.js
+# Puts Mozilla pdf.js (Apache-2.0) into vendor/ so the transport drawing PDF can be shown in the report offline.
+# Runs when vendor/REQUEST changes.
+on:
+  push:
+    branches: [main]
+    paths: ['vendor/REQUEST']
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pdfjs-dist
+        run: |
+          V=$(head -1 vendor/REQUEST | tr -d '[:space:]')
+          cd /tmp && npm pack "pdfjs-dist@$V" && tar xzf pdfjs-dist-*.tgz
+          cp package/legacy/build/pdf.min.js "$GITHUB_WORKSPACE/vendor/pdf.min.js"
+          cp package/legacy/build/pdf.worker.min.js "$GITHUB_WORKSPACE/vendor/pdf.worker.min.js"
+          cp package/LICENSE "$GITHUB_WORKSPACE/vendor/pdfjs-LICENSE" || true
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor; git commit -m "vendor: pdf.js $(head -1 vendor/REQUEST)" || exit 0
+          git push

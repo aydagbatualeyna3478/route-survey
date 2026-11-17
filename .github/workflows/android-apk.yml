@@ -34,7 +34,7 @@ jobs:
       - name: Copy the web app into the Android package
         run: |
           mkdir -p apk/www
-          cp -r *.html manifest.webmanifest *.js *.css assets fonts icons apk/www/
+          cp -r *.html manifest.webmanifest *.js *.css assets fonts icons vendor apk/www/
           rm -f apk/www/sw.js
 
       - name: Create the Android project
