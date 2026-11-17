@@ -17,11 +17,11 @@
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=38"></script>
+<script src="auth.js?v=39"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=38"></script>
-<script src="rules.js?v=38"></script>
-<script src="catalog.js?v=38"></script>
+<script src="db.js?v=39"></script>
+<script src="rules.js?v=39"></script>
+<script src="catalog.js?v=39"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -92,6 +92,14 @@
     g.fillStyle = '#E02424'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
     g.beginPath(); g.arc(0, -24, 5, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.restore();
   };
+  const markPin = (g, x, y, col, letter, s) => {   // Google-style pin with an optional letter
+    g.save(); g.translate(x, y); g.scale(s || 1, s || 1);
+    g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(-4, -10, -13, -14, -13, -24); g.arc(0, -24, 13, Math.PI, 0); g.bezierCurveTo(13, -14, 4, -10, 0, 0);
+    g.fillStyle = col; g.fill(); g.lineWidth = 2; g.strokeStyle = 'rgba(0,0,0,.45)'; g.stroke();
+    if (letter) { g.fillStyle = '#222'; g.font = 'bold 15px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(letter, 0, -24); }
+    else { g.beginPath(); g.arc(0, -24, 4.5, 0, Math.PI * 2); g.fillStyle = 'rgba(0,0,0,.35)'; g.fill(); }
+    g.restore();
+  };
   const toUrl = c => new Promise(res => { try { c.toBlob(b => res(b ? URL.createObjectURL(b) : null), 'image/jpeg', 0.82); } catch (e) { res(null); } });
   const ESRI = (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
   const OSM = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
@@ -128,7 +136,7 @@
     return toUrl(c);
   }
   let routeBase = null, routeProj = null;
-  async function makeRouteBase() {   // whole route on satellite imagery, once; each page puts its obstacle's pin on top
+  async function makeRouteBase() {   // whole route once (road map or satellite); each page puts its obstacle's pin on top
     if (routeLine.length < 2) return;
     const las = routeLine.map(p => p[0]), los = routeLine.map(p => p[1]), b = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
     let z = 17, n; for (; z > 2; z--) { n = 256 * 2 ** z; if (wx(b[3], n) - wx(b[2], n) <= MW * 0.86 && wy(b[0], n) - wy(b[1], n) <= MH * 0.8) break; }
@@ -137,13 +145,18 @@
     routeProj = (lat, lon) => [wx(lon, n) - x0, wy(lat, n) - y0];
     if (mp.provider === 'google') return;
     const c = document.createElement('canvas'); c.width = MW; c.height = MH; const g = c.getContext('2d'); g.fillStyle = '#C9D2DC'; g.fillRect(0, 0, MW, MH);
-    const ok = await tiles(g, z, x0, y0, MW, MH, ESRI);
+    // like the team's sample: road map (or satellite), the route, S at the first obstacle, E at the last, every obstacle a small blue pin
+    const road = mp.routeType !== 'satellite';
+    const ok = await tiles(g, z, x0, y0, MW, MH, road ? OSM : ESRI);
     g.lineJoin = g.lineCap = 'round';
     const path = () => { g.beginPath(); routeLine.forEach((p, i) => { const [x, y] = routeProj(p[0], p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); };
-    path(); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 14; g.stroke(); path(); g.strokeStyle = '#FFD400'; g.lineWidth = 8; g.stroke();
-    const dot = (p, col) => { const [x, y] = routeProj(p[0], p[1]); g.beginPath(); g.arc(x, y, 12, 0, Math.PI * 2); g.fillStyle = col; g.fill(); g.lineWidth = 4; g.strokeStyle = '#fff'; g.stroke(); };
-    dot(routeLine[0], '#1F9D4C'); dot(routeLine[routeLine.length - 1], '#111');
-    if (ok) attrib(g, MW, MH, 'Esri, Maxar, Earthstar Geographics', 18);
+    if (road) { path(); g.strokeStyle = 'rgba(30,90,255,.75)'; g.lineWidth = 7; g.stroke(); }
+    else { path(); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 14; g.stroke(); path(); g.strokeStyle = '#FFD400'; g.lineWidth = 8; g.stroke(); }
+    for (const x of recs.filter(x => x.latDec != null && !x.parentId)) { const [px, py] = routeProj(x.latDec, x.lonDec); markPin(g, px, py, '#5B8DEF', '', 0.75 * MW / 600); }
+    const first = recs.find(x => x.latDec != null) , last = [...recs].reverse().find(x => x.latDec != null);
+    const sP = first ? [first.latDec, first.lonDec] : routeLine[0], eP = last ? [last.latDec, last.lonDec] : routeLine[routeLine.length - 1];
+    markPin(g, ...routeProj(sP[0], sP[1]), '#F5B400', 'S', 1.25 * MW / 600); markPin(g, ...routeProj(eP[0], eP[1]), '#F5B400', 'E', 1.25 * MW / 600);
+    if (ok) attrib(g, MW, MH, road ? '© OpenStreetMap contributors' : 'Esri, Maxar, Earthstar Geographics', 18);
     routeBase = await toUrl(c);
   }
   function polyline(pts) {   // Google encoded polyline
@@ -166,7 +179,7 @@
       return `<img src="${u}&key=${encodeURIComponent(mp.key)}" alt="">`;
     }
     let pin = '';
-    if (r.latDec != null && routeProj) { const [x, y] = routeProj(r.latDec, r.lonDec); pin = `<svg class="pin" viewBox="-13 -38 26 38" style="left:${x / MW * 100}%;top:${y / MH * 100}%;width:14pt;height:20pt;margin:-20pt 0 0 -7pt"><path d="M0 0C-4-10-13-14-13-24A13 13 0 0 1 13-24C13-14 4-10 0 0Z" fill="#E02424" stroke="#fff" stroke-width="2"/><circle cx="0" cy="-24" r="5" fill="#fff"/></svg>`; }
+    if (r.latDec != null && routeProj) { const [x, y] = routeProj(r.latDec, r.lonDec); pin = `<svg class="pin" viewBox="-13 -38 26 38" style="left:${x / MW * 100}%;top:${y / MH * 100}%;width:14pt;height:20pt;margin:-20pt 0 0 -7pt"><path d="M0 0C-4-10-13-14-13-24A13 13 0 0 1 13-24C13-14 4-10 0 0Z" fill="#E02424" stroke="#fff" stroke-width="2"/><text x="0" y="-19" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="14" fill="#fff">O</text></svg>`; }
     return (routeBase ? `<img src="${routeBase}" alt="">` : '<div class="none">Map not available</div>') + pin;
   }
   // corner photos (up to 4) laid over the obstacle photo
@@ -272,7 +285,7 @@
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=38'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=39'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
