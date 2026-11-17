@@ -16,11 +16,11 @@
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=42"></script>
+<script src="auth.js?v=43"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=42"></script>
-<script src="rules.js?v=42"></script>
-<script src="catalog.js?v=42"></script>
+<script src="db.js?v=43"></script>
+<script src="rules.js?v=43"></script>
+<script src="catalog.js?v=43"></script>
 <script>
 (async () => {
   const id = location.hash.slice(1), msg = document.getElementById('msg');
@@ -32,8 +32,10 @@
   const url = async bid => (await DB.blobUrl(bid)) || null;
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 
-  const routeLine = routeKm(sv);   // final order -> route line and every obstacle's KM
+  let routeLine = routeKm(sv);   // final order -> route line and every obstacle's KM
   const recs = orderedRecords(sv);
+  { const road = await roadRoute(sv, recs, () => { msg.textContent = 'Yol güzergahı ve KM hesaplanıyor…'; });   // KM and route along the roads
+    if (road && road.line.length > 1) { routeLine = road.line; applyRoadKm(recs, road.cum); } }
   /* photos for the report: 1200×900 JPEG (quality 0.72) with Excel's 2.5 pt soft edges baked in.
      Small, plain JPEGs keep the PDF light; nothing has to be rasterised when printing. */
   async function reportPhoto(id) {
@@ -101,7 +103,7 @@
   await Promise.all([...A.logos.map(l => l.src), A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=42'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=43'; s.onload = res; document.body.appendChild(s); });
   await Promise.all([...document.images].map(i => i.decode ? i.decode().catch(() => {}) : null));
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (Math.min(screen.width, document.documentElement.clientWidth) - 8) / 794));
   fit(); window.addEventListener('resize', fit);

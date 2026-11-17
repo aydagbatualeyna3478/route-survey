@@ -115,6 +115,53 @@
     return line.map(x => [x[0], x[1]]);
   }
   g.archivedRecords = archived; g.routeKm = routeKm;
+
+  /* Road route and road KM (reports): the obstacles in report order (bypasses included, INFO left out) are joined by the
+     driving route of OSRM (OpenStreetMap roads, no key); the vehicle is put on the nearest road at every obstacle.
+     Returns { line: [[lat, lon]…], cum: { recordId: metres from the first obstacle } }, kept per survey on this device
+     and asked again only when the points change. Without internet: null (the straight-line KM stays). */
+  async function roadRoute(sv, recs, onBusy) {
+    const wp = [];
+    for (const r of recs) {
+      if (r.latDec == null || r.flag === 'INFO') continue;
+      const p = [+r.latDec.toFixed(5), +r.lonDec.toFixed(5)], q = wp[wp.length - 1];
+      if (q && q.p[0] === p[0] && q.p[1] === p[1]) q.ids.push(r.id); else wp.push({ p, ids: [r.id] });
+    }
+    if (wp.length < 2) return null;
+    const key = 'road:' + sv.id, sig = wp.map(w => w.p.join(',')).join(';');
+    const kept = await DB.getSetting(key); if (kept && kept.sig === sig && kept.cum) return kept;
+    if (onBusy) onBusy();
+    const line = [], wcum = [0], N = 40;
+    try {
+      for (let i = 0; i < wp.length - 1; i += N - 1) {
+        const part = wp.slice(i, i + N), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+        const u = `https://router.project-osrm.org/route/v1/driving/${part.map(w => `${w.p[1]},${w.p[0]}`).join(';')}?overview=full&geometries=geojson&continue_straight=true`;
+        const j = await fetch(u, { signal: ctl.signal }).then(r => r.json()).finally(() => clearTimeout(t));
+        if (!j || j.code !== 'Ok' || !j.routes || !j.routes[0]) throw new Error(j && j.code || 'route');
+        const c = j.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
+        line.push(...(line.length ? c.slice(1) : c));
+        (j.routes[0].legs || []).forEach((l, k) => { wcum[i + k + 1] = wcum[i + k] + (l.distance || 0); });
+        if (i + N < wp.length) await new Promise(r => setTimeout(r, 1100));   // the public server allows about one request a second
+      }
+    } catch (e) { console.warn('road route', e); return null; }
+    if (wcum.length !== wp.length) return null;
+    const cum = {}; wp.forEach((w, i) => w.ids.forEach(id => { cum[id] = wcum[i]; }));
+    const out = { sig, line, cum, at: Date.now() };
+    try { await DB.setSetting(key, out); } catch (e) {}
+    return out;
+  }
+  /* KM from the road distances: INFO takes its obstacle's KM, a record without a position the KM before it; KM (elle) wins */
+  function applyRoadKm(recs, cum) {
+    let last = 0; const byId = {};
+    for (const r of recs) {
+      let m = cum[r.id];
+      if (m == null && r.parentId && byId[r.parentId] != null) m = byId[r.parentId];
+      if (m == null) m = last; else last = m;
+      byId[r.id] = m;
+      r.km = r.kmManual != null ? r.kmManual : Math.round(m) / 1000;
+    }
+  }
+  g.roadRoute = roadRoute; g.applyRoadKm = applyRoadKm;
   /* Every record carrying a height ('heights') or width ('widths'), lowest first, with where it lies on the route:
      'route'    an obstacle on the main route
      'bypass'   a record on a bypass
