@@ -346,6 +346,14 @@
   let FILT = (() => { try { return JSON.parse(localStorage.getItem('rs-filter')) || {}; } catch (e) { return {}; } })();
   const saveFilt = () => { try { localStorage.setItem('rs-filter', JSON.stringify(FILT)); } catch (e) {} };
 
+  // standard conclusion texts (same as report.js), used to start a custom text
+  const CONCL = {
+    bridge: {
+      done_ok: 'Static analysis of all the bridges on the transportation route has been performed and based on results of static analysis, all the bridges are having suitable bearing capacity for current axle loads and there is no need for any additional action regarding the bridges.',
+      required: 'Static analysis of the bridges on the transportation route must be performed before the transportation and the results must be submitted to the related authorities for the road permit.',
+    },
+    road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
+  };
   V.home = async () => {
     const every = (await DB.listSurveys()).sort((a, b) => b.createdAt - a.createdAt);
     const uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'tr'));
@@ -369,7 +377,7 @@
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
-    $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" data-go="#/settings" title="Ayarlar" aria-label="Ayarlar">${gearSvg} Ayarlar</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
+    $app.innerHTML = `${bar('Etütlerim', null, `<button class="btn" id="openEtut">Etüt dosyası aç</button><button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" data-go="#/settings" title="Ayarlar" aria-label="Ayarlar">${gearSvg} Ayarlar</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
       <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Bu filtrelere uyan etüt yok.</div>' : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="card bk" id="bkline" style="margin-top:auto"></div>
       <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
@@ -429,8 +437,8 @@
     };
     const ob = document.getElementById('openEtut');
     if (ob) ob.onclick = () => sheet('Etüt dosyası aç', [
-      { label: 'ZIP dosyası seç', file: true, accept: '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
-      { label: 'Açılmış klasör seç', file: true, dir: true, multi: true, accept: '*/*', run: fs => openEtut(async () => Transfer.folderSource(fs)) },
+      { label: 'ZIP dosyası seç', file: true, accept: FIELD ? '.zip,application/zip,application/x-zip-compressed,application/octet-stream' : '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
+      ...(FIELD ? [] : [{ label: 'Açılmış klasör seç', file: true, dir: true, multi: true, accept: '*/*', run: fs => openEtut(async () => Transfer.folderSource(fs)) }]),
     ]);
   };
 
@@ -1482,9 +1490,9 @@
           ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (anahtarsız; taslaktaki uydu görüntüsü gibi)' : 'Google Maps (API anahtarı gerekir)'}</label>`).join('')}
           <label class="f" style="${mp.provider === 'google' ? '' : 'display:none'}">Google Maps API anahtarı<input id="gkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label></div>
         <div class="card"><b>4.1 Bridge</b>${opt('bridge', 'done_ok', 'Statik analiz yapıldı, tüm köprüler uygun')}${opt('bridge', 'required', 'Statik analiz gerekli')}${opt('bridge', 'custom', 'Kendi metnimi yazacağım')}
-          <label class="f" style="${c.bridge === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="bt" rows="3">${esc(c.bridgeText || '')}</textarea></label></div>
+          <label class="f" style="${c.bridge === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="bt" rows="5">${esc(c.bridgeText || '')}</textarea></label></div>
         <div class="card"><b>4.6 Road condition</b>${opt('road', 'paved_ok', 'Yol uygun, tamamı asfalt, kritik dar nokta yok')}${opt('road', 'custom', 'Kendi metnimi yazacağım')}
-          <label class="f" style="${c.road === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="rt" rows="3">${esc(c.roadText || '')}</textarea></label></div>
+          <label class="f" style="${c.road === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="rt" rows="4">${esc(c.roadText || '')}</textarea></label></div>
       </div>
     </div>
     <div class="foot"><button class="btn" id="mkold" style="min-width:0">Eski format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
@@ -1506,7 +1514,12 @@
     $app.onchange = async e => {
       if (e.target.name === 'r2head' || e.target.name === 'r2foot') { await save(); R2[e.target.name === 'r2head' ? 'head' : 'foot'] = e.target.name === 'r2foot' ? +e.target.value : e.target.value; await DB.putSurvey(sv); return V.report(id); }
       if (e.target.name === 'mapProvider') { await save(); mp.provider = e.target.value; await DB.setSetting('maps', mp); return V.report(id); }
-      if (e.target.type === 'radio') { await save(); c[e.target.name] = e.target.value; await DB.putSurvey(sv); V.report(id); }
+      if (e.target.type === 'radio') {
+        await save(); const k = e.target.name, was = c[k]; c[k] = e.target.value;
+        // "Kendi metnimi yazacağım": the box starts with the standard text, ready to be edited
+        if (c[k] === 'custom' && (k === 'bridge' || k === 'road')) { const tk = k + 'Text'; if (!String(c[tk] || '').trim()) c[tk] = CONCL[k][was] || CONCL[k][k === 'bridge' ? 'done_ok' : 'paved_ok']; }
+        await DB.putSurvey(sv); V.report(id);
+      }
     };
     document.getElementById('mk').onclick = async () => {
       await save();

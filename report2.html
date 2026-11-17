@@ -17,11 +17,11 @@
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=44"></script>
+<script src="auth.js?v=45"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=44"></script>
-<script src="rules.js?v=44"></script>
-<script src="catalog.js?v=44"></script>
+<script src="db.js?v=45"></script>
+<script src="rules.js?v=45"></script>
+<script src="catalog.js?v=45"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -133,7 +133,7 @@
   /* photo boxes in pt. Obstacle photo 4:3 in both. Maps: portrait two 4:3 side by side under the photo;
      landscape two 16:9 stacked in the right column under the remarks */
   const G = MODE === 'p'
-    ? { photo: [50, 193, 495.28, 371.46], sat: [50, 569.46, 244.64, 183.48], route: [300.64, 569.46, 244.64, 183.48] }
+    ? { photo: [50, 217, 495.28, 371.46], sat: [50, 593.46, 244.64, 183.48], route: [300.64, 593.46, 244.64, 183.48] }
     : { photo: [36, 166, 492, 369], sat: [536, 225.25, 270, 151.875], route: [536, 383.125, 270, 151.875] };
   const PX = 4, MW = Math.round(G.sat[2] * PX), MH = Math.round(G.sat[3] * PX);
   const box = ([x, y, w, h]) => `left:${x}pt;top:${y}pt;width:${w}pt;height:${h}pt`;
@@ -162,6 +162,8 @@
     const path = () => { g.beginPath(); routeLine.forEach((p, i) => { const [x, y] = routeProj(p[0], p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); };
     if (road) { path(); g.strokeStyle = 'rgba(30,90,255,.75)'; g.lineWidth = 7; g.stroke(); }
     else { path(); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 14; g.stroke(); path(); g.strokeStyle = '#FFD400'; g.lineWidth = 8; g.stroke(); }
+    // every obstacle as a small dot on the route (symbolic); the page's own obstacle gets the big red pin on top
+    { const rr = 4.2 * MW / 600; for (const x of recs.filter(x => x.latDec != null && x.flag !== 'INFO')) { const [px, py] = routeProj(x.latDec, x.lonDec); g.beginPath(); g.arc(px, py, rr, 0, Math.PI * 2); g.fillStyle = '#1F3A68'; g.fill(); g.lineWidth = rr * 0.55; g.strokeStyle = '#fff'; g.stroke(); } }
     const first = recs.find(x => x.latDec != null) , last = [...recs].reverse().find(x => x.latDec != null);
     const sP = first ? [first.latDec, first.lonDec] : routeLine[0], eP = last ? [last.latDec, last.lonDec] : routeLine[routeLine.length - 1];
     markPin(g, ...routeProj(sP[0], sP[1]), '#F5B400', 'S', 1.25 * MW / 600); markPin(g, ...routeProj(eP[0], eP[1]), '#F5B400', 'E', 1.25 * MW / 600);
@@ -182,6 +184,8 @@
       const others = recs.filter(x => x !== r && x.latDec != null && !x.parentId);
       const sk = Math.max(1, Math.ceil(others.length / 120)), blue = others.filter((_, i) => i % sk === 0).map(x => `${f6(x.latDec)},${f6(x.lonDec)}`).join('%7C');
       let u = `https://maps.googleapis.com/maps/api/staticmap?size=${Math.round(MW / 2)}x${Math.round(MH / 2)}&scale=2&maptype=${typ}&path=color:0x1E5AFFCC%7Cweight:4%7Cenc:${encodeURIComponent(polyline(pts))}`;
+      { const oth = recs.filter(x => x !== r && x.latDec != null && x.flag !== 'INFO'), sk = Math.max(1, Math.ceil(oth.length / 120));
+        const dots = oth.filter((_, i) => i % sk === 0).map(x => `${f6(x.latDec)},${f6(x.lonDec)}`).join('%7C'); if (dots) u += `&markers=size:tiny%7Ccolor:0x1F3A68%7C${dots}`; }
       u += `&markers=color:0xF5B400%7Clabel:S%7C${f6(pts[0][0])},${f6(pts[0][1])}&markers=color:0xF5B400%7Clabel:E%7C${f6(pts[pts.length - 1][0])},${f6(pts[pts.length - 1][1])}`;
       if (r.latDec != null) u += `&markers=color:red%7Clabel:O%7C${f6(r.latDec)},${f6(r.lonDec)}`;
       return `<img src="${u}&key=${encodeURIComponent(mp.key)}" alt="">`;
@@ -235,7 +239,8 @@
   const settings = { general: !!P.general, minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV };
   const COL = { red: '#FF0000', yellow: '#FFFF00', magenta: '#FF00FF', purple: '#7030A0', blue: '#4F81BD', green: '#92D050' };
   const H = P.header || {}, route = (!H.route || H.route === `${P.start.name} - ${P.end.name} Arası Yol Etüdü` ? `${P.start.name} - ${P.end.name}` : H.route), project = H.project || P.projectName || P.client || route;
-  const TITLE = `ROUTE SURVEY REPORT, ${String(project).toUpperCase()}`;
+  const SE = `${P.start.name} - ${P.end.name}`;
+  const TITLE = `${SE} ROUTE SURVEY REPORT`;
   // logos: top left = Çaba Misnak alone or with CJ ICM; bottom left (landscape) = one or two customer logos (all chosen in the app)
   const R2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
   const partner = (await url(await DB.getSetting('partnerLogo'))) || 'assets/logo_cjicm.jpg';
@@ -259,16 +264,16 @@
       <div class="a title">${esc(title)}</div>`;
   const footer = MODE === 'p'
     ? (custLogos.length
-        ? `<div class="a cust n${custLogos.length}" style="left:50pt;top:762pt;height:32pt;width:230pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>`
-        : `<div class="a" style="left:50pt;top:766pt;width:300pt;font-size:6.3pt;line-height:1.35;color:#333"><b style="font-size:6.8pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>`)
-      + `<div class="a conf" style="left:345pt;top:768pt;width:200pt;text-align:left">${CONF}</div>`
+        ? `<div class="a cust n${custLogos.length}" style="left:50pt;top:782pt;height:30pt;width:230pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>`
+        : `<div class="a" style="left:50pt;top:785pt;width:300pt;font-size:6.3pt;line-height:1.35;color:#333"><b style="font-size:6.8pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>`)
+      + `<div class="a conf" style="left:345pt;top:785pt;width:200pt;text-align:left">${CONF}</div>`
     : `<div class="a cust n${custLogos.length}" style="top:540pt;height:28pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
        <div class="a conf" style="top:547pt">${CONF}</div>`;
   const ll = r => r.latDec != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latDec},${r.lonDec}">${esc(r.lat)}${MODE === 'p' ? '<br>' : ', '}${esc(r.lon)}</a>` : '—';
   const obst = r => esc(OL(r.obstacle) || (r.flag === 'INFO' ? 'Info' : '—'));
   const GREEN = '#2E7D32';
   const badge = (f, fs) => `<span style="display:inline-block;background:${GREEN};color:#fff;font-weight:700;font-size:${fs}pt;line-height:1;padding:1.6pt 3pt 1.4pt;border-radius:2.5pt;letter-spacing:.02em;white-space:nowrap">${esc(f.toUpperCase())}</span>`;
-  const noCell = r => r.flag ? `<span style="display:block;font-size:8.4pt;line-height:1.15;white-space:nowrap">${esc(r.no)}</span>${badge(r.flag, r.flag === 'BYPASS' ? 5 : 6)}` : esc(r.no);
+  const noCell = r => r.flag ? `<span style="display:block;font-size:8.4pt;line-height:1.15;white-space:nowrap">${esc(r.no)}</span>${badge(r.flag, 6)}` : esc(r.no);
   const photoBox = r => `<div class="a photo" style="${box(G.photo)};container-type:inline-size">${r.photo ? `<img src="${r.photo}" alt="">` : '<div class="none">No photo</div>'}
       ${r.photo && (r.ann || []).length ? `<div style="position:absolute;inset:0">${annHtml(r.ann, -1)}</div>` : ''}
       ${Object.entries(r.ins || {}).filter(([, u]) => u).map(([k, u]) => `<img src="${u}" alt="" style="position:absolute;inset:auto;${k[0] === 't' ? 'top' : 'bottom'}:2.5%;${k[1] === 'l' ? 'left' : 'right'}:2.5%;width:31%;height:auto;aspect-ratio:4/3;object-fit:cover;border:1.5pt solid #fff;box-shadow:0 0 2pt rgba(0,0,0,.5)">`).join('')}</div>`;
@@ -279,15 +284,17 @@
     const rmStyle = '', rhStyle = bg ? `background:${bg};color:${col === 'yellow' || col === 'green' ? '#111' : '#fff'};` : '';   // the colour goes on the REMARKS bar; the text box stays white
     const det = details(r), rm = remarks(r);
     if (MODE === 'p') return `${header(TITLE)}
-      <table class="a strip" style="left:50pt;top:121pt;width:220pt"><colgroup><col style="width:34pt"><col style="width:44pt"><col></colgroup>
+      <table class="a strip" style="left:50pt;top:121pt;width:220pt"><colgroup><col style="width:46pt"><col style="width:48pt"><col></colgroup>
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th></tr><tr><td style="height:22pt;padding:0 1pt">${noCell(r)}</td><td style="height:22pt">${km1(r.km)}</td><td style="height:22pt;font-size:9pt">${obst(r)}</td></tr></table>
-      <table class="a strip" style="left:50pt;top:161pt;width:220pt"><colgroup><col style="width:92pt"><col></colgroup>
-        <tr><th style="height:27pt">COORDINATES</th><td class="ll" style="height:27pt;font-size:8pt;line-height:1.2">${ll(r)}</td></tr></table>
+      <table class="a strip" style="left:50pt;top:159pt;width:220pt"><colgroup><col style="width:78pt"><col></colgroup>
+        <tr><th style="height:20pt;font-size:7pt">COORDINATES</th><td class="ll" style="height:20pt;font-size:7.4pt;white-space:nowrap">${ll(r).replace('<br>', ', ')}</td></tr></table>
+      <div class="a rmh" style="left:50pt;top:182pt;width:220pt;height:12pt;font-size:7.4pt">DETAILS</div>
+      <div class="a rmb" style="left:50pt;top:194pt;width:220pt;height:18pt;font-size:7.4pt;line-height:1.2;padding:2pt 5pt">${esc(det.join('  |  ')) || '—'}</div>
       <div class="a rmh" style="left:276pt;top:121pt;width:269.28pt;height:14pt;${rhStyle}">REMARKS</div>
-      <div class="a rmb" style="left:276pt;top:135pt;width:269.28pt;height:53pt;font-size:8.2pt;${rmStyle}">${det.map(esc).join('\n')}${det.length && rm ? '\n' : ''}${esc(rm) || (det.length ? '' : '—')}</div>
+      <div class="a rmb" style="left:276pt;top:135pt;width:269.28pt;height:77pt;font-size:8.2pt;${rmStyle}">${esc(rm) || '—'}</div>
       ${photoBox(r)}${maps(r)}${footer}`;
     return `${header(TITLE)}
-      <table class="a strip" style="left:36pt;top:116pt;width:492pt"><colgroup><col style="width:30pt"><col style="width:40pt"><col style="width:118pt"><col style="width:124pt"><col></colgroup>
+      <table class="a strip" style="left:36pt;top:116pt;width:492pt"><colgroup><col style="width:44pt"><col style="width:46pt"><col style="width:110pt"><col style="width:122pt"><col></colgroup>
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>LATITUDE &amp; LONGITUDE</th><th>DETAILS</th></tr>
         <tr><td style="height:29pt;padding:0 1pt">${noCell(r)}</td><td style="height:29pt">${km1(r.km)}</td><td style="height:29pt;font-size:9pt">${obst(r)}</td><td class="ll" style="height:29pt;font-size:8pt">${ll(r)}</td><td class="det" style="height:29pt">${esc(det.join('  |  ') || '—')}</td></tr></table>
       ${photoBox(r)}
@@ -303,7 +310,7 @@
       return `<tr class="${r.parentId ? 'sub' : ''}"><td style="${r.flag ? `background:${GREEN};color:#fff;font-weight:700;font-size:7pt;` : ''}">${esc(r.no)}${r.flag ? ` · ${esc(r.flag)}` : ''}</td><td>${km1(r.km)}</td><td>${esc(OL(r.obstacle) || (r.flag === 'INFO' ? 'Info' : ''))}</td><td style="${bg}">${esc(remarks(r).replace(/\n/g, ' '))}</td></tr>`;
     }).join('');
     const pos = MODE === 'p' ? 'left:50pt;top:122pt;width:495.28pt' : '';
-    pagesHtml.push(`${header(`${project} — OBSTACLE SUMMARY`)}<table class="a sum" style="${pos}"><colgroup><col style="width:66pt"><col style="width:40pt"><col style="width:${MODE === 'p' ? 128 : 180}pt"><col></colgroup><tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>NOTES</th></tr>${rows}</table>${footer}`);
+    pagesHtml.push(`${header(`${SE} OBSTACLE SUMMARY`)}<table class="a sum" style="${pos}"><colgroup><col style="width:84pt"><col style="width:48pt"><col style="width:${MODE === 'p' ? 120 : 170}pt"><col></colgroup><tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>NOTES</th></tr>${rows}</table>${footer}`);
   }
   for (const r of recs) pagesHtml.push(recordPage(r));
   window.R2_PAGES = pagesHtml; window.R2_MODE = MODE;
@@ -312,7 +319,7 @@
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=44'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=45'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);

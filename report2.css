@@ -55,7 +55,7 @@
 
 /* dikey pafta (Nov 17): same parts on an A4 portrait page */
 .page.lp.pp { width: 210mm; height: 297mm; page: auto; }
-.page.lp.pp .pno { top: 806pt; right: 50pt; }
+.page.lp.pp .pno { top: 818pt; right: 50pt; }
 .lp .strip th { padding: 0 3pt; }
 .lp .strip td.ll a { font-size: inherit; }
 .page.lp.pp .info td { height: 12.2pt; font-size: 7pt; }
