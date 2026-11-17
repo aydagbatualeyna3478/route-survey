@@ -6,7 +6,7 @@
        1 - Bridge/ foto.jpg, ek-1.jpg…, bilgiler.txt
          1-1 - INFO/ …          INFO/BYPASS inside their obstacle's folder
        Arşiv/ A1 - …/          archived obstacles (not in the report)
-       logolar/, kapak.jpg, cizim.png   office material, when present
+       logolar/, kapak.jpg, cizim.pdf   office material, when present
    Photos are already JPEG, so the ZIP stores them without compressing again. */
 (function (g) {
   const FORMAT = 'route-survey-etut', VERSION = 1;
@@ -15,7 +15,7 @@
   const rootName = sv => safe(`${sv.project.start.name}-${sv.project.end.name} Arası Etüt Raporu`);
   const fileNameOf = sv => `${rootName(sv)} ${new Date().toISOString().slice(0, 10)}.zip`;
   const lab = k => (g.OL ? g.OL(k) : k) || '';   // obstacle name as set in the survey layout
-  const extOf = b => /png/.test(b && b.type) ? 'png' : 'jpg';
+  const extOf = b => /pdf/.test(b && b.type) ? 'pdf' : /png/.test(b && b.type) ? 'png' : 'jpg';
   const fmt = (v, d) => v == null || v === '' ? '' : Number(v).toLocaleString('tr-TR', { maximumFractionDigits: d == null ? 2 : d });
 
   // ---------- CRC-32 + ZIP writer (stored entries, UTF-8 names) ----------
@@ -130,7 +130,7 @@
     }
     const logoFiles = {};
     for (const [k, id] of Object.entries(sv.logos || {})) {
-      const pth = k === 'cover' ? 'kapak.jpg' : k === 'drawing' ? 'cizim.png' : `logolar/${k}.png`;
+      const pth = k === 'cover' ? 'kapak.jpg' : k === 'drawing' ? 'cizim.pdf' : `logolar/${k}.png`;
       logoFiles[k] = pth; entries.push({ path: pth, blob: id, logo: k });
     }
     return { live, arc, all, files, logoFiles, entries, json: () => {
@@ -139,7 +139,7 @@
     } };
   }
   /* the real file type decides the extension; the planned name is fixed up when the blob is read */
-  const fixExt = (pth, b) => pth.replace(/\.(jpg|png)$/, '.' + extOf(b));
+  const fixExt = (pth, b) => pth.replace(/\.(jpg|png|pdf)$/, '.' + extOf(b));
 
   // ---------- export ----------
   async function exportSurvey(sv, onStep) {
@@ -233,7 +233,7 @@
     const sv = doc.survey, origId = sv.id, old = await DB.getSurvey(sv.id);
     if (old && mode === 'replace') { for (const r of old.records) for (const b of [r.photoId, ...(r.extras || [])]) await DB.delBlob(b); for (const b of Object.values(old.logos || {})) await DB.delBlob(b); }
     if (mode === 'copy') { sv.id = DB.uid(); sv.copyOf = origId; }
-    const blobAt = async pth => { const b = pth && await src.get(base + pth); if (!b) return null; const type = /\.png$/i.test(pth) ? 'image/png' : 'image/jpeg'; return DB.putBlob(b.type === type ? b : new Blob([b], { type })); };
+    const blobAt = async pth => { const b = pth && await src.get(base + pth); if (!b) return null; const type = /\.pdf$/i.test(pth) ? 'application/pdf' : /\.png$/i.test(pth) ? 'image/png' : 'image/jpeg'; return DB.putBlob(b.type === type ? b : new Blob([b], { type })); };
     let n = 0;
     for (const r of sv.records) {
       n += 1; if (onStep) onStep(n, sv.records.length);

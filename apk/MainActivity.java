@@ -103,19 +103,19 @@ public class MainActivity extends BridgeActivity {
     public void onResume() { super.onResume(); immersive(); }
 
     /* minimal PDF: one JPEG per page, filling an A4 page (portrait or landscape) */
-    private File writePdf(String name, List<byte[]> jpgs, List<int[]> dims, List<Boolean> land) throws Exception {
+    private File writePdf(String name, List<byte[]> jpgs, List<int[]> dims, List<Boolean> land, List<double[]> sizes) throws Exception {
         File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Etütler");
         if (!dir.exists() && !dir.mkdirs()) dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         String safe = name.replaceAll("[\\\\/:*?\"<>|]+", "-").trim();
         File f = new File(dir, (safe.isEmpty() ? "Route Survey Report" : safe) + ".pdf");
-        try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land)); }
+        try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land, sizes)); }
         catch (Exception e) {   // public Documents not writable on this device: the app's own folder
             f = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), f.getName());
-            try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land)); }
+            try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land, sizes)); }
         }
         return f;
     }
-    private static byte[] pdfBytes(List<byte[]> jpgs, List<int[]> dims, List<Boolean> land) throws Exception {
+    private static byte[] pdfBytes(List<byte[]> jpgs, List<int[]> dims, List<Boolean> land, List<double[]> sizes) throws Exception {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         List<Integer> offs = new ArrayList<>();
         int n = jpgs.size(), objs = 2 + n * 3;
@@ -126,7 +126,9 @@ public class MainActivity extends BridgeActivity {
         offs.add(out.size()); out.write(("2 0 obj\n<< /Type /Pages /Kids [" + kids + "] /Count " + n + " >>\nendobj\n").getBytes("ISO-8859-1"));
         for (int i = 0; i < n; i++) {
             int po = 3 + i * 3, co = po + 1, io = po + 2;
-            String W = land.get(i) ? "841.89" : "595.28", H = land.get(i) ? "595.28" : "841.89";
+            double[] sz = sizes != null && i < sizes.size() ? sizes.get(i) : null;   // the page's own size in pt (A4, A3 drawing…)
+            String W = sz != null && sz[0] > 100 ? String.format(java.util.Locale.ROOT, "%.2f", sz[0]) : land.get(i) ? "841.89" : "595.28";
+            String H = sz != null && sz[1] > 100 ? String.format(java.util.Locale.ROOT, "%.2f", sz[1]) : land.get(i) ? "595.28" : "841.89";
             offs.add(out.size());
             out.write((po + " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + W + " " + H + "] /Resources << /XObject << /Im0 " + io + " 0 R >> >> /Contents " + co + " 0 R >>\nendobj\n").getBytes("ISO-8859-1"));
             byte[] cs = ("q " + W + " 0 0 " + H + " 0 0 cm /Im0 Do Q").getBytes("ISO-8859-1");
@@ -209,7 +211,7 @@ public class MainActivity extends BridgeActivity {
                         JSONObject o = new JSONObject(json);
                         JSONArray pages = o.getJSONArray("pages");
                         float dens = getResources().getDisplayMetrics().density, S = (float) o.optDouble("scale", 2.0);
-                        List<byte[]> jpgs = new ArrayList<>(); List<int[]> dims = new ArrayList<>(); List<Boolean> land = new ArrayList<>();
+                        List<byte[]> jpgs = new ArrayList<>(); List<int[]> dims = new ArrayList<>(); List<Boolean> land = new ArrayList<>(); List<double[]> sizes = new ArrayList<>();
                         for (int i = 0; i < pages.length(); i++) {
                             JSONObject pg = pages.getJSONObject(i);
                             double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
@@ -221,9 +223,9 @@ public class MainActivity extends BridgeActivity {
                             web.draw(c);
                             ByteArrayOutputStream bo = new ByteArrayOutputStream();
                             bmp.compress(Bitmap.CompressFormat.JPEG, 86, bo); bmp.recycle();
-                            jpgs.add(bo.toByteArray()); dims.add(new int[]{bw, bh}); land.add(w > h);
+                            jpgs.add(bo.toByteArray()); dims.add(new int[]{bw, bh}); land.add(w > h); sizes.add(new double[]{pg.optDouble("pw", 0), pg.optDouble("ph", 0)});
                         }
-                        File f = writePdf(o.optString("name", "Route Survey Report"), jpgs, dims, land);
+                        File f = writePdf(o.optString("name", "Route Survey Report"), jpgs, dims, land, sizes);
                         share(f);
                         done = "window.__pdfDone && window.__pdfDone(" + JSONObject.quote(f.getAbsolutePath()) + ", null)";
                     } catch (Throwable e) {

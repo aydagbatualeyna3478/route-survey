@@ -190,6 +190,10 @@
   keep(`<div style="margin-top:7mm">${H1('2', 'Transportation Drawing')}</div><p>Preliminary transportation drawing.</p>`);
 
   // ---------- 2 drawing page (uploaded PDF page, keeps its own size) ----------
+  for (const d of A.drawings || []) {   // PDF drawing: one page each, landscape pages on A3 landscape
+    if (d.landscape) { const pg = newPage('a3'); pg.appendChild(el(`<img src="${d.src}" style="position:absolute;inset:6mm;width:calc(100% - 12mm);height:calc(100% - 12mm);object-fit:contain" alt="">`)); }
+    else { const pg = newPage('text'); pg.appendChild(el(`<div class="content" style="display:flex;align-items:center;justify-content:center"><img src="${d.src}" style="max-width:100%;max-height:100%" alt=""></div>`)); }
+  }
   if (A.drawing) {
     if (A.drawingLandscape) { const pg = newPage('a3'); pg.appendChild(el(`<img src="${A.drawing}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain" alt="">`)); }
     else { const pg = newPage('text'); pg.appendChild(el(`<div class="content" style="display:flex;align-items:center;justify-content:center"><img src="${A.drawing}" style="max-width:100%;max-height:100%" alt=""></div>`)); }

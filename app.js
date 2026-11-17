@@ -347,6 +347,7 @@
   let FILT = (() => { try { return JSON.parse(localStorage.getItem('rs-filter')) || {}; } catch (e) { return {}; } })();
   const saveFilt = () => { try { localStorage.setItem('rs-filter', JSON.stringify(FILT)); } catch (e) {} };
 
+  const pdfBadge = (b, name) => `<span style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--ink)"><svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M3 1h14l6 6v22H3z" fill="#fff" stroke="#B4232A" stroke-width="2"/><text x="13" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#B4232A" font-family="Arial">PDF</text></svg>${esc(name || 'Çizim PDF')} · ${Math.max(1, Math.round((b.size || 0) / 1024))} KB</span>`;
   // standard conclusion texts (same as report.js), used to start a custom text
   const CONCL = {
     bridge: {
@@ -512,8 +513,12 @@
     const c = cargoOf(p);
     const logos = sv ? sv.logos : {};
     const compLogo = await blobUrl(await DB.getSetting('companyLogo'));
-    const pv = async (bid, fallback) => { const u = await blobUrl(bid); return u ? `<img src="${u}" alt="">` : (fallback || imgSvg + ' Yükle'); };
-    const slot = async (key, title, note, bid, fallback) => `<label class="logo"><b>${title}</b><span class="pv" id="pv-${key}">${await pv(bid, fallback)}</span><span>${note}</span><input class="hid" type="file" accept="image/*" data-logo="${key}"></label>`;
+    const pv = async (bid, fallback) => {
+      const b = bid && await DB.getBlob(bid);
+      if (b && /pdf/.test(b.type)) return pdfBadge(b);
+      const u = await blobUrl(bid); return u ? `<img src="${u}" alt="">` : (fallback || imgSvg + ' Yükle');
+    };
+    const slot = async (key, title, note, bid, fallback) => `<label class="logo"><b>${title}</b><span class="pv" id="pv-${key}">${await pv(bid, fallback)}</span><span>${note}</span><input class="hid" type="file" accept="${key === 'drawing' ? 'application/pdf,.pdf' : 'image/*'}" data-logo="${key}"></label>${key === 'drawing' && bid ? `<button type="button" class="btn sm" data-lrm="drawing" style="min-height:32px;font-size:12px;color:var(--badtx)">Çizimi kaldır</button>` : ''}`;
     const LG = sv ? logosOf(sv) : { ids: {}, pos: { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' }, cover: { tl: ['company'], tr: ['client1'], mid: ['company'], row: ['client1', 'client2'] } };
     const cover = JSON.parse(JSON.stringify(LG.cover));
     const LNAME = { company: 'İşi yapan', client1: 'Müşteri-1', client2: 'Müşteri-2', owner: 'İşin sahibi' };
@@ -574,7 +579,7 @@
         <span class="hint">Köşe seçimi iç sayfalar içindir. Logolar oranı bozulmadan küçültülür ve sayfa kenar boşluklarının içinde kalır.</span>
         <div class="sec">Kapak sayfası düzeni</div>
         <div class="card" id="coverPick" style="gap:8px">${AREAS.map(coverRow).join('')}</div>
-        <div class="g2">${await slot('cover', 'Kapak fotoğrafı', 'Boşsa standart', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma çizimi', 'Resim (JPG/PNG)', logos.drawing)}</div>
+        <div class="g2">${await slot('cover', 'Kapak fotoğrafı', 'Boşsa standart', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma çizimi', 'PDF dosyası', logos.drawing)}</div>
       </div>
     </form>
     <div class="foot"><button class="btn pri" id="save">${sv ? 'Kaydet' : 'Etüdü başlat'}</button></div>`;
@@ -604,9 +609,11 @@
     });
     f.querySelectorAll('[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return;
-      const key = inp.dataset.logo, blob = await shrink(inp.files[0], key === 'drawing' ? 3000 : key === 'cover' ? 1800 : 1200);
+      const key = inp.dataset.logo, file = inp.files[0];
+      if (key === 'drawing' && !/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { inp.value = ''; return toast('Taşıma çizimi PDF olmalı'); }
+      const blob = key === 'drawing' ? new Blob([file], { type: 'application/pdf' }) : await shrink(file, key === 'cover' ? 1800 : 1200);
       pending[key] = blob; delete removed[key];
-      const pvEl = document.getElementById('pv-' + key); [...pvEl.childNodes].forEach(n => { if (n !== inp) n.remove(); }); pvEl.insertAdjacentHTML('afterbegin', `<img src="${URL.createObjectURL(blob)}" alt="">`);
+      const pvEl = document.getElementById('pv-' + key); [...pvEl.childNodes].forEach(n => { if (n !== inp) n.remove(); }); pvEl.insertAdjacentHTML('afterbegin', key === 'drawing' ? pdfBadge(blob, file.name) : `<img src="${URL.createObjectURL(blob)}" alt="">`);
     }));
     document.getElementById('save').onclick = async () => {
       if (!f.reportValidity()) return;
@@ -627,7 +634,7 @@
       // move older 'client' / 'partner' logos into the new slots
       if (s.logos.client && !s.logos.client1) s.logos.client1 = s.logos.client; if (s.logos.partner && !s.logos.client2) s.logos.client2 = s.logos.partner;
       delete s.logos.client; delete s.logos.partner;
-      for (const k of ['client1', 'client2', 'owner']) if (removed[k]) { await DB.delBlob(s.logos[k]); delete s.logos[k]; }
+      for (const k of ['client1', 'client2', 'owner', 'drawing']) if (removed[k]) { await DB.delBlob(s.logos[k]); delete s.logos[k]; }
       for (const k of ['client1', 'client2', 'owner', 'cover', 'drawing']) if (pending[k]) { await DB.delBlob(s.logos[k]); s.logos[k] = await DB.putBlob(pending[k]); }
       s.logoPos = logoPos; s.coverLogos = cover;
       if (pending.company) { await DB.delBlob(await DB.getSetting('companyLogo')); await DB.setSetting('companyLogo', await DB.putBlob(pending.company)); }
@@ -1502,7 +1509,8 @@
             <div><b>${cnt(['Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn'])}</b><span>dönüş/viraj</span></div><div><b>${cnt(['Overhead Structure'])}</b><span>üst yapı</span></div></div></div>
         <div class="card"><b>Engel sayfaları</b><span class="hint">${recs.length} kayıt · yeni taslakta her kayıt (INFO/BYPASS dahil) ayrı yatay sayfa · ${recs.length - nf - ni} ana, ${nf} BYPASS, ${ni} INFO · arşivdekiler hariç</span>
           ${miss ? `<span class="note w">${miss} kayıtta fotoğraf yok.</span>` : ''}${nopos ? `<span class="note w">${nopos} kayıtta konum yok.</span>` : ''}</div>
-        <div class="card"><b>2 Transportation Drawing</b><span class="hint">${sv.logos.drawing ? 'Çizim yüklendi.' : 'Çizim yüklenmedi; "Etüt bilgileri" ekranından resim olarak ekleyebilirsin.'}</span></div>
+        <div class="card"><b>2 Transportation Drawing</b><span class="hint">${sv.logos.drawing ? 'Taşıma çizimi (PDF) yüklü; tüm sayfaları rapora eklenir.' : 'Çizim yüklenmedi. PDF olarak istediğin zaman ekleyebilirsin.'}</span>
+          <div class="row" style="flex-wrap:wrap"><label class="btn sm" style="cursor:pointer">${sv.logos.drawing ? 'Çizimi değiştir (PDF)' : 'Çizim ekle (PDF)'}<input class="hid" type="file" accept="application/pdf,.pdf" id="drw"></label>${sv.logos.drawing ? '<button class="btn sm" id="drwrm" style="color:var(--badtx)">Çizimi kaldır</button>' : ''}</div></div>
         <div class="hint">Giriş metinleri, kısaltmalar, 4.2–4.8 standart metinleri ve referans fotoğrafları otomatik eklenir. Güzergah haritası internet varsa OpenStreetMap'ten çizilir.</div>
       </div>
       <div class="pane">
@@ -1525,6 +1533,14 @@
       await DB.setSetting('headerDefaults', { docNo: H.docNo, revDate: H.revDate });
       await DB.putSurvey(sv);
     };
+    const drw = document.getElementById('drw');
+    if (drw) drw.onchange = async () => {
+      const f = drw.files[0]; if (!f) return;
+      if (!/pdf$/i.test(f.type) && !/\.pdf$/i.test(f.name)) return toast('Taşıma çizimi PDF olmalı');
+      await save(); await DB.delBlob(sv.logos.drawing); sv.logos.drawing = await DB.putBlob(new Blob([f], { type: 'application/pdf' })); await DB.putSurvey(sv); toast('Taşıma çizimi eklendi'); V.report(id);
+    };
+    const drwrm = document.getElementById('drwrm');
+    if (drwrm) drwrm.onclick = async () => { if (drwrm.dataset.sure !== '1') { drwrm.dataset.sure = '1'; drwrm.textContent = 'Emin misin? Kaldır'; return; } await save(); await DB.delBlob(sv.logos.drawing); delete sv.logos.drawing; await DB.putSurvey(sv); V.report(id); };
     document.querySelectorAll('[data-r2logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return; await save();
       const k = inp.dataset.r2logo, blob = await shrink(inp.files[0], 1200);
