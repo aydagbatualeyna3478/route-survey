@@ -758,11 +758,12 @@
        obstacle. Numbers are not stored — they follow the list order, so a move renumbers everything. */
     const list = document.getElementById('list');
     let selMode = keep.on, lp = null, drag = null, suppressClick = false, delSure = false;
+    let snap = keep.snap || null;   // order when selection started: "İptal" puts it back
     const sel = new Set(keep.ids.filter(x => sv.records.some(r => r.id === x)));
     const isUnit = (c, grp) => grp ? c.classList.contains('grp') : c.classList.contains('rec');
     const unitOf = rec => rec.classList.contains('sub') ? rec : rec.closest('.grp');
     const recOf = u => u.classList.contains('grp') ? u.querySelector(':scope > .rec') : u;
-    const remember = () => { SELST[id] = { on: selMode, ids: [...sel], tab }; };
+    const remember = () => { SELST[id] = { on: selMode, ids: [...sel], tab, snap: selMode ? snap : null }; };
     const paintSel = () => {
       list.classList.toggle('selmode', selMode);
       list.querySelectorAll('.rec').forEach(b => b.classList.toggle('chk', sel.has(b.dataset.rec)));
@@ -772,7 +773,7 @@
       const n = sel.size;
       sb.innerHTML = `<b>${n} engel seçili</b>${tab === 's' ? `<button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
         <button class="btn" data-sel="arc" ${n ? '' : 'disabled'}>Arşive gönder</button>` : `<button class="btn" data-sel="unarc" ${n ? '' : 'disabled'}>Etüde geri al</button>`}
-        <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="done">Bitti</button>`;
+        <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi bırak, sırayı seçimden önceki haline getir">İptal</button><button class="btn" data-sel="done">Bitti</button>`;
       remember();
     };
     const applyDom = async () => {   // list order on screen -> sv.records (each main followed by its INFO/BYPASS)
@@ -801,7 +802,7 @@
     };
     const startDrag = (rec, pid) => {
       lp = null; suppressClick = true; if (navigator.vibrate) navigator.vibrate(25);
-      if (!selMode) sel.clear();
+      if (!selMode) { sel.clear(); snap = sv.records.map(r => r.id); }
       selMode = true; sel.add(rec.dataset.rec); delSure = false; paintSel();
       if (tab === 'a') return;   // the archive is not ordered: long press only selects
       const u = unitOf(rec); u.classList.add('dragging');
@@ -845,7 +846,15 @@
       const sb = e.target.closest('[data-sel]');
       if (sb) {
         const k = sb.dataset.sel;
-        if (k === 'done') { selMode = false; sel.clear(); delSure = false; return paintSel(); }
+        if (k === 'done') { selMode = false; sel.clear(); delSure = false; snap = null; return paintSel(); }
+        if (k === 'cancel') {   // back to the order before this selection; nothing stays selected
+          const was = snap || []; selMode = false; sel.clear(); delSure = false; snap = null;
+          const pos = Object.fromEntries(was.map((x, i) => [x, i])), before = sv.records.map(r => r.id).join();
+          sv.records = sv.records.map((r, i) => [r, pos[r.id] != null ? pos[r.id] : was.length + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
+          SELST[id] = { on: false, ids: [], tab };
+          if (sv.records.map(r => r.id).join() !== before) { await DB.putSurvey(sv); toast('Sıra eski haline döndü'); }
+          return V.survey(id);
+        }
         if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
         if (k === 'arc' || k === 'unarc') {   // archive: kept with the survey, left out of the report, numbering and KM
           const on = k === 'arc', hit = sv.records.filter(x => sel.has(x.id));

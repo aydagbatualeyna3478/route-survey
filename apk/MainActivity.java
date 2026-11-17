@@ -23,6 +23,10 @@ import android.print.PrintManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 import com.getcapacitor.BridgeActivity;
 
 /* AndroidFolder: the backup folder the user picks with Android's own folder picker (Storage Access Framework),
@@ -76,6 +80,18 @@ public class MainActivity extends BridgeActivity {
         return n.endsWith(".jpg") ? "image/jpeg" : n.endsWith(".png") ? "image/png" : n.endsWith(".txt") ? "text/plain" : "application/octet-stream";
     }
 
+    /* full screen: the tablet's navigation and status bars are hidden; a swipe from the edge shows them for a moment */
+    private void immersive() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        c.hide(WindowInsetsCompat.Type.systemBars());
+    }
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) { super.onWindowFocusChanged(hasFocus); if (hasFocus) immersive(); }
+    @Override
+    public void onResume() { super.onResume(); immersive(); }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -98,6 +114,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        immersive();
         final WebView web = getBridge().getWebView();
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface
