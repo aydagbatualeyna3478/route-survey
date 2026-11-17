@@ -685,7 +685,7 @@
       return h;
     };
     const html = `<div class="ltabs" role="tablist"><button role="tab" data-tab="s" class="${tab === 's' ? 'on' : ''}">Etüt raporu · ${recs.filter(r => !r.parentId).length}</button>
-        <button role="tab" data-tab="a" class="${tab === 'a' ? 'on' : ''}">${esc(sv.project.start.name)}-${esc(sv.project.end.name)} arşivi · ${arch.length}</button></div>`
+        <button role="tab" data-tab="a" class="${tab === 'a' ? 'on' : ''}">${esc(sv.project.start.name)}-${esc(sv.project.end.name)} arşivi · ${arch.length}</button><button class="selgo" data-sel="start" title="Engel seç: taşı, arşive gönder, sil ya da sadece seçilenleri dışa aktar">☑ Seç</button></div>`
       + (tab === 's' ? (await group(recs) || '<div class="empty">Henüz engel yok.<br>Sağdaki "Yeni engel ekle" ile ilk fotoğrafı çek.</div>')
         : (await group(arch) || '<div class="empty">Arşiv boş.<br>Yalnızca arşiv için çekilen engelleri engel ekranındaki "Arşive gönder" ile ya da listede basılı tutup seçerek buraya gönderebilirsin. Arşivdekiler rapora girmez.</div>'));
     const bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
@@ -755,7 +755,8 @@
       if (!selMode) { if (sb) sb.remove(); remember(); return; }
       if (!sb) { sb = document.createElement('div'); sb.className = 'selbar'; list.appendChild(sb); }   // fixed over the top bar: the list does not shift
       const n = sel.size;
-      sb.innerHTML = `<b>${n} engel seçili</b>${tab === 's' ? `<button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
+      const pool = list.querySelectorAll('.rec').length, all = n && n >= pool;
+      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
         <button class="btn" data-sel="arc" ${n ? '' : 'disabled'}>Arşive gönder</button>` : `<button class="btn" data-sel="unarc" ${n ? '' : 'disabled'}>Etüde geri al</button>`}
         <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi bırak, sırayı seçimden önceki haline getir">İptal</button><button class="btn" data-sel="done">Bitti</button>`;
       remember();
@@ -830,6 +831,7 @@
       const sb = e.target.closest('[data-sel]');
       if (sb) {
         const k = sb.dataset.sel;
+        if (k === 'start') { if (!selMode) { sel.clear(); snap = sv.records.map(r => r.id); } selMode = true; delSure = false; return paintSel(); }
         if (k === 'done') { selMode = false; sel.clear(); delSure = false; snap = null; return paintSel(); }
         if (k === 'cancel') {   // back to the order before this selection; nothing stays selected
           const was = snap || []; selMode = false; sel.clear(); delSure = false; snap = null;
@@ -838,6 +840,19 @@
           SELST[id] = { on: false, ids: [], tab };
           if (sv.records.map(r => r.id).join() !== before) { await DB.putSurvey(sv); toast('Sıra eski haline döndü'); }
           return V.survey(id);
+        }
+        if (k === 'all') {   // every obstacle in this tab, or none when all are already selected
+          const ids = [...list.querySelectorAll('.rec')].map(b => b.dataset.rec);
+          if (sel.size >= ids.length) sel.clear(); else ids.forEach(x => sel.add(x));
+          delSure = false; return paintSel();
+        }
+        if (k === 'exp') {   // report with only the selected obstacles (their INFO/BYPASS come along); numbers and KM stay as in the full route
+          const ids = [...sel]; if (!ids.length) return;
+          const open = o => { try { localStorage.setItem('rs-only', JSON.stringify({ id, ids, t: Date.now() })); } catch (e) {} remember(); location.href = `report2.html?o=${o}&sel=1#${id}`; };
+          return sheet(`${ids.length} seçili engel dışa aktarılacak`, [
+            { label: 'Dikey pafta (A4 dikey)', cls: 'pri', run: () => open('p') },
+            { label: 'Yatay pafta (A4 yatay)', cls: 'pri', run: () => open('l') },
+          ]);
         }
         if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
         if (k === 'arc' || k === 'unarc') {   // archive: kept with the survey, left out of the report, numbering and KM
