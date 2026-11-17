@@ -244,7 +244,7 @@
     const no = r.no.replace('-', ' - ');
     let h = cell(1, 1, 'c b bd', '#') + cell(1, 2, 'c b bd', 'KM') + cell(1, 3, 'c b bb', 'OBSTACLE');
     h += r.flag ? cell(2, 1, 'no flag bd', `<span>${esc(no)}</span><span class="f">${r.flag}</span>`, 2) : cell(2, 1, 'no bd', esc(no), 2);
-    h += cell(2, 2, 'c bd', km1(r.km), 2) + cell(2, 3, 'c bb', esc(r.obstacle), 2);
+    h += cell(2, 2, 'c bd', km1(r.km), 2) + cell(2, 3, 'c bb', esc(window.OL ? OL(r.obstacle) : r.obstacle), 2);
     h += `<div class="c b bd" style="grid-row:4;grid-column:1 / 3">Latitude:</div>` + cell(4, 3, 'c bb lnk', `<a href="${mapsUrl(r)}">${esc(tr(r.lat))}</a>`);
     h += `<div class="c b bd" style="grid-row:5;grid-column:1 / 3">Longitude:</div>` + cell(5, 3, 'c bb lnk', `<a href="${mapsUrl(r)}">${esc(tr(r.lon))}</a>`);
     h += `<div class="c b bb rem ${hl(r) ? 'hl-' + hl(r) : ''}" style="grid-row:6">REMARKS</div>`;

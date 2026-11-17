@@ -14,6 +14,7 @@
   const safe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Engel';
   const rootName = sv => safe(`${sv.project.start.name}-${sv.project.end.name} Arası Etüt Raporu`);
   const fileNameOf = sv => `${rootName(sv)} ${new Date().toISOString().slice(0, 10)}.zip`;
+  const lab = k => (g.OL ? g.OL(k) : k) || '';   // obstacle name as set in the survey layout
   const extOf = b => /png/.test(b && b.type) ? 'png' : 'jpg';
   const fmt = (v, d) => v == null || v === '' ? '' : Number(v).toLocaleString('tr-TR', { maximumFractionDigits: d == null ? 2 : d });
 
@@ -75,7 +76,7 @@
   function recordText(sv, r) {
     const L = [];
     L.push(`No: ${r.no}${r.flag ? ' (' + r.flag + ')' : ''}`);
-    L.push(`Engel: ${r.obstacle || '(tip seçilmedi)'}`);
+    L.push(`Engel: ${lab(r.obstacle) || '(tip seçilmedi)'}`);
     if (r.fields && r.fields.type) L.push(`Tip: ${r.fields.type}`);
     if (r.fields && r.fields.name) L.push(`Ad: ${r.fields.name}`);
     if (r.fields && r.fields.spans) L.push(`Açıklıklar: ${r.fields.spans}`);
@@ -113,7 +114,7 @@
     const files = {}, folder = {}, entries = [];
     const place = (list, base) => {
       for (const r of list) {
-        const nm = r.parentId && !r.solo ? safe(`${r.no} - ${r.flag || 'INFO'}${r.obstacle && r.obstacle !== r.flag ? ' - ' + r.obstacle : ''}`) : safe(`${r.no} - ${r.obstacle || 'Tip seçilmedi'}`);
+        const nm = r.parentId && !r.solo ? safe(`${r.no} - ${r.flag || 'INFO'}${r.obstacle && r.obstacle !== r.flag ? ' - ' + lab(r.obstacle) : ''}`) : safe(`${r.no} - ${lab(r.obstacle) || 'Tip seçilmedi'}`);
         folder[r.id] = (r.parentId && !r.solo && folder[r.parentId] ? folder[r.parentId] : base) + nm + '/';
       }
     };

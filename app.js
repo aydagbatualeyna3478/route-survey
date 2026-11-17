@@ -18,67 +18,17 @@
   })();
   document.documentElement.classList.toggle('field', FIELD);
 
-  const TYPES = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn',
-    'Inclination', 'Declination', 'Road Condition', 'Width Obstruction', 'Railroad Crossing', 'Port Gate', 'Satellite View', 'Drone View'];
-  const QUICK = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'Inclination', 'Declination'];
-  const WIDTH_TYPES = ['Port Gate', 'Width Obstruction'];   // these ask for W automatically; any other type can add it by hand
-  const CURVES = ['Right curve. Turning radius of the curve is suitable for planned transportation operation.', 'Left curve. Turning radius of the curve is suitable for planned transportation operation.'];
-  const SUB = {
-    'Overhead Structure': ['L Shape Signboard', 'Signboard', 'Bridge', 'Traffic Enforcement Camera', 'L Shape Traffic Light', 'Traffic Light', 'Pedestrian Bridge', 'Pipeline'],
-    'Overhead Cable': ['High Voltage Powerline', 'Medium Voltage Powerline', 'Low Voltage Powerline', 'Telephone Line', 'Railroad Communication Cable'],
-    'Bridge': ['Precast Concrete I Girder', 'Precast Concrete U Girder', 'Concrete Tee Beam', 'Concrete Flat Slab', 'Steel I Girder', 'Steel U Girder', 'Concrete Box Girder'],
-    'Culvert': ['Box', 'Arc', 'Pipe'],
-  };
-  // 3: obstacles with a width get one of these automatically when the width is entered (load width known)
-  const W_OK = 'The clearance is sufficient for planned transportation operation. No action required.';
-  const W_NO = 'The clearance is not sufficient for planned transportation operation.';
-  /* standard comments; each list opens with the app's own, followed by the wording used in the team's past reports
-     (Gaziantep–Kahramanmaraş and Best Transformer–İzmir Aliağa, Nov 2026) */
-  const PHRASES = {
-    'Overhead Cable': [R.TEXT.lvLift, R.TEXT.lvOff, R.TEXT.hvOff, R.TEXT.none,
-      'Cable height is enough for planned transportation operation. No action required.',
-      'The height of the cables is suitable for the planned operation. No action required.'],
-    'Overhead Structure': [R.TEXT.structure, 'Structure must be removed/bypassed.', 'Use right lane to pass. No action required.', 'Use left lane to pass. No action required.', R.TEXT.none,
-      'The heights and widths of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
-      'The heights of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
-      'The widths of the opposing L-shaped traffic lights are suitable for the planned transportation operation.',
-      'The clearance on the right side of the L-shape traffic light is enough for transportation.',
-      'The clearance between the L-shape traffic lights is enough for transportation. No action required.',
-      'The height of the traffic lights is suitable for the planned operation. No action required.',
-      'Signboard must be removed.'],
-    'Bridge': ['Bridge static analysis and evaluation is required.',
-      'Bridge static analysis and evaluation is required. Major cracks observed.',
-      'Bridge static analysis and evaluation is required. Minor cracks observed.', 'The bridge is in good condition.',
-      'Construction of a new bridge has commenced along the route. The height of bridge is currently unknown.'],
-    'Culvert': ['The culvert is good condition.', 'Bridge static analysis and evaluation is required.'],
-    'Left Turn': ['Turn left.', 'Turn left. Turning radius of the turn is suitable for planned transportation operation.', 'Turn left. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.',
-      'Turn left and take the second exit at the roundabout.', 'Turn left by roundabout turn.', 'Turn left and exit the freeway.'],
-    'Right Turn': ['Turn right.', 'Turn right. Turning radius of the turn is suitable for planned transportation operation.', 'Turn right. Turning radius of the turn is not suitable for planned transportation operation.', 'The opposite traffic direction must be used.',
-      'Turn right. The turn is suitable for planned transportation operation.', 'Concrete blocks must be removed for the right turn.', 'Turn right after exit of factory.', 'Turn right at the roundabout and enter the freeway.'],
-    'Curve': ['Left curve. No action required.', 'Right curve. No action required.', 'S Turn.', 'S Turn. Turning radius is suitable for transportation.'],
-    'U Turn': ['U turn. Turning radius of the turn is suitable for planned transportation operation.', 'U - Turn is suitable for the planned transportation operation.', 'U turn.', 'U Turn by roundabout turn.'],
-    'Roundabout Turn': ['Continue straight at the roundabout.', 'Take the second exit at the roundabout.', 'Enter the roundabout.'],
-    'Inclination': [4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => `The degree of the inclination is about ${n}%.`).concat('The degree of the inclination is about %.'),
-    'Declination': [4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => `The degree of the declination is about ${n}%.`).concat('The degree of the declination is about %.'),
-    'Road Condition': ['The road is in poor condition and requires minor civil works.', 'The opposite traffic direction must be used.',
-      'Road is good condition. No action required.', 'No action required.',
-      'The road narrows to a single lane due to roadworks.', 'Due to ongoing roadworks, the road narrows to a single lane.', 'The road is reduced to a single lane.',
-      'The road returns to two lanes as the roadworks have been completed.', 'Roadworks have been completed.', 'Start of road works at this point.',
-      'Start of roadworks at this point. The traffic cones will be removed to allow the transport convoy to proceed along the planned route.', 'The traffic cones will be removed.',
-      'Roadworks ahead, use the right lane.', 'Left lane must be used.', 'Move on the opposite direction.',
-      'The road has become a single carriageway with one lane in each direction.', 'The road has become a dual carriageway with two lanes in each direction.',
-      'Connect to the main road.', 'Back onto the main road.', 'Security check point. No action required.',
-      'Trees are extending into the roadway in some sections.', 'Automatic barrier.', 'Concrete barriers.',
-      'Construction of a new bridge has commenced along the route. The height of bridge is currently unknown.',
-      'The road condition is not suitable for the planned operation. The road must be widened up to the main road connection, and filling and compaction work must be carried out.'],
-    'Width Obstruction': [W_OK, W_NO, 'The clearance is sufficient for transport.'],
-    'Railroad Crossing': ['Railroad crossing must be organized based on the train schedule.'],
-    'Port Gate': [W_OK, W_NO, 'Entrance of the port gate.', 'Width of factory gate is suitable for planned transportation operation.', 'Gate dimensions is suitable for planned transportation operation.',
-      'Jobsite Gate is not suitable for planned transportation operation. Gate must be widened.', 'Exit of the jobsite gate to the opposite direction.', 'Terminal gate entrance.', 'Cargo unloading area.'],
-    'Satellite View': ['Satellite view of transportation simulation.'],
-    'Drone View': ['Drone view of transportation simulation.'],
-  };
-  for (const k of Object.keys(PHRASES)) if (!['Satellite View', 'Drone View'].includes(k) && !PHRASES[k].some(t => /^no action required\.?$/i.test(t))) PHRASES[k].push('No action required.');
+  /* obstacle types, sub-types and standard remarks come from the survey layout (catalog.js, editable in Ayarlar) */
+  const W_OK = Catalog.W_OK, W_NO = Catalog.W_NO, CURVES = Catalog.CURVES;
+  let TYPES, QUICK, WIDTH_TYPES, SUB, PHRASES, LAY;
+  const TD = k => Catalog.def(k) || {};
+  function applyLayout() {
+    LAY = Catalog.get(); const vis = LAY.types.filter(t => !t.hidden);
+    TYPES = vis.map(t => t.key); QUICK = vis.filter(t => t.quick).map(t => t.key); WIDTH_TYPES = LAY.types.filter(t => t.widths).map(t => t.key);
+    SUB = Object.fromEntries(LAY.types.filter(t => t.sub.length).map(t => [t.key, t.sub]));
+    PHRASES = Object.fromEntries(LAY.types.filter(t => t.phrases.length).map(t => [t.key, t.phrases]));
+  }
+  applyLayout();
   /* remarks the user typed themselves on obstacles of the same type in this survey, offered as options for the rest of it
      (derived from the records, so an edited or deleted text simply drops out) */
   function ownPhrases(sv, type, key, skipId) {
@@ -107,6 +57,7 @@
   const go = h => { location.hash = h; };
   const settingsOf = sv => ({ general: !!sv.project.general, minHeight: pn((sv.project.cargo && sv.project.cargo.height) ?? sv.project.minHeight) ?? 0, refLV: pn(sv.project.refLV), refMV: pn(sv.project.refMV), refHV: pn(sv.project.refHV) });
   const pinSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.6"/></svg>';
+  const gearSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   const userSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
   const mapsUrl = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`;
   const backSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
@@ -194,7 +145,8 @@
     toast('Kaydediliyor…');
     const parent = o.parent || null, name = o.name || '';
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
-    if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
+    if (TD(name).heights) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
+    if (TD(name).widths) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
     if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
@@ -369,7 +321,7 @@
       if (!c || c.value == null) return `<div class="mrow"><b>${t}</b><span class="hint">${c && c.skipped ? 'yalnız bypass edilen engellerde' : 'henüz girilmedi'}</span></div>`;
       const r = c.rec, low = limit && c.value < limit;
       return `<button class="mrow ${low ? 'low' : ''}" data-go="#/r/${sv.id}/${r.id}" title="Engeli aç"><b>${t}</b><span class="v">${fmt(c.value)} m</span>${low ? `<span class="tag bad">${word}</span>` : ''}
-        <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(r.obstacle || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen hariç` : ''}</span></button>`;
+        <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(OL(r.obstacle) || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen hariç` : ''}</span></button>`;
     };
     return `<div class="cargo minh">${line('heights', 'Kritik min. H', Number(cg.height) || null, 'yükten alçak')}${line('widths', 'Kritik min. W', Number(cg.width) || null, 'yükten dar')}</div>`;
   };
@@ -417,7 +369,7 @@
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
-    $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
+    $app.innerHTML = `${bar('Etütlerim', null, `${FIELD ? '' : '<button class="btn" id="openEtut">Etüt dosyası aç</button>'}<button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" data-go="#/settings" title="Ayarlar" aria-label="Ayarlar">${gearSvg} Ayarlar</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
       <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Bu filtrelere uyan etüt yok.</div>' : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="card bk" id="bkline" style="margin-top:auto"></div>
       <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
@@ -685,7 +637,7 @@
       const u = await blobUrl(r.photoId), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
       return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
-        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(r.obstacle) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(OL(r.obstacle)) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">${r.latDec == null ? '<b style="color:var(--warntx)">konum yok</b>' : r.kmManual != null ? 'KM ' + fmt(r.kmManual, 1) : ''}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
         ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<span class="bkic" data-bkr="${r.id}" aria-hidden="true"></span><button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
     };
@@ -718,8 +670,8 @@
           <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM'ler rapor oluşturulurken son sıraya göre hesaplanır</span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
           <div class="hint">Engele dokununca seçilir: yeni engeller seçili engelin arkasına eklenir. Düzenlemek, Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
-          ${pick ? (() => { const pr = recs.find(r => r.id === pick) || archivedRecords(sv).find(r => r.id === pick); return pr ? `<div class="note w row" style="justify-content:space-between;gap:10px"><span>Yeni engeller <b>${pr.no} · ${esc(pr.obstacle || 'Tip seçilmedi')}</b> engelinin arkasına eklenecek.</span><button class="btn sm" data-act="toend" style="min-width:0">Sona ekle</button></div>` : ''; })() : ''}
-          ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(bp.obstacle)}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
+          ${pick ? (() => { const pr = recs.find(r => r.id === pick) || archivedRecords(sv).find(r => r.id === pick); return pr ? `<div class="note w row" style="justify-content:space-between;gap:10px"><span>Yeni engeller <b>${pr.no} · ${esc(OL(pr.obstacle) || 'Tip seçilmedi')}</b> engelinin arkasına eklenecek.</span><button class="btn sm" data-act="toend" style="min-width:0">Sona ekle</button></div>` : ''; })() : ''}
+          ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(OL(bp.obstacle))}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb(`data-go="#/add/${sv.id}?mode=sat"`, '', imgSvg, 'Uydu Fotoğrafı Ekle')
@@ -1023,11 +975,11 @@
     const title = mode === 'sat' ? 'Uydu fotoğrafı ekle' : mode === 'nophoto' ? 'Fotoğrafsız engel ekle' : parent ? `Yeni kayıt · ${parent.no}-… ${flag}` : 'Yeni engel ekle';
     const draw = () => {
       const list = all ? TYPES : QUICK.concat(['Satellite View', 'Drone View']);
-      $app.innerHTML = `${bar(title, `#/s/${sv.id}`, parent && mode !== 'sat' ? `<span class="tag sub">${parent.no} · ${esc(parent.obstacle)} → ${flag}</span>` : '')}
+      $app.innerHTML = `${bar(title, `#/s/${sv.id}`, parent && mode !== 'sat' ? `<span class="tag sub">${parent.no} · ${esc(OL(parent.obstacle))} → ${flag}</span>` : '')}
       <div class="split">
         <div class="pane">
           <div class="sec">Engel tipi</div>
-          <div class="chips">${[...new Set(list.concat(custom))].map(t => `<button class="chip ${t === type ? 'on' : ''}" data-type="${esc(t)}">${esc(t)}</button>`).join('')}
+          <div class="chips">${[...new Set(list.concat(custom))].map(t => `<button class="chip ${t === type ? 'on' : ''}" data-type="${esc(t)}">${esc(OL(t))}</button>`).join('')}
             ${all ? '' : '<button class="chip" data-all="1">Tümü…</button>'}<button class="chip dash" data-custom="1">+ Kendim yazacağım</button></div>
           <label class="f" id="cw" style="${customName ? '' : 'display:none'}">Engel adı (raporda OBSTACLE hücresine yazılır)<input id="ct" value="${esc(customName)}" placeholder="ör. Industrial Area Gate"></label>
           ${mode === 'photo' ? '<div class="hint">Tipi seçmeden de çekebilirsin; sonraki ekranda değiştirilebilir.</div>' : ''}
@@ -1036,7 +988,7 @@
           ${mode === 'nophoto' ? `<div class="sec">Fotoğrafsız kayıt</div><span class="hint">Konum ve KM şu anki GPS'ten alınır. Fotoğrafı sonradan da ekleyebilirsin.</span>
               <button class="btn red" id="nop" style="min-height:90px;font-size:18px">Kaydı oluştur</button>`
             : mode === 'sat' ? `<div class="sec">Uydu / drone görüntüsü</div>
-              ${mains.length ? `<label class="f">Hangi engele ait?<select id="par">${mains.slice().reverse().map(m => `<option value="${m.id}" ${parent && parent.id === m.id ? 'selected' : ''}>${m.no} · ${esc(m.obstacle)}</option>`).join('')}</select></label>
+              ${mains.length ? `<label class="f">Hangi engele ait?<select id="par">${mains.slice().reverse().map(m => `<option value="${m.id}" ${parent && parent.id === m.id ? 'selected' : ''}>${m.no} · ${esc(OL(m.obstacle))}</option>`).join('')}</select></label>
                 <span class="hint">Seçilen engelin altına INFO olarak eklenir; konum ve KM o engelden alınır.</span>` : '<span class="hint">Henüz engel yok; yeni kayıt olarak eklenir.</span>'}
               <button class="btn red" id="satp" style="min-height:90px;font-size:18px">${imgSvg} Boş uydu kaydı oluştur</button>
               <span class="hint">Fotoğraf çekilmez. Kayıt boş bir görselle oluşur; simülasyon görüntüsünü ofiste engel ekranındaki "Fotoğraf ekle" ile eklersiniz.</span>`
@@ -1059,7 +1011,8 @@
         toast('Kaydediliyor…');
         const name = (ct.value || '').trim() || type || 'Road Condition';
         const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag, obstacle: name, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
-        if (/Overhead/.test(name)) rec.heights = [{ label: 'H', value: null }];
+        if (TD(name).heights) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
+        if (TD(name).widths) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
         if (file) { rec.photoId = await DB.putBlob(await to43(file)); rec.aspect = 4 / 3; }
         const pos = useGps ? await GPS.current() : null;
         if (pos) {
@@ -1104,8 +1057,8 @@
       const lim = limit();
       const hrow = (h, i) => {
         const v = pn(h.value), cls = st.general || v == null ? '' : v < lim ? 'bad' : 'ok';
-        const opts = ['H', 'H1', 'H2', 'H3', 'HL', 'HM', 'HR'];
-        return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:#fff">
+        const opts = LAY.heightLabels;
+        return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
             <option value="" ${h.label ? '' : 'selected'}>Seç</option>${opts.map(o => `<option ${o === h.label ? 'selected' : ''}>${o}</option>`).join('')}</select><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${st.general || v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
           ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>`;
@@ -1114,14 +1067,14 @@
       const cw = st.general ? null : pn((sv.project.cargo || {}).width);
       const wrow = (w, i) => {
         const v = pn(w.value), cls = cw == null || v == null ? '' : v < cw ? 'bad' : 'ok';
-        return `<div class="hrow ${cls}"><select class="lab" data-wl="${i}" aria-label="Genişlik etiketi" style="width:84px;padding:8px;border:1px solid ${w.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:#fff">
-            <option value="" ${w.label ? '' : 'selected'}>Seç</option>${['W', 'W1', 'W2', 'W3'].map(o => `<option ${o === w.label ? 'selected' : ''}>${o}</option>`).join('')}</select>
+        return `<div class="hrow ${cls}"><select class="lab" data-wl="${i}" aria-label="Genişlik etiketi" style="width:84px;padding:8px;border:1px solid ${w.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
+            <option value="" ${w.label ? '' : 'selected'}>Seç</option>${LAY.widthLabels.map(o => `<option ${o === w.label ? 'selected' : ''}>${o}</option>`).join('')}</select>
           <input data-wv="${i}" inputmode="decimal" value="${esc(fmt(w.value))}" placeholder="m" aria-label="Genişlik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${cls === 'bad' ? fmt(cw - v, 2) + ' m dar' : cls === 'ok' ? 'Uygun' : ''}</span>
           <button class="btn sm" data-wdel="${i}" aria-label="Sil">×</button></div>`;
       };
       const sw = (key, name, col, on) => `<button class="sw ${on ? 'on' : ''}" data-col="${key}"><i style="background:${col}"></i>${name}</button>`;
-      $app.innerHTML = `${bar(r.obstacle || 'Yeni engel', `#/s/${sv.id}`, `${inArc ? '<span class="tag warn" style="font-size:13px">Arşivde · rapora girmez</span>' : ''}<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:#E8EEF5;color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
+      $app.innerHTML = `${bar(OL(r.obstacle) || 'Yeni engel', `#/s/${sv.id}`, `${inArc ? '<span class="tag warn" style="font-size:13px">Arşivde · rapora girmez</span>' : ''}<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:var(--sel);color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split rec3">
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">${INS}` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
@@ -1141,18 +1094,17 @@
         </div>
         <div class="pane">
           <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel tipi' : 'Engel tipini seç'}</div>
-          <div class="chips" id="tys">${[...new Set(TYPES.concat(sv.records.map(x => x.obstacle)).filter(Boolean))].map(t => `<button class="chip ${t === r.obstacle ? 'on' : ''}" data-type="${esc(t)}" style="min-height:40px;padding:8px 13px;font-size:14px">${esc(t)}</button>`).join('')}
+          <div class="chips" id="tys">${[...new Set(TYPES.concat(sv.records.map(x => x.obstacle)).filter(Boolean))].map(t => `<button class="chip ${t === r.obstacle ? 'on' : ''}" data-type="${esc(t)}" style="min-height:40px;padding:8px 13px;font-size:14px">${esc(OL(t))}</button>`).join('')}
             <button class="chip dash" data-tcustom="1" style="min-height:40px;padding:8px 13px;font-size:14px">+ Kendim yazacağım</button></div>
           <label class="f" id="cnw" style="display:none">Engel adı (raporda OBSTACLE hücresine yazılır)<input id="cnv" placeholder="ör. Industrial Area Gate"></label>
-          ${sub ? `<div class="sec">${isOH ? (r.obstacle === 'Overhead Cable' ? 'Line type' : 'Structure type') : isBr ? 'Bridge type' : 'Culvert type'}</div>
+          ${sub ? `<div class="sec">${esc(TD(r.obstacle).subLabel || 'Type')}</div>
             <div class="chips">${sub.map(t => `<button class="chip ${r.fields.type === t ? 'on' : ''}" data-sub="${esc(t)}">${esc(t.replace(' Powerline', ''))}</button>`).join('')}</div>
             <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
-          ${isBr ? `<div class="g2"><label class="f">Bridge name<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label><label class="f">Bridge spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label></div>` : ''}
-          ${isCu ? `<label class="f">Culvert spans<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 1x5m"></label>` : ''}
+          ${TD(r.obstacle).nameField || TD(r.obstacle).spansField ? `<div class="g2">${TD(r.obstacle).nameField ? `<label class="f">${esc(TD(r.obstacle).nameField)}<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label>` : ''}${TD(r.obstacle).spansField ? `<label class="f">${esc(TD(r.obstacle).spansField)}<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label>` : ''}</div>` : ''}
         </div>
         <div class="pane">
           ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
-          ${isOH ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
+          ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
           ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
@@ -1189,7 +1141,7 @@
       document.querySelectorAll('[data-hv]').forEach(i => i.addEventListener('change', () => { read(); autoAct(); draw(); }));
       if (g('tt')) g('tt').addEventListener('change', () => { read(); autoAct(); draw(); });
       const setType = t => { read(); r.obstacle = t; r.fields = {}; r.actionAuto = true;
-        if (/Overhead/.test(t) && !r.heights.length) r.heights = [{ label: 'H', value: null }];
+        if (TD(t).heights && !r.heights.length) r.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
         if (WIDTH_TYPES.includes(t) && !(r.widths || []).length) r.widths = [{ label: 'W', value: null }];
         if (!r.remarks && PHRASES[t] && PHRASES[t].length === 1 && !/%/.test(PHRASES[t][0]) && !/Overhead|Bridge|Culvert/.test(t)) r.remarks = PHRASES[t][0];
         DB.putSurvey(sv).then(() => V.record(id, rid)); };
@@ -1248,9 +1200,9 @@
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
         if (p) applyPh(+p.dataset.ph);
-        if (e.target.closest('#phall')) { read(); sheet(`${r.obstacle} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) })).concat(OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) })))); }
+        if (e.target.closest('#phall')) { read(); sheet(`${OL(r.obstacle)} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) })).concat(OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) })))); }
         const ow = e.target.closest('[data-own]'); if (ow) applyOwn(OWN[+ow.dataset.own]);
-        if (e.target.closest('#ownall')) { read(); sheet(`${r.obstacle} · bu etütte yazdıkların`, OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) }))); }
+        if (e.target.closest('#ownall')) { read(); sheet(`${OL(r.obstacle)} · bu etütte yazdıkların`, OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) }))); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
         const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
@@ -1269,7 +1221,7 @@
           const b = list[i], x = await blobUrl(b);
           h += `<button class="pc ${b === chosen ? 'on' : ''}" data-c="${b}"><img src="${x}" alt="Fotoğraf ${i + 1}"><span class="lb">${b === chosen ? 'Raporda kullanılacak' : i + 1}</span>${b !== r.photoId ? `<span class="dl" data-del="${b}" role="button" aria-label="Bu fotoğrafı sil">×</span>` : ''}</button>`;
         }
-        d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(r.obstacle || 'Engel')} — raporda kullanılacak fotoğrafı seç</b><span style="font-size:13px;color:#D1D5DB">${list.length} fotoğraf</span></div>
+        d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(OL(r.obstacle) || 'Engel')} — raporda kullanılacak fotoğrafı seç</b><span style="font-size:13px;color:#D1D5DB">${list.length} fotoğraf</span></div>
           <div class="ph-grid">${h}</div>
           <div class="ph-foot"><button class="btn" data-x="1" style="background:#1F2937;color:#fff;border-color:#374151">Vazgeç</button>
             <button class="btn" id="pmore" style="background:#1F2937;color:#fff;border-color:#374151">${camSvg} Daha çek</button><span style="flex:1"></span>
@@ -1350,7 +1302,7 @@
     const where = x => x.status === 'bypass' ? 'bypass güzergahında' : x.status === 'bypassed' ? 'yük bu engelin bypass\'ından geçer' : x.status === 'info' ? 'info kaydı' : 'ana güzergahta';
     const item = (x, top, extra, low) => `<button class="citem ${x.counted ? '' : 'off'} ${top ? 'top' : ''}" data-go="#/r/${sv.id}/${x.rec.id}">
         <span class="cv ${low ? 'low' : ''}">${fmt(x.value)} m</span>
-        <span class="ct"><b>${esc(x.rec.no)} · ${esc(x.rec.obstacle || 'Tip seçilmedi')}</b>
+        <span class="ct"><b>${esc(x.rec.no)} · ${esc(OL(x.rec.obstacle) || 'Tip seçilmedi')}</b>
           <span class="hint">${esc(x.all.map(h => `${h.label || ''} ${fmt(Number(h.value))}`).join(' · '))}${x.rec.fields && x.rec.fields.type ? ' · ' + esc(x.rec.fields.type) : ''} · ${where(x)}</span>${extra || ''}</span>
         <span class="cb">${top ? '<span class="tag bad">KRİTİK</span>' : ''}${ST[x.status]}</span></button>`;
     const col = (list, limit) => { let first = true; return list.map(x => { const top = first && x.counted; if (top) first = false; return item(x, top, '', limit && x.counted && x.value < limit); }).join('') || '<div class="empty">Kayıt yok</div>'; };
@@ -1494,11 +1446,11 @@
     const lg = { company: await blobUrl(await DB.getSetting('companyLogo')) || 'assets/logo_company.jpg', partner: await blobUrl(await DB.getSetting('partnerLogo')) || 'assets/logo_cjicm.jpg', client1: await blobUrl(sv.logos.client1), client2: await blobUrl(sv.logos.client2) };
     const hf = (k, t, ph) => `<label class="f">${t}<input data-h="${k}" value="${esc(H[k] || '')}" ${ph ? `placeholder="${ph}"` : ''} style="${NEED.includes(k) && !String(H[k] || '').trim() ? 'border:2px solid var(--red)' : ''}"></label>`;
     const lslot = (k, t) => `<label class="logo" style="cursor:pointer"><b>${t}</b><span class="pv">${lg[k] ? `<img src="${lg[k]}" alt="">` : imgSvg + ' Yükle'}</span><span class="hint">Değiştirmek için dokun</span><input class="hid" type="file" accept="image/*" data-r2logo="${k}"></label>`;
-    const ropt = (name, v, t, cur) => `<label class="row" style="border:${cur === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:8px 10px;font-size:14px;background:#fff"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
+    const ropt = (name, v, t, cur) => `<label class="row" style="border:${cur === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:8px 10px;font-size:14px;background:var(--card2)"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
     const nf = recs.filter(r => r.flag === 'BYPASS').length, ni = recs.filter(r => r.flag === 'INFO').length;
     const miss = recs.filter(r => !r.photoId).length, nopos = recs.filter(r => r.latDec == null).length;
     c.bridge = c.bridge || 'required'; c.road = c.road || 'paved_ok';
-    const opt = (k, v, t) => `<label class="row" style="border:${c[k] === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:#fff"><input type="radio" name="${k}" value="${v}" ${c[k] === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
+    const opt = (k, v, t) => `<label class="row" style="border:${c[k] === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="${k}" value="${v}" ${c[k] === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
     $app.innerHTML = `${bar('Rapor oluştur', `#/s/${id}`, cargoBox(sv.project))}
     <div class="split even">
       <div class="pane">
@@ -1526,7 +1478,7 @@
       <div class="pane">
         <div class="card"><b>Haritalar (yeni taslak)</b>
           <span class="hint">Her engel sayfasında: güzergahın tamamı üzerinde engelin yeri ve engelin yakın uydu görüntüsü. Rapor açılırken internetten alınır.</span>
-          ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:#fff"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (anahtarsız; taslaktaki uydu görüntüsü gibi)' : 'Google Maps (API anahtarı gerekir)'}</label>`).join('')}
+          ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (anahtarsız; taslaktaki uydu görüntüsü gibi)' : 'Google Maps (API anahtarı gerekir)'}</label>`).join('')}
           <label class="f" style="${mp.provider === 'google' ? '' : 'display:none'}">Google Maps API anahtarı<input id="gkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label></div>
         <div class="card"><b>4.1 Bridge</b>${opt('bridge', 'done_ok', 'Statik analiz yapıldı, tüm köprüler uygun')}${opt('bridge', 'required', 'Statik analiz gerekli')}${opt('bridge', 'custom', 'Kendi metnimi yazacağım')}
           <label class="f" style="${c.bridge === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="bt" rows="3">${esc(c.bridgeText || '')}</textarea></label></div>
@@ -1567,6 +1519,117 @@
     document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
 
+
+  // ----- settings (only from the home screen): theme, maps, survey layout -----
+  async function saveText(name, text) {   // a text file: tablet → Belgeler/Etütler + share sheet; computer → save dialog / download
+    if (window.Capacitor && Capacitor.nativePromise) {
+      try {
+        await Capacitor.nativePromise('Filesystem', 'writeFile', { path: 'Etütler/' + name, directory: 'DOCUMENTS', data: text, encoding: 'utf8', recursive: true });
+        const u = await Capacitor.nativePromise('Filesystem', 'getUri', { path: 'Etütler/' + name, directory: 'DOCUMENTS' });
+        try { await Capacitor.nativePromise('Share', 'share', { title: name, files: [u.uri], dialogTitle: 'Etüt düzenini gönder' }); } catch (e) {}
+        return toast('Kaydedildi: Belgeler/Etütler/' + name);
+      } catch (e) { /* fall through to download */ }
+    }
+    const blob = new Blob(['﻿' + text], { type: 'text/plain;charset=utf-8' });
+    if (window.showSaveFilePicker) {
+      try { const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Etüt düzeni', accept: { 'text/plain': ['.txt'] } }] }); const w = await h.createWritable(); await w.write(blob); await w.close(); return toast('Kaydedildi: ' + h.name); }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  const theme = () => { try { return localStorage.getItem('rs-theme') || 'light'; } catch (e) { return 'light'; } };
+  function setTheme(t) {
+    try { localStorage.setItem('rs-theme', t); } catch (e) {}
+    const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', dark);
+  }
+  let SET = { tab: 'layout', key: null, draft: null };
+  V.settings = async () => {
+    const mp = Object.assign({ provider: 'esri', key: '', routeType: 'roadmap', zoom: 18 }, await DB.getSetting('maps'));
+    SET.draft = JSON.parse(JSON.stringify(Catalog.get()));
+    const D = SET.draft;
+    if (!SET.key || !D.types.some(t => t.key === SET.key)) SET.key = D.types[0].key;
+    const T = D.types.find(t => t.key === SET.key), ti = D.types.indexOf(T);
+    const tabs = [['layout', 'Etüt düzeni (engel tipleri)'], ['look', 'Görünüm'], ['maps', 'Haritalar']];
+    const chipT = (k, on, l) => `<button class="chip ${on ? 'on' : ''}" data-tg="${k}" style="border-radius:12px">${on ? '✓ ' : ''}${l}</button>`;
+    const item = t => `<button class="citem ${t.key === SET.key ? 'on' : ''}" data-tk="${esc(t.key)}" style="${t.key === SET.key ? 'outline:3px solid var(--navy);' : ''}${t.hidden ? 'opacity:.55;' : ''}">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column"><b style="font-size:15px">${esc(t.label)}</b>${t.label !== t.key ? `<span class="hint">standart: ${esc(t.key)}</span>` : ''}</span>
+        <span class="row" style="gap:4px">${t.quick ? '<span class="tag ok">Hızlı</span>' : ''}${t.heights ? '<span class="tag">H</span>' : ''}${t.widths ? '<span class="tag">W</span>' : ''}${t.hidden ? '<span class="tag warn">Gizli</span>' : ''}${t.builtin ? '' : '<span class="tag sub">Yeni</span>'}</span></button>`;
+    const layoutPane = `<div class="split even" style="flex:1;min-height:0">
+        <div class="pane" style="gap:10px">
+          <div class="g3"><label class="f">Düzen adı<input id="lname" value="${esc(D.name)}"></label><label class="f">Yükseklik etiketleri<input id="lhl" value="${esc(D.heightLabels.join(', '))}"></label><label class="f">Genişlik etiketleri<input id="lwl" value="${esc(D.widthLabels.join(', '))}"></label></div>
+          <div class="row" style="justify-content:space-between"><b style="color:var(--navy)">Engel tipleri · ${D.types.length}</b><button class="btn sm" id="tnew">+ Yeni engel tipi</button></div>
+          <div style="display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;flex:1">${D.types.map(item).join('')}</div>
+        </div>
+        <div class="pane" style="gap:12px">
+          <div class="row" style="justify-content:space-between"><b style="font-size:18px">${esc(T.label)}</b><span class="row" style="gap:6px"><button class="btn sm" data-mv="-1" ${ti ? '' : 'disabled'} aria-label="Yukarı">▲</button><button class="btn sm" data-mv="1" ${ti < D.types.length - 1 ? '' : 'disabled'} aria-label="Aşağı">▼</button>${T.builtin ? '' : '<button class="btn sm" id="tdel" style="color:var(--badtx)">Sil</button>'}</span></div>
+          ${T.builtin ? `<span class="hint">Standart tip (<b>${esc(T.key)}</b>). Adını ve içeriğini değiştirebilirsin; uygulamanın kuralları (enerji hattı kontrolü, raporun sonuç bölümü) bu tipe bağlı kalır. Silmek yerine gizleyebilirsin.</span>` : '<span class="hint">Senin eklediğin tip.</span>'}
+          <label class="f">Görünen ad (uygulamada ve raporda OBSTACLE)<input data-f="label" value="${esc(T.label)}"></label>
+          <div class="row" style="flex-wrap:wrap;gap:8px">${chipT('quick', T.quick, 'Hızlı listede')}${chipT('heights', T.heights, 'Yükseklik (H) girişi')}${chipT('widths', T.widths, 'Genişlik (W) girişi')}${chipT('hidden', T.hidden, 'Gizli')}</div>
+          <div class="g2"><label class="f">Tip başlığı (raporda, ör. Line Type / Hat Tipi)<input data-f="subLabel" value="${esc(T.subLabel)}"></label><span></span></div>
+          <label class="f">Tip seçenekleri (her satıra bir tane)<textarea data-f="sub" rows="4">${esc(T.sub.join('\n'))}</textarea></label>
+          <div class="g2"><label class="f">Ad alanı (boş = yok, ör. Bridge Name)<input data-f="nameField" value="${esc(T.nameField)}"></label><label class="f">Açıklık alanı (boş = yok, ör. Spans)<input data-f="spansField" value="${esc(T.spansField)}"></label></div>
+          <label class="f">Hazır cümleler / remarks (her satıra bir cümle)<textarea data-f="phrases" rows="8">${esc(T.phrases.join('\n'))}</textarea></label>
+        </div></div>`;
+    const lookPane = `<div class="pane" style="max-width:720px;gap:14px"><div class="sec">Tema</div>
+        <div class="g3">${[['light', 'Açık tema'], ['dark', 'Koyu tema'], ['auto', 'Cihaza göre']].map(([k, l]) => `<button class="chip ${theme() === k ? 'on' : ''}" data-theme="${k}" style="border-radius:12px;min-height:64px">${l}</button>`).join('')}</div>
+        <span class="hint">Seçim bu cihazda hatırlanır. Raporlar ve PDF her zaman beyaz zeminle çıkar.</span></div>`;
+    const mapsPane = `<div class="pane" style="max-width:860px;gap:14px"><div class="sec">Rapordaki uydu ve güzergah görüntüleri</div>
+        ${[['google', 'Google Maps (API anahtarı gerekir)'], ['esri', 'Esri uydu (anahtarsız)']].map(([v, l]) => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:12px;background:var(--card2)"><input type="radio" name="mprov" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:20px;height:20px">${l}</label>`).join('')}
+        <label class="f">Google Maps API anahtarı (Maps Static API açık olmalı)<input id="mkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label>
+        <div class="g2"><label class="f">Engel yakın görüntüsü yakınlığı<select id="mzoom">${[16, 17, 18, 19, 20].map(z => `<option value="${z}" ${+mp.zoom === z ? 'selected' : ''}>${z}${z === 18 ? ' (önerilen)' : ''}</option>`).join('')}</select></label>
+          <label class="f">Güzergah haritası<select id="mrt"><option value="roadmap" ${mp.routeType !== 'satellite' ? 'selected' : ''}>Yol haritası (örnekteki gibi)</option><option value="satellite" ${mp.routeType === 'satellite' ? 'selected' : ''}>Uydu</option></select></label></div>
+        <span class="hint">Güzergah haritası: ilk engelden son engele güzergah çizgisi, başlangıç S ve bitiş E işareti, diğer engeller küçük mavi, sayfadaki engel kırmızı O işaretiyle gösterilir. Google seçili olup anahtar girilmezse rapor açılmaz.</span></div>`;
+    $app.innerHTML = `${bar('Ayarlar', '#/')}
+      <div class="full" style="gap:12px"><div class="row" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="btn ${SET.tab === k ? 'pri' : ''}" data-stab="${k}">${l}</button>`).join('')}</div>
+      ${SET.tab === 'layout' ? layoutPane : SET.tab === 'look' ? lookPane : mapsPane}</div>
+      ${SET.tab === 'layout' ? `<div class="foot" style="justify-content:space-between"><span class="row" style="gap:10px"><button class="btn" id="lreset" style="min-width:0">Standarda dön</button><span class="hint" id="lsaved">Değişiklikler kendiliğinden kaydedilir.</span></span>
+        <span class="row" style="gap:10px"><label class="btn" style="cursor:pointer">İçe aktar (.txt)<input class="hid" type="file" accept=".txt,.json,text/plain,application/json" id="limp"></label><button class="btn pri" id="lexp">Dışa aktar (.txt)</button></span></div>` : ''}`;
+    let tmr = null;
+    const persist = () => { Catalog.setNow(D); applyLayout(); clearTimeout(tmr); const el = document.getElementById('lsaved'); if (el) el.textContent = 'Kaydediliyor…'; tmr = setTimeout(async () => { await Catalog.save(D); applyLayout(); const e2 = document.getElementById('lsaved'); if (e2) e2.textContent = 'Kaydedildi.'; }, 500); };
+    $app.onclick = async e => {
+      const t = e.target;
+      const st = t.closest('[data-stab]'); if (st) { SET.tab = st.dataset.stab; return V.settings(); }
+      const th = t.closest('[data-theme]'); if (th) { setTheme(th.dataset.theme); return V.settings(); }
+      const tk = t.closest('[data-tk]'); if (tk) { SET.key = tk.dataset.tk; return V.settings(); }
+      const tg = t.closest('[data-tg]'); if (tg) { T[tg.dataset.tg] = !T[tg.dataset.tg]; persist(); return V.settings(); }
+      const mv = t.closest('[data-mv]'); if (mv) { const j = ti + +mv.dataset.mv; D.types.splice(ti, 1); D.types.splice(j, 0, T); persist(); return V.settings(); }
+      if (t.closest('#tnew')) {
+        let n = 1, key; do { key = `Yeni engel ${n++}`; } while (D.types.some(x => x.key === key));
+        D.types.push({ key, label: key, builtin: false, hidden: false, quick: true, heights: false, widths: false, subLabel: 'Type', sub: [], nameField: '', spansField: '', phrases: ['No action required.'] });
+        SET.key = key; persist(); return V.settings();
+      }
+      if (t.closest('#tdel')) { const b = t.closest('#tdel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Sil'; return; } D.types.splice(ti, 1); SET.key = null; persist(); return V.settings(); }
+      if (t.closest('#lreset')) { const b = t.closest('#lreset'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Tüm değişiklikler silinir'; return; } SET.draft = Catalog.defaults(); SET.key = null; await Catalog.save(SET.draft); applyLayout(); toast('Standart düzene dönüldü'); return V.settings(); }
+      if (t.closest('#lexp')) { await Catalog.save(D); applyLayout(); return saveText(`Etüt düzeni - ${(D.name || 'düzen').replace(/[\\/:*?"<>|]+/g, '-')}.txt`, Catalog.toText(D)); }
+    };
+    $app.oninput = e => {
+      const t = e.target;
+      if (t.dataset.f) {
+        const k = t.dataset.f;
+        T[k] = k === 'sub' || k === 'phrases' ? t.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean) : t.value;
+        if (k === 'label') { const it = document.querySelector(`[data-tk="${CSS.escape(T.key)}"] b`); if (it) it.textContent = t.value; }
+        return persist();
+      }
+      if (t.id === 'lname') { D.name = t.value; return persist(); }
+      if (t.id === 'lhl') { D.heightLabels = t.value.split(',').map(x => x.trim()).filter(Boolean); return persist(); }
+      if (t.id === 'lwl') { D.widthLabels = t.value.split(',').map(x => x.trim()).filter(Boolean); return persist(); }
+    };
+    $app.onchange = async e => {
+      const t = e.target;
+      if (t.id === 'limp' && t.files[0]) {
+        try { const L = Catalog.fromText(await t.files[0].text()); SET.draft = JSON.parse(JSON.stringify(L)); SET.key = null; await Catalog.save(L); applyLayout(); toast(`"${L.name}" düzeni yüklendi`); }
+        catch (er) { toast(er.message); }
+        return V.settings();
+      }
+      if (t.name === 'mprov' || t.id === 'mzoom' || t.id === 'mrt') {
+        if (t.name === 'mprov') mp.provider = t.value; if (t.id === 'mzoom') mp.zoom = +t.value; if (t.id === 'mrt') mp.routeType = t.value;
+        await DB.setSetting('maps', mp); return V.settings();
+      }
+      if (t.id === 'mkey') { mp.key = t.value.trim(); if (mp.key && mp.provider !== 'google') mp.provider = 'google'; await DB.setSetting('maps', mp); toast('Anahtar kaydedildi'); return V.settings(); }
+    };
+  };
+
   // ---------- router ----------
   document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
   async function route() {
@@ -1585,10 +1648,11 @@
       else if (p[0] === 'a') await V.annotate(p[1], p[2]);
       else if (p[0] === 'rep') await V.report(p[1]);
       else if (p[0] === 'admin') await Auth.adminView(bar);
+      else if (p[0] === 'settings') await V.settings();
       else go('#/');
     } catch (err) { console.error(err); $app.innerHTML = `${bar('Hata', '#/')}<div class="full"><div class="note w">Beklenmeyen bir hata oluştu: ${esc(err.message)}</div></div>`; }
   }
   // sign-in, authenticator and device approval come first (auth.js); the app starts once this device is allowed
-  Auth.start(async () => { try { if (!window.__bk) { window.__bk = 1; await Backup.init(); } } catch (e) { console.error(e); } window.removeEventListener('hashchange', route); window.addEventListener('hashchange', route); route(); });
+  Auth.start(async () => { try { await Catalog.load(); applyLayout(); } catch (e) { console.error(e); } try { if (!window.__bk) { window.__bk = 1; await Backup.init(); } } catch (e) { console.error(e); } window.removeEventListener('hashchange', route); window.addEventListener('hashchange', route); route(); });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Capacitor) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
