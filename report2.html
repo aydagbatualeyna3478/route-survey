@@ -17,11 +17,11 @@
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=41"></script>
+<script src="auth.js?v=42"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=41"></script>
-<script src="rules.js?v=41"></script>
-<script src="catalog.js?v=41"></script>
+<script src="db.js?v=42"></script>
+<script src="rules.js?v=42"></script>
+<script src="catalog.js?v=42"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -37,8 +37,34 @@
   const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
   const url = async bid => (await DB.blobUrl(bid)) || null;
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
-  const routeLine = routeKm(sv);            // KM of every record from the final order
+  let routeLine = routeKm(sv);              // KM of every record from the final order
   const recs = orderedRecords(sv);           // archived records are left out
+
+  /* the route drawn on the maps follows the roads: the obstacles (in report order, bypasses included, INFO left out)
+     are joined by the driving route of OSRM (OpenStreetMap road data, no key). Kept per survey, so the same route is
+     not asked again; without internet the straight line between obstacles is used. */
+  async function roadRoute() {
+    const pts = []; for (const r of recs) { if (r.latDec == null || r.flag === 'INFO') continue; const p = [+r.latDec.toFixed(5), +r.lonDec.toFixed(5)]; const q = pts[pts.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) pts.push(p); }
+    if (pts.length < 2) return null;
+    const key = 'road:' + sv.id, sig = pts.map(p => p.join(',')).join(';');
+    const kept = await DB.getSetting(key); if (kept && kept.sig === sig) return kept.line;
+    msg.textContent = 'Yol güzergahı hesaplanıyor…';
+    const out = [], N = 40;
+    try {
+      for (let i = 0; i < pts.length - 1; i += N - 1) {
+        const part = pts.slice(i, i + N), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
+        const u = `https://router.project-osrm.org/route/v1/driving/${part.map(p => `${p[1]},${p[0]}`).join(';')}?overview=full&geometries=geojson&continue_straight=true`;
+        const j = await fetch(u, { signal: ctl.signal }).then(r => r.json()).finally(() => clearTimeout(t));
+        if (!j || j.code !== 'Ok' || !j.routes || !j.routes[0]) throw new Error(j && j.code || 'route');
+        const c = j.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
+        out.push(...(out.length ? c.slice(1) : c));
+        if (i + N < pts.length) await new Promise(r => setTimeout(r, 1100));   // the public server allows about one request a second
+      }
+    } catch (e) { console.warn('road route', e); return null; }
+    try { await DB.setSetting(key, { sig, line: out, at: Date.now() }); } catch (e) {}
+    return out;
+  }
+  { const road = await roadRoute(); if (road && road.length > 1) routeLine = road; }
 
   // ---------- photos: 1400×1050 JPEG with Excel's 2.5 pt soft edge baked in (marks are drawn on top from r.ann) ----------
   async function reportPhoto(bid) {
@@ -255,9 +281,10 @@
         <tr><td class="l">Ülke / Country</td><td>${esc(H.country)}</td><td class="l">Revizyon Tarihi / Date</td><td>${esc(H.revDate)}</td></tr></table>
       <div class="a title">${esc(title)}</div>`;
   const footer = MODE === 'p'
-    ? `${custLogos.length ? `<div class="a cust n${custLogos.length}" style="left:50pt;top:763pt;height:30pt;width:120pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>` : ''}
-       <div class="a" style="left:${custLogos.length ? 178 : 50}pt;top:766pt;width:${custLogos.length ? 215 : 300}pt;font-size:${custLogos.length ? 5.6 : 6.3}pt;line-height:1.35;color:#333"><b style="font-size:${custLogos.length ? 6.1 : 6.8}pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>
-       <div class="a conf" style="left:${custLogos.length ? 400 : 345}pt;top:768pt;width:${custLogos.length ? 145 : 200}pt;text-align:left">${CONF}</div>`
+    ? (custLogos.length
+        ? `<div class="a cust n${custLogos.length}" style="left:50pt;top:762pt;height:32pt;width:230pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>`
+        : `<div class="a" style="left:50pt;top:766pt;width:300pt;font-size:6.3pt;line-height:1.35;color:#333"><b style="font-size:6.8pt;color:#111">${COMPANY[0]}</b><br>${COMPANY[1]}<br>${COMPANY[2]}</div>`)
+      + `<div class="a conf" style="left:345pt;top:768pt;width:200pt;text-align:left">${CONF}</div>`
     : `<div class="a cust n${custLogos.length}" style="top:540pt;height:28pt">${custLogos.map(s => `<img src="${s}" alt="">`).join('')}</div>
        <div class="a conf" style="top:547pt">${CONF}</div>`;
   const ll = r => r.latDec != null ? `<a href="https://www.google.com/maps/search/?api=1&query=${r.latDec},${r.lonDec}">${esc(r.lat)}${MODE === 'p' ? '<br>' : ', '}${esc(r.lon)}</a>` : '—';
@@ -270,14 +297,14 @@
       <div class="a map" style="${box(G.route)}">${routeMap(r)}<span class="tag">ROUTE</span></div>`;
   function recordPage(r) {
     const col = window.SurveyRules.highlightOf(r, settings), bg = col && COL[col] ? COL[col] : null;
-    const rmStyle = bg ? `background:${bg};${col === 'purple' || col === 'blue' ? 'color:#fff;' : ''}` : '';
+    const rmStyle = '', rhStyle = bg ? `background:${bg};color:${col === 'yellow' || col === 'green' ? '#111' : '#fff'};` : '';   // the colour goes on the REMARKS bar; the text box stays white
     const det = details(r), rm = remarks(r);
     if (MODE === 'p') return `${header(TITLE)}
       <table class="a strip" style="left:50pt;top:121pt;width:220pt"><colgroup><col style="width:34pt"><col style="width:44pt"><col></colgroup>
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th></tr><tr><td style="height:22pt;padding:0 1pt">${noCell(r)}</td><td style="height:22pt">${km1(r.km)}</td><td style="height:22pt;font-size:9pt">${obst(r)}</td></tr></table>
       <table class="a strip" style="left:50pt;top:161pt;width:220pt"><colgroup><col style="width:92pt"><col></colgroup>
         <tr><th style="height:27pt">COORDINATES</th><td class="ll" style="height:27pt;font-size:8pt;line-height:1.2">${ll(r)}</td></tr></table>
-      <div class="a rmh" style="left:276pt;top:121pt;width:269.28pt;height:14pt">REMARKS</div>
+      <div class="a rmh" style="left:276pt;top:121pt;width:269.28pt;height:14pt;${rhStyle}">REMARKS</div>
       <div class="a rmb" style="left:276pt;top:135pt;width:269.28pt;height:53pt;font-size:8.2pt;${rmStyle}">${det.map(esc).join('\n')}${det.length && rm ? '\n' : ''}${esc(rm) || (det.length ? '' : '—')}</div>
       ${photoBox(r)}${maps(r)}${footer}`;
     return `${header(TITLE)}
@@ -285,7 +312,7 @@
         <tr><th>#</th><th>KM</th><th>OBSTACLE</th><th>LATITUDE &amp; LONGITUDE</th><th>DETAILS</th></tr>
         <tr><td style="height:29pt;padding:0 1pt">${noCell(r)}</td><td style="height:29pt">${km1(r.km)}</td><td style="height:29pt;font-size:9pt">${obst(r)}</td><td class="ll" style="height:29pt;font-size:8pt">${ll(r)}</td><td class="det" style="height:29pt">${esc(det.join('  |  ') || '—')}</td></tr></table>
       ${photoBox(r)}
-      <div class="a rmh" style="left:536pt;top:116pt;width:270pt;height:15pt">REMARKS</div>
+      <div class="a rmh" style="left:536pt;top:116pt;width:270pt;height:15pt;${rhStyle}">REMARKS</div>
       <div class="a rmb" style="left:536pt;top:131pt;width:270pt;height:88.25pt;${rmStyle}">${esc(rm) || '—'}</div>
       ${maps(r)}${footer}`;
   }
@@ -302,7 +329,7 @@
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=41'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=42'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
