@@ -418,9 +418,13 @@
       const tag = st.busy ? '<span class="tag warn">Yedekleniyor…</span>' : st.error ? '<span class="tag bad">Yedek hatası</span>' : st.on && !st.needsPermission ? '<span class="tag ok">Yedek açık</span>' : '<span class="tag warn">Yedek kapalı</span>';
       let txt, btns = '';
       if (!st.supported) txt = 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor. Edge ya da Chrome kullan.';
-      else if (st.kind === 'android') {
-        txt = st.on ? `Her etüt Belgeler/Etütler içinde kendi klasöründe, her engel ayrı klasörde tutuluyor.${t ? ' Son yedek: ' + t : ''}` : 'Klasör yedeği kapalı.';
-        btns = `${st.on ? '<button class="btn sm" data-bk="now">Şimdi yedekle</button>' : '<button class="btn sm pri" data-bk="on">Yedeği aç</button>'}<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>`;
+      else if (st.kind === 'android' || st.kind === 'saf') {
+        const where = st.kind === 'saf' ? esc(st.label.replace('Klasör · ', '')) : 'Belgeler/Etütler';
+        if (st.needsPermission) { txt = `Yedek klasörüne (${where}) artık yazılamıyor. Klasörü yeniden seç.`; btns = '<button class="btn sm pri" data-bk="pick">Klasörü yeniden seç</button><button class="btn sm" data-bk="default">Belgeler/Etütler kullan</button>'; }
+        else {
+          txt = st.on ? `Yedek klasörü: ${where} · her etüt kendi klasöründe, her engel ayrı klasörde.${t ? ' Son yedek: ' + t : ''}` : 'Klasör yedeği kapalı.';
+          btns = `${st.on ? '<button class="btn sm" data-bk="now">Şimdi yedekle</button>' : '<button class="btn sm pri" data-bk="on">Yedeği aç</button>'}${st.canPick ? `<button class="btn sm" data-bk="pick">${st.kind === 'saf' ? 'Klasörü değiştir' : 'Klasör seç'}</button>` : ''}${st.kind === 'saf' ? '<button class="btn sm" data-bk="default">Belgeler/Etütler kullan</button>' : ''}<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>`;
+        }
       } else if (!st.on) { txt = 'Etütleri bir klasöre otomatik yedekle. OneDrive içindeki bir klasör seçersen yedek buluta da gider.'; btns = '<button class="btn sm pri" data-bk="pick">Yedek klasörü seç</button>'; }
       else if (st.needsPermission) { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))}. Tarayıcı yeniden açıldığı için yazma izni gerekiyor.`; btns = '<button class="btn sm pri" data-bk="grant">Yedeğe izin ver</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
       else { txt = `Yedek klasörü: ${esc(st.label.replace('Klasör · ', ''))} · her etüt kendi klasöründe, her engel ayrı klasörde.${t ? ' Son yedek: ' + t : ''}`; btns = '<button class="btn sm" data-bk="now">Şimdi yedekle</button><button class="btn sm" data-bk="pick">Klasörü değiştir</button>'; }
@@ -434,6 +438,7 @@
         if (b.dataset.bk === 'grant') await Backup.grant();
         if (b.dataset.bk === 'now') { await Backup.backupAll(); toast('Yedek güncellendi'); }
         if (b.dataset.bk === 'on') await Backup.setOn(true);
+        if (b.dataset.bk === 'default') { await Backup.useDefault(); toast('Yedek Belgeler/Etütler klasörüne yazılıyor'); }
         if (b.dataset.bk === 'restore') {
           const L = await Backup.restoreList();
           if (!L.length) return toast('Belgeler/Etütler içinde yedek bulunamadı');

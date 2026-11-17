@@ -47,19 +47,36 @@
     async remove(path) { try { const d = await this.dir(dirOf(path), false); await d.removeEntry(path.slice(dirOf(path).length)); } catch (e) {} },
     async removeDir(path) { try { const p = path.replace(/\/$/, ''), d = await this.dir(dirOf(p), false); await d.removeEntry(p.slice(dirOf(p).length), { recursive: true }); } catch (e) {} },
   };
-  const target = () => (T() && T().native() ? android : desktop);
+  // tablet: a folder picked with Android's own folder picker (AndroidFolder bridge in MainActivity), when one is set
+  const AF = () => window.AndroidFolder;
+  const afCall = (m, ...a) => { const r = AF()[m](...a); if (typeof r === 'string' && r.startsWith('ERR:')) throw new Error(r.slice(4)); return r; };
+  let SAF = null;   // { uri, name, ok }
+  const saf = {
+    kind: 'saf', get label() { return 'Klasör · ' + (SAF ? SAF.name : ''); },
+    async ready() { return !!(SAF && SAF.ok); },
+    async write(path, data) { afCall('write', path, typeof data === 'string' ? T().b64(enc.encode(data)) : T().b64(data)); },
+    async move(from, to) { afCall('move', from, to); },
+    async remove(path) { try { afCall('remove', path); } catch (e) {} },
+    async removeDir(path) { try { afCall('remove', path.replace(/\/$/, '')); } catch (e) {} },
+    async list(path) { try { return JSON.parse(afCall('list', path.replace(/\/$/, ''))); } catch (e) { return []; } },
+    async read(path) { const bin = atob(afCall('read', path)); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u]); },
+  };
+  const readSaf = () => { try { const c = AF() && AF().current(); SAF = c ? JSON.parse(c) : null; } catch (e) { SAF = null; } };
+  const target = () => (T() && T().native() ? (SAF ? saf : android) : desktop);
   const supported = () => (T() && T().native()) || typeof window.showDirectoryPicker === 'function';
 
   // ---------- state ----------
   const ST = { on: false, busy: false, last: null, error: '', queue: new Set(), timer: null, listeners: new Set() };
   const emit = () => ST.listeners.forEach(f => { try { f(status()); } catch (e) {} });
-  const status = () => ({ supported: supported(), kind: target().kind, label: target().label, on: ST.on, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: ST.needsPermission, pending: ST.queue.size });
+  const status = () => ({ supported: supported(), canPick: !T().native() || !!AF(), kind: target().kind, label: target().label, on: ST.on, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: ST.needsPermission, pending: ST.queue.size });
   const mkey = id => `bk:${target().kind}:${id}`;
 
   async function init() {
     if (!supported()) return;
     const cfg = (await DB.getSetting('backup')) || {};
-    if (target().kind === 'android') { ST.on = cfg.android !== false; try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }   // on by default on the tablet
+    if (T().native()) readSaf();
+    if (target().kind === 'saf') { ST.on = cfg.android !== false; if (!SAF.ok) ST.needsPermission = true; }
+    else if (target().kind === 'android') { ST.on = cfg.android !== false; try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }   // on by default on the tablet
     else { HANDLE = (await DB.getSetting('backupDir')) || null; ST.on = !!HANDLE && cfg.desktop !== false; if (ST.on && !(await desktop.ready(false))) ST.needsPermission = true; }
     ST.last = cfg.last || null;
     // every save of a survey schedules its folder update
@@ -150,7 +167,8 @@
   }
 
   // ---------- controls used by the app ----------
-  async function chooseFolder() {   // computer only; must run from a click
+  async function chooseFolder() {   // must run from a click
+    if (T().native()) return pickTablet();
     const h = await window.showDirectoryPicker({ id: 'rs-backup', mode: 'readwrite', startIn: 'documents' });
     if ((await h.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Klasöre yazma izni verilmedi');
     const changed = !HANDLE || !(await HANDLE.isSameEntry(h));
@@ -160,6 +178,23 @@
     ST.on = true; ST.needsPermission = false; ST.error = '';
     await backupAll();
   }
+  // tablet: pick a folder with Android's folder picker; Belgeler/Etütler again with useDefault()
+  function pickTablet() {
+    return new Promise((res, rej) => {
+      window.__folderPicked = async (uri, error) => {
+        window.__folderPicked = null;
+        if (error) return rej(new Error(error));
+        if (!uri) return res(false);
+        readSaf(); await resetManifests();
+        const cfg = (await DB.getSetting('backup')) || {}; cfg.android = true; await DB.setSetting('backup', cfg);
+        ST.on = true; ST.needsPermission = false; ST.error = ''; emit();
+        await backupAll(); res(true);
+      };
+      AF().pick();
+    });
+  }
+  async function useDefault() { if (AF()) AF().clear(); SAF = null; ST.needsPermission = false; ST.error = ''; await resetManifests(); emit(); if (ST.on) await backupAll(); }
+  async function resetManifests() { for (const sv of await DB.listSurveys()) await DB.setSetting(mkey(sv.id), null); await DB.setSetting('bkRoots:' + target().kind, null); }
   async function grant() { if (await desktop.ready(true)) { ST.needsPermission = false; ST.error = ''; await backupAll(); } emit(); }
   async function setOn(on) {
     const cfg = (await DB.getSetting('backup')) || {}; cfg[target().kind] = !!on; await DB.setSetting('backup', cfg);
@@ -173,15 +208,15 @@
   }
   // tablet: backup folders that hold an etut.json, to open again
   async function restoreList() {
-    if (target().kind !== 'android') return [];
+    const t = target(); if (!t.list) return [];
     const out = [];
-    for (const d of (await android.list('')).filter(x => x.dir)) {
-      const names = [], walk = async pre => { for (const f of await android.list(pre)) { if (f.dir) await walk(pre + f.name + '/'); else names.push(pre + f.name); } };
-      if (!(await android.list(d.name + '/')).some(f => f.name === 'etut.json')) continue;
-      out.push({ name: d.name, source: async () => { await walk(d.name + '/'); return { names, get: async n => names.includes(n) ? android.read(n) : null }; } });
+    for (const d of (await t.list('')).filter(x => x.dir)) {
+      const names = [], walk = async pre => { for (const f of await t.list(pre)) { if (f.dir) await walk(pre + f.name + '/'); else names.push(pre + f.name); } };
+      if (!(await t.list(d.name + '/')).some(f => f.name === 'etut.json')) continue;
+      out.push({ name: d.name, source: async () => { await walk(d.name + '/'); return { names, get: async n => names.includes(n) ? t.read(n) : null }; } });
     }
     return out;
   }
 
-  g.Backup = { init, status, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, grant, setOn, backupAll, restoreList, schedule, supported };
+  g.Backup = { init, status, useDefault, onChange: f => { ST.listeners.add(f); return () => ST.listeners.delete(f); }, chooseFolder, grant, setOn, backupAll, restoreList, schedule, supported };
 })(window);
