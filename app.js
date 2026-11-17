@@ -1440,7 +1440,8 @@
     const cnt = t => recs.filter(r => t.includes(r.obstacle)).length;
     const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
     const P = sv.project, last = (await DB.getSetting('headerDefaults')) || {};
-    const H = P.header = Object.assign({ client: P.client || '', project: '', route: `${P.start.name} - ${P.end.name} Arası Yol Etüdü`, country: '', date: longDate(new Date()), docNo: last.docNo || '', rev: P.rev || '00', revDate: last.revDate || '' }, P.header || {});
+    const H = P.header = Object.assign({ client: P.client || '', project: '', route: `${P.start.name} - ${P.end.name}`, country: '', date: longDate(new Date()), docNo: last.docNo || '', rev: P.rev || '00', revDate: last.revDate || '' }, P.header || {});
+    if (H.route === `${P.start.name} - ${P.end.name} Arası Yol Etüdü`) H.route = `${P.start.name} - ${P.end.name}`;   // older default
     const R2 = sv.r2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
     const NEED = ['client', 'project', 'country', 'date', 'docNo', 'rev', 'revDate'], missing = NEED.filter(k => !String(H[k] || '').trim());
     const lg = { company: await blobUrl(await DB.getSetting('companyLogo')) || 'assets/logo_company.jpg', partner: await blobUrl(await DB.getSetting('partnerLogo')) || 'assets/logo_cjicm.jpg', client1: await blobUrl(sv.logos.client1), client2: await blobUrl(sv.logos.client2) };

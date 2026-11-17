@@ -128,20 +128,27 @@
       if (q && q.p[0] === p[0] && q.p[1] === p[1]) q.ids.push(r.id); else wp.push({ p, ids: [r.id] });
     }
     if (wp.length < 2) return null;
-    const key = 'road:' + sv.id, sig = wp.map(w => w.p.join(',')).join(';');
+    const key = 'road:' + sv.id, sig = 'v2|' + wp.map(w => w.p.join(',')).join(';');
     const kept = await DB.getSetting(key); if (kept && kept.sig === sig && kept.cum) return kept;
     if (onBusy) onBusy();
-    const line = [], wcum = [0], N = 40;
+    /* one-way roads are not a limit here: every leg is asked both ways (A→B and B→A) and the shorter road is used */
+    const ask = async part => {
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 25000);
+      const u = `https://router.project-osrm.org/route/v1/driving/${part.map(w => `${w.p[1]},${w.p[0]}`).join(';')}?overview=false&steps=true&geometries=geojson&continue_straight=false`;
+      const j = await fetch(u, { signal: ctl.signal }).then(r => r.json()).finally(() => clearTimeout(t));
+      if (!j || j.code !== 'Ok' || !j.routes || !j.routes[0]) throw new Error(j && j.code || 'route');
+      return j.routes[0].legs.map(l => ({ d: l.distance || 0, g: [].concat(...(l.steps || []).map(st => st.geometry.coordinates.map(([lo, la]) => [la, lo]))) }));
+    };
+    const line = [], wcum = [0], N = 40, wait = () => new Promise(r => setTimeout(r, 1100));   // the public server allows about one request a second
     try {
       for (let i = 0; i < wp.length - 1; i += N - 1) {
-        const part = wp.slice(i, i + N), ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 20000);
-        const u = `https://router.project-osrm.org/route/v1/driving/${part.map(w => `${w.p[1]},${w.p[0]}`).join(';')}?overview=full&geometries=geojson&continue_straight=true`;
-        const j = await fetch(u, { signal: ctl.signal }).then(r => r.json()).finally(() => clearTimeout(t));
-        if (!j || j.code !== 'Ok' || !j.routes || !j.routes[0]) throw new Error(j && j.code || 'route');
-        const c = j.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
-        line.push(...(line.length ? c.slice(1) : c));
-        (j.routes[0].legs || []).forEach((l, k) => { wcum[i + k + 1] = wcum[i + k] + (l.distance || 0); });
-        if (i + N < wp.length) await new Promise(r => setTimeout(r, 1100));   // the public server allows about one request a second
+        const part = wp.slice(i, i + N), fwd = await ask(part); await wait();
+        const rev = await ask(part.slice().reverse()); if (i + N < wp.length) await wait();
+        fwd.forEach((f, k) => {
+          const b = rev[part.length - 2 - k], use = b && b.d < f.d ? { d: b.d, g: b.g.slice().reverse() } : f;
+          wcum[i + k + 1] = wcum[i + k] + use.d;
+          line.push(...(line.length ? use.g.slice(1) : use.g));
+        });
       }
     } catch (e) { console.warn('road route', e); return null; }
     if (wcum.length !== wp.length) return null;
