@@ -8,7 +8,17 @@ import android.content.SharedPreferences;
 import android.content.UriPermission;
 import android.database.Cursor;
 import android.net.Uri;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Environment;
+import android.widget.Toast;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
+import androidx.core.content.FileProvider;
 import android.provider.DocumentsContract;
 import android.util.Base64;
 import java.io.ByteArrayOutputStream;
@@ -92,6 +102,58 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() { super.onResume(); immersive(); }
 
+    /* minimal PDF: one JPEG per page, filling an A4 page (portrait or landscape) */
+    private File writePdf(String name, List<byte[]> jpgs, List<int[]> dims, List<Boolean> land) throws Exception {
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Etütler");
+        if (!dir.exists() && !dir.mkdirs()) dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+        String safe = name.replaceAll("[\\\\/:*?\"<>|]+", "-").trim();
+        File f = new File(dir, (safe.isEmpty() ? "Route Survey Report" : safe) + ".pdf");
+        try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land)); }
+        catch (Exception e) {   // public Documents not writable on this device: the app's own folder
+            f = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), f.getName());
+            try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land)); }
+        }
+        return f;
+    }
+    private static byte[] pdfBytes(List<byte[]> jpgs, List<int[]> dims, List<Boolean> land) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        List<Integer> offs = new ArrayList<>();
+        int n = jpgs.size(), objs = 2 + n * 3;
+        out.write("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n".getBytes("ISO-8859-1"));
+        StringBuilder kids = new StringBuilder();
+        for (int i = 0; i < n; i++) kids.append(3 + i * 3).append(" 0 R ");
+        offs.add(out.size()); out.write("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".getBytes("ISO-8859-1"));
+        offs.add(out.size()); out.write(("2 0 obj\n<< /Type /Pages /Kids [" + kids + "] /Count " + n + " >>\nendobj\n").getBytes("ISO-8859-1"));
+        for (int i = 0; i < n; i++) {
+            int po = 3 + i * 3, co = po + 1, io = po + 2;
+            String W = land.get(i) ? "841.89" : "595.28", H = land.get(i) ? "595.28" : "841.89";
+            offs.add(out.size());
+            out.write((po + " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + W + " " + H + "] /Resources << /XObject << /Im0 " + io + " 0 R >> >> /Contents " + co + " 0 R >>\nendobj\n").getBytes("ISO-8859-1"));
+            byte[] cs = ("q " + W + " 0 0 " + H + " 0 0 cm /Im0 Do Q").getBytes("ISO-8859-1");
+            offs.add(out.size());
+            out.write((co + " 0 obj\n<< /Length " + cs.length + " >>\nstream\n").getBytes("ISO-8859-1")); out.write(cs); out.write("\nendstream\nendobj\n".getBytes("ISO-8859-1"));
+            byte[] jpg = jpgs.get(i); int[] d = dims.get(i);
+            offs.add(out.size());
+            out.write((io + " 0 obj\n<< /Type /XObject /Subtype /Image /Width " + d[0] + " /Height " + d[1] + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpg.length + " >>\nstream\n").getBytes("ISO-8859-1"));
+            out.write(jpg); out.write("\nendstream\nendobj\n".getBytes("ISO-8859-1"));
+        }
+        int xref = out.size();
+        StringBuilder x = new StringBuilder("xref\n0 " + (objs + 1) + "\n0000000000 65535 f \n");
+        for (int o : offs) x.append(String.format(java.util.Locale.ROOT, "%010d 00000 n \n", o));
+        x.append("trailer\n<< /Size ").append(objs + 1).append(" /Root 1 0 R >>\nstartxref\n").append(xref).append("\n%%EOF\n");
+        out.write(x.toString().getBytes("ISO-8859-1"));
+        return out.toByteArray();
+    }
+    private void share(File f) {
+        try {
+            Uri u = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+            Intent i = new Intent(Intent.ACTION_SEND); i.setType("application/pdf"); i.putExtra(Intent.EXTRA_STREAM, u); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "PDF raporu"));
+        } catch (Exception e) {
+            Toast.makeText(this, "PDF kaydedildi: " + f.getAbsolutePath(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -113,6 +175,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        WebView.enableSlowWholeDocumentDraw();   // the PDF maker draws pages that are not on screen
         super.onCreate(savedInstanceState);
         immersive();
         final WebView web = getBridge().getWebView();
@@ -133,6 +196,44 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         }, "AndroidPrint");
+
+        /* AndroidPdf.make(json): the report as one PDF with each page in its own size (portrait A4 and landscape A4),
+           because Android's print dialog gives every page the same paper and keeps margins. Each page of the report
+           (CSS px rectangle in the document) is drawn from the WebView at ~190 dpi, stored as JPEG and put full-page into
+           the PDF. json = { name, scale, pages: [{ x, y, w, h }] }. Calls window.__pdfDone(path, error) when ready. */
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface public void make(final String json) {
+                runOnUiThread(() -> {
+                    String done;
+                    try {
+                        JSONObject o = new JSONObject(json);
+                        JSONArray pages = o.getJSONArray("pages");
+                        float dens = getResources().getDisplayMetrics().density, S = (float) o.optDouble("scale", 2.0);
+                        List<byte[]> jpgs = new ArrayList<>(); List<int[]> dims = new ArrayList<>(); List<Boolean> land = new ArrayList<>();
+                        for (int i = 0; i < pages.length(); i++) {
+                            JSONObject pg = pages.getJSONObject(i);
+                            double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
+                            int bw = (int) Math.round(w * S), bh = (int) Math.round(h * S);
+                            Bitmap bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+                            Canvas c = new Canvas(bmp); c.drawColor(Color.WHITE);
+                            c.scale(S / dens, S / dens);
+                            c.translate((float) (-x * dens + web.getScrollX()), (float) (-y * dens + web.getScrollY()));
+                            web.draw(c);
+                            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                            bmp.compress(Bitmap.CompressFormat.JPEG, 86, bo); bmp.recycle();
+                            jpgs.add(bo.toByteArray()); dims.add(new int[]{bw, bh}); land.add(w > h);
+                        }
+                        File f = writePdf(o.optString("name", "Route Survey Report"), jpgs, dims, land);
+                        share(f);
+                        done = "window.__pdfDone && window.__pdfDone(" + JSONObject.quote(f.getAbsolutePath()) + ", null)";
+                    } catch (Throwable e) {
+                        done = "window.__pdfDone && window.__pdfDone(null, " + JSONObject.quote(String.valueOf(e.getMessage())) + ")";
+                    }
+                    final String run = done;
+                    web.post(() -> web.evaluateJavascript(run, null));
+                });
+            }
+        }, "AndroidPdf");
 
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface public void pick() {

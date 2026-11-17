@@ -343,6 +343,7 @@
     const o = a => a.map(v => `<option value="${esc(v)}">`).join('');
     return `<datalist id="dlPcode">${o(codes)}</datalist><datalist id="dlPname">${o(names)}</datalist><datalist id="dlClient">${o(uniq(all.map(s => s.project.client)))}</datalist>`;
   }
+  let SHOWF = false;   // filters on the home screen: shown only when asked for
   let FILT = (() => { try { return JSON.parse(localStorage.getItem('rs-filter')) || {}; } catch (e) { return {}; } })();
   const saveFilt = () => { try { localStorage.setItem('rs-filter', JSON.stringify(FILT)); } catch (e) {} };
 
@@ -363,25 +364,42 @@
       && (!FILT.who || surveyorsOf(s.project).includes(FILT.who)) && (!FILT.firm || s.project.client === FILT.firm));
     const sel = (k, label) => `<label class="f" style="min-width:180px;flex:1"><span>${label}</span><select data-filt="${k}"><option value="">Tümü</option>${opts[k].map(v => `<option ${FILT[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
     const nf = ['region', 'proj', 'who', 'firm'].filter(k => FILT[k]).length;
-    const filters = every.length ? `<div class="card filt" style="gap:10px"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><b style="font-size:14px;color:var(--navy);margin-right:4px">Bölge</b>
+    const fOpen = SHOWF || nf > 0;
+    const filters = every.length && fOpen ? `<div class="card filt" style="gap:10px"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><b style="font-size:14px;color:var(--navy);margin-right:4px">Bölge</b>
         <button class="chip ${!FILT.region ? 'on' : ''}" data-freg="">Tümü</button>${REGIONS.map(g => `<button class="chip ${FILT.region === g ? 'on' : ''}" data-freg="${g}">${g}</button>`).join('')}
         <span class="hint" style="margin-left:auto">${list.length} / ${every.length} etüt${nf ? ' · <button class="btn sm" data-fclear="1" style="min-height:30px">Filtreleri temizle</button>' : ''}</span></div>
       <div class="row" style="flex-wrap:wrap;gap:10px">${sel('proj', 'Proje kodu / adı')}${sel('who', 'Etüdü yapan')}${sel('firm', 'Firma')}</div></div>` : '';
     const card = sv => {
       const n = sv.records.length, act = sv.status === 'active', c = cargoOf(sv.project);
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
-        <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Sahada' : 'Tamamlandı'}</span></div>
+        <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Devam ediyor' : 'Tamamlandı'}</span>${'<span class="bkic" data-bksv="' + sv.id + '" aria-hidden="true" style="margin-left:6px"></span>'}</div>
         <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
         ${sv.project.region || pkey(sv.project) || sv.project.client || surveyorsOf(sv.project).length ? `<div class="hint" style="color:var(--ink)">${[sv.project.region, pkey(sv.project), sv.project.client, surveyorsOf(sv.project).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
         ${critSummary(sv)}
         <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
-    $app.innerHTML = `${bar('Etütlerim', null, `<button class="btn" id="openEtut">Etüt dosyası aç</button><button class="btn" data-go="#/import">${imgSvg} Fotoğraflardan etüt oluştur</button><button class="btn pri" data-go="#/new" style="min-width:260px">+ Yeni etüt raporu oluştur</button><button class="btn" data-go="#/settings" title="Ayarlar" aria-label="Ayarlar">${gearSvg} Ayarlar</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
+    $app.innerHTML = `${bar('Etütlerim', null, `<button class="btn" id="openEtut">Etüt dosyası aç</button>${every.length ? `<button class="btn ${fOpen ? 'pri' : ''}" id="ftog">Filtrele${nf ? ` (${nf})` : ''}</button>` : ''}<button class="btn pri" id="newsv" style="min-width:200px">+ Yeni etüt</button><button class="btn" data-go="#/settings" title="Ayarlar" aria-label="Ayarlar">${gearSvg} Ayarlar</button><button class="btn" id="acct" title="Hesap" aria-label="Hesap">${userSvg}${Auth.isAdmin() ? ' Yönetim' : ''}</button>`)}
       <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Bu filtrelere uyan etüt yok.</div>' : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
       <div class="card bk" id="bkline" style="margin-top:auto"></div>
       <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
     document.getElementById('acct').onclick = () => Auth.accountSheet();
+    document.getElementById('newsv').onclick = () => sheet('Yeni etüt', [
+      { label: 'Yeni etüt raporu oluştur', cls: 'pri', run: () => go('#/new') },
+      { label: 'Fotoğraflardan etüt raporu oluştur', icon: imgSvg, run: () => go('#/import') },
+    ]);
+    const ft = document.getElementById('ftog'); if (ft) ft.onclick = () => { if (SHOWF && nf) { FILT = {}; saveFilt(); } SHOWF = !SHOWF; V.home(); };
+    /* backup mark on every survey card: green = every obstacle in the backup, orange = something waiting, grey = backup off */
+    { const paintSv = async () => {
+        const els = [...document.querySelectorAll('[data-bksv]')]; if (!els.length) return offSv();
+        for (const el of els) {
+          const sv2 = await DB.getSurvey(el.dataset.bksv); if (!sv2) continue;
+          const { state, recs } = await Backup.recordStatus(sv2), v = Object.values(recs);
+          const k = state === 'off' ? 'off' : v.every(x => x === 'ok') ? 'ok' : 'pending';
+          if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = BKICON[k]; el.title = k === 'ok' ? 'Etüt yedeklendi' : k === 'pending' ? 'Yedeklenmemiş değişiklik var' : 'Yedek kapalı'; }
+        }
+      };
+      const offSv = Backup.onChange(st => { if (!st.busy) paintSv(); }); paintSv(); }
     $app.querySelectorAll('[data-filt]').forEach(x => x.onchange = () => { if (x.value) FILT[x.dataset.filt] = x.value; else delete FILT[x.dataset.filt]; saveFilt(); V.home(); });
     $app.querySelectorAll('[data-freg]').forEach(x => x.onclick = () => { if (x.dataset.freg) FILT.region = x.dataset.freg; else delete FILT.region; saveFilt(); V.home(); });
     const fc = $app.querySelector('[data-fclear]'); if (fc) fc.onclick = () => { FILT = {}; saveFilt(); V.home(); };
@@ -1357,8 +1375,8 @@
       <div class="split wide">
         <div class="pane photo-stage" style="overflow:hidden"><div class="photo" id="stage">${u ? `<img src="${u}" alt="">` : ''}<div id="lay" style="position:absolute;inset:0"></div></div></div>
         <div class="pane">
-          <div class="sec">Yön oku (zemine yatık, sarı)</div>
-          <div class="tools"><button class="btn sm" data-add="g:straight">${annGArrow('straight')} Düz</button><button class="btn sm" data-add="g:left">${annGArrow('left')} Sola</button><button class="btn sm" data-add="g:right">${annGArrow('right')} Sağa</button></div>
+          <div class="sec">Yön oku</div>
+          <div class="tools"><button class="btn sm" data-add="yarrow"><svg viewBox="0 0 40 20" width="36" height="18"><polygon points="2,7 26,7 26,2 38,10 26,18 26,13 2,13" fill="#FFE500" stroke="#9A8600" stroke-width="1"/></svg> Sarı yön oku</button></div>
           <div class="sec">Ölçü</div>
           <div class="tools"><button class="btn sm" data-add="h">↕ Yükseklik (H:)</button><button class="btn sm" data-add="w">↔ Genişlik (W:)</button></div>
           <div class="sec">Tabela</div>
@@ -1380,10 +1398,11 @@
         <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
         ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Yassılaştır</button><button class="btn sm" data-c="tall">Diklet</button>' : ''}
         ${o.k === 'garrow' ? ['straight', 'left', 'right'].map(d => `<button class="btn sm ${o.dir === d ? 'pri' : ''}" data-c="dir:${d}">${annGArrow(d)}</button>`).join('') : ''}
-        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}</div>
+        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}
+        ${o.k === 'yarrow' ? '<button class="btn sm" data-c="thick">Kalınlaştır</button><button class="btn sm" data-c="thin">İncelt</button>' : ''}</div>
         ${o.k === 'text' || o.k === 'line' ? `<div class="sec">Renk</div><div class="tools">${Object.entries(ANNCOL).map(([k, [c, bg]]) => `<button class="btn sm" data-c="col:${k}" aria-label="${k}" title="${({ red: 'Kırmızı', black: 'Siyah', blue: 'Mavi', green: 'Yeşil', yellow: 'Sarı', white: 'Beyaz' })[k]}" style="min-width:44px;${(o.color || 'red') === k ? 'outline:3px solid var(--navy);outline-offset:2px;' : ''}background:${bg};"><span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${c};border:1px solid #0003"></span></button>`).join('')}</div>` : ''}
         <div class="tools">
-        ${o.k !== 'line' ? '<button class="btn sm" data-c="big">Büyüt</button><button class="btn sm" data-c="small">Küçült</button>' : ''}<button class="btn sm" data-c="del" style="color:var(--badtx)">Sil</button></div></div>`;
+        ${o.k !== 'line' && o.k !== 'yarrow' ? '<button class="btn sm" data-c="big">Büyüt</button><button class="btn sm" data-c="small">Küçült</button>' : ''}<button class="btn sm" data-c="del" style="color:var(--badtx)">Sil</button></div></div>`;
       const tv = document.getElementById('tv'); if (tv) tv.oninput = () => { o.text = tv.value; lay.innerHTML = annHtml(items, sel); };
     };
     let drag = null;
@@ -1395,7 +1414,7 @@
     });
     stage.addEventListener('pointermove', e => {
       if (!drag) return; const dx = (e.clientX - drag.sx) / drag.b.width, dy = (e.clientY - drag.sy) / drag.b.height, o = items[sel], s = drag.o;
-      if (o.k === 'line') { if (drag.h !== '2') { o.x1 = s.x1 + dx; o.y1 = s.y1 + dy; } if (drag.h !== '1') { o.x2 = s.x2 + dx; o.y2 = s.y2 + dy; } }
+      if (o.k === 'line' || o.k === 'yarrow') { if (drag.h !== '2') { o.x1 = s.x1 + dx; o.y1 = s.y1 + dy; } if (drag.h !== '1') { o.x2 = s.x2 + dx; o.y2 = s.y2 + dy; } }
       else { o.x = s.x + dx; o.y = s.y + dy; }
       lay.innerHTML = annHtml(items, sel);
     });
@@ -1408,6 +1427,7 @@
         if (k === 'arrow') items.push({ k, x: 0.46, y: 0.62, w: 0.08, h: 0.17, rot: 0 });
         if (k === 'text') items.push({ k, x: 0.08, y: 0.08, w: 0.45, text: '' });
         if (k === 'line') items.push({ k, x1: 0.3, y1: 0.3, x2: 0.45, y2: 0.5 });
+        if (k === 'yarrow') items.push({ k, x1: 0.3, y1: 0.84, x2: 0.52, y2: 0.72, w: 0.05 });
         const minOf = list => { const v = (list || []).map(h => pn(h.value)).filter(x => x != null); return v.length ? Math.min(...v) : null; };
         if (k === 'h') {
           const v = minOf(r.heights);
@@ -1431,6 +1451,7 @@
         if (k === 'flat') o.h *= 0.85; if (k === 'tall') o.h /= 0.85;
         if (k.startsWith('dir:')) o.dir = k.slice(4);
         if (k === 'both') o.both = !o.both;
+        if (k === 'thick') o.w = Math.min(0.2, (o.w || 0.05) * 1.2); if (k === 'thin') o.w = Math.max(0.015, (o.w || 0.05) / 1.2);
         if (k.startsWith('col:')) o.color = k.slice(4);
         if (k === 'del') { items.splice(sel, 1); sel = -1; }
         paint();

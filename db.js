@@ -231,6 +231,14 @@
       if (o.k === 'garrow') h += `<div ${box(o, i)}><svg viewBox="0 0 100 60" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible"><g fill="#FFE500" stroke="#9A8600" stroke-width="1.6" stroke-linejoin="round">${GARROW[o.dir] || GARROW.straight}</g></svg></div>`;
       if (o.k === 'sign') h += `<div ${box(o, i, 'aspect-ratio:100/88;height:auto')}>${signSvg(o)}</div>`;
       if (o.k === 'text') h += `<div ${box({ ...o, w: null }, i, `width:max-content;max-width:${Math.max(30, (1 - o.x) * 100)}%;border:.45cqw solid ${acol(o)[0]};background:${acol(o)[1]};color:${acol(o)[0]};font-weight:700;font-size:${(3.7 * (o.fs || 1)).toFixed(2)}cqw;line-height:1.15;padding:.6cqw 1cqw;white-space:pre-wrap`)}>${esc(o.text) || 'Not'}</div>`;
+      if (o.k === 'yarrow') {   // yellow flat direction arrow from (x1,y1) to (x2,y2); both ends can be dragged
+        const ax = o.x1 * 100, ay = o.y1 * 75, bx = o.x2 * 100, by = o.y2 * 75, L = Math.hypot(bx - ax, by - ay) || 1;
+        const dx = (bx - ax) / L, dy = (by - ay) / L, nx = -dy, ny = dx, hw = (o.w || 0.05) * 50, hl = Math.min(L * 0.5, hw * 3.2), H = hw * 2.3;
+        const P = (x, y) => `${x.toFixed(2)},${y.toFixed(2)}`, cx = bx - dx * hl, cy = by - dy * hl;
+        const pts = [P(ax + nx * hw, ay + ny * hw), P(cx + nx * hw, cy + ny * hw), P(cx + nx * H, cy + ny * H), P(bx, by), P(cx - nx * H, cy - ny * H), P(cx - nx * hw, cy - ny * hw), P(ax - nx * hw, ay - ny * hw)].join(' ');
+        lines += `<polygon data-i="${i}" points="${pts}" fill="#FFE500" stroke="#9A8600" stroke-width="0.3" stroke-linejoin="round" style="pointer-events:visiblePainted;touch-action:none"/>`;
+        if (i === sel) h += `<span class="hd" data-i="${i}" data-h="1" style="left:${o.x1 * 100}%;top:${o.y1 * 100}%"></span><span class="hd" data-i="${i}" data-h="2" style="left:${o.x2 * 100}%;top:${o.y2 * 100}%"></span>`;
+      }
       if (o.k === 'line') {
         const ck = ACOL[o.color] ? o.color : 'red'; used.add(ck);
         lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="${ACOL[ck][0]}" stroke-width="0.8" marker-end="url(#ah-${ck})"${o.both ? ` marker-start="url(#ahs-${ck})"` : ''}/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
