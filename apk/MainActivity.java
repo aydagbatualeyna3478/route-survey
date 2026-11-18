@@ -194,39 +194,49 @@ public class MainActivity extends BridgeActivity {
             }
         }, "AndroidPrint");
 
-        /* AndroidPdf.make(json): the report as one PDF with each page in its own size (portrait A4 and landscape A4),
-           because Android's print dialog gives every page the same paper and keeps margins. Each page of the report
-           (CSS px rectangle in the document) is drawn from the WebView at ~190 dpi, stored as JPEG and put full-page into
-           the PDF. json = { name, scale, pages: [{ x, y, w, h }] }. Calls window.__pdfDone(path, error) when ready. */
+        /* AndroidPdf: the report as one PDF made page by page, each page in its own size (portrait / landscape A4, A3).
+           The page script shows one report page at a time at the top of the document; add() draws it from the WebView
+           (~190 dpi JPEG) and writes it straight to the PDF file, so long reports (300 pages) neither run out of memory
+           nor come out grey (a WebView cannot draw a document that is hundreds of pages tall in one go).
+           begin(name) → "" or error · add({x,y,w,h,pw,ph,scale}) → window.__pdfStep(error|null) · end() → window.__pdfDone(path, error) */
         web.addJavascriptInterface(new Object() {
-            @JavascriptInterface public void make(final String json) {
+            PdfOut out; File file;
+            @JavascriptInterface public String begin(final String name) {
+                try { if (out != null) out.close(); } catch (Exception e) { /* old one */ }
+                try { file = pdfFile(name); out = new PdfOut(file); return ""; } catch (Throwable e) { out = null; return String.valueOf(e.getMessage()); }
+            }
+            @JavascriptInterface public void add(final String json) {
+                runOnUiThread(() -> {
+                    String err = null;
+                    try {
+                        JSONObject pg = new JSONObject(json);
+                        float dens = getResources().getDisplayMetrics().density, S = (float) pg.optDouble("scale", 2.0);
+                        double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
+                        int bw = (int) Math.round(w * S), bh = (int) Math.round(h * S);
+                        Bitmap bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+                        Canvas c = new Canvas(bmp); c.drawColor(Color.WHITE);
+                        c.scale(S / dens, S / dens);
+                        c.translate((float) (-x * dens + web.getScrollX()), (float) (-y * dens + web.getScrollY()));
+                        web.draw(c);
+                        ByteArrayOutputStream bo = new ByteArrayOutputStream(1 << 20);
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 85, bo); bmp.recycle();
+                        double pw = pg.optDouble("pw", 0), ph = pg.optDouble("ph", 0);
+                        if (pw <= 100 || ph <= 100) { pw = w > h ? 841.89 : 595.28; ph = w > h ? 595.28 : 841.89; }
+                        out.page(bo.toByteArray(), bw, bh, pw, ph);
+                    } catch (Throwable e) { err = String.valueOf(e.getMessage()); }
+                    final String run = "window.__pdfStep && window.__pdfStep(" + (err == null ? "null" : JSONObject.quote(err)) + ")";
+                    web.post(() -> web.evaluateJavascript(run, null));
+                });
+            }
+            @JavascriptInterface public void end(final boolean ok) {
                 runOnUiThread(() -> {
                     String done;
                     try {
-                        JSONObject o = new JSONObject(json);
-                        JSONArray pages = o.getJSONArray("pages");
-                        float dens = getResources().getDisplayMetrics().density, S = (float) o.optDouble("scale", 2.0);
-                        File f = pdfFile(o.optString("name", "Route Survey Report"));
-                        ByteArrayOutputStream bo = new ByteArrayOutputStream(1 << 20);
-                        try (PdfOut out = new PdfOut(f)) {
-                            for (int i = 0; i < pages.length(); i++) {
-                                JSONObject pg = pages.getJSONObject(i);
-                                double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
-                                int bw = (int) Math.round(w * S), bh = (int) Math.round(h * S);
-                                Bitmap bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-                                Canvas c = new Canvas(bmp); c.drawColor(Color.WHITE);
-                                c.scale(S / dens, S / dens);
-                                c.translate((float) (-x * dens + web.getScrollX()), (float) (-y * dens + web.getScrollY()));
-                                web.draw(c);
-                                bo.reset(); bmp.compress(Bitmap.CompressFormat.JPEG, 86, bo); bmp.recycle();
-                                double pw = pg.optDouble("pw", 0), ph = pg.optDouble("ph", 0);
-                                if (pw <= 100 || ph <= 100) { pw = w > h ? 841.89 : 595.28; ph = w > h ? 595.28 : 841.89; }
-                                out.page(bo.toByteArray(), bw, bh, pw, ph);
-                            }
-                            out.finish();
-                        }
-                        share(f);
-                        done = "window.__pdfDone && window.__pdfDone(" + JSONObject.quote(f.getAbsolutePath()) + ", null)";
+                        if (ok) out.finish();
+                        out.close(); out = null;
+                        if (!ok) { file.delete(); throw new Exception("iptal"); }
+                        share(file);
+                        done = "window.__pdfDone && window.__pdfDone(" + JSONObject.quote(file.getAbsolutePath()) + ", null)";
                     } catch (Throwable e) {
                         done = "window.__pdfDone && window.__pdfDone(null, " + JSONObject.quote(String.valueOf(e.getMessage())) + ")";
                     }
