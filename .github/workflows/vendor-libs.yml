@@ -1,0 +1,28 @@
+name: Vendor libraries
+# Puts small browser libraries into vendor/ (works offline). vendor/LIBS lists "package@version path-in-package target-file".
+# html-to-image (MIT): draws a report page into a canvas so the computer can write the PDF itself, like the tablet.
+on:
+  push:
+    branches: [main]
+    paths: ['vendor/LIBS']
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch
+        run: |
+          while read -r PKG SRC DST; do
+            [ -z "$PKG" ] && continue
+            rm -rf /tmp/p && mkdir /tmp/p && cd /tmp/p && npm pack "$PKG" && tar xzf *.tgz
+            cp "package/$SRC" "$GITHUB_WORKSPACE/vendor/$DST"
+            cp package/LICENSE* "$GITHUB_WORKSPACE/vendor/$DST.LICENSE" 2>/dev/null || true
+            cd "$GITHUB_WORKSPACE"
+          done < vendor/LIBS
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor; git commit -m "vendor: libraries" || exit 0
+          git push
