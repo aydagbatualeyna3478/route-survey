@@ -102,49 +102,44 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() { super.onResume(); immersive(); }
 
-    /* minimal PDF: one JPEG per page, filling an A4 page (portrait or landscape) */
-    private File writePdf(String name, List<byte[]> jpgs, List<int[]> dims, List<Boolean> land, List<double[]> sizes) throws Exception {
+    /* minimal PDF written straight to the file, page by page (one JPEG per page in the page's own size),
+       so even a 300-page report never has to fit in memory at once */
+    static final class PdfOut implements AutoCloseable {
+        final java.io.OutputStream o; long pos = 0; final List<Long> offs = new ArrayList<>(); final List<Integer> kids = new ArrayList<>(); int next = 3;
+        PdfOut(File f) throws Exception {
+            o = new java.io.BufferedOutputStream(new FileOutputStream(f), 1 << 16);
+            w("%PDF-1.4\n%âãÏÓ\n"); obj(1); w("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        }
+        void w(String t) throws Exception { byte[] b = t.getBytes("ISO-8859-1"); o.write(b); pos += b.length; }
+        void w(byte[] b) throws Exception { o.write(b); pos += b.length; }
+        void obj(int n) { while (offs.size() < n) offs.add(0L); offs.set(n - 1, pos); }
+        void page(byte[] jpg, int bw, int bh, double pw, double ph) throws Exception {
+            int po = next, co = po + 1, io = po + 2; next += 3; kids.add(po);
+            String W = String.format(java.util.Locale.ROOT, "%.2f", pw), H = String.format(java.util.Locale.ROOT, "%.2f", ph);
+            obj(po); w(po + " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + W + " " + H + "] /Resources << /XObject << /Im0 " + io + " 0 R >> >> /Contents " + co + " 0 R >>\nendobj\n");
+            byte[] cs = ("q " + W + " 0 0 " + H + " 0 0 cm /Im0 Do Q").getBytes("ISO-8859-1");
+            obj(co); w(co + " 0 obj\n<< /Length " + cs.length + " >>\nstream\n"); w(cs); w("\nendstream\nendobj\n");
+            obj(io); w(io + " 0 obj\n<< /Type /XObject /Subtype /Image /Width " + bw + " /Height " + bh + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpg.length + " >>\nstream\n");
+            w(jpg); w("\nendstream\nendobj\n");
+        }
+        void finish() throws Exception {
+            StringBuilder k = new StringBuilder(); for (int id : kids) k.append(id).append(" 0 R ");
+            obj(2); w("2 0 obj\n<< /Type /Pages /Kids [" + k + "] /Count " + kids.size() + " >>\nendobj\n");
+            long xref = pos; int n = offs.size();
+            StringBuilder x = new StringBuilder("xref\n0 " + (n + 1) + "\n0000000000 65535 f \n");
+            for (long of : offs) x.append(String.format(java.util.Locale.ROOT, "%010d 00000 n \n", of));
+            x.append("trailer\n<< /Size ").append(n + 1).append(" /Root 1 0 R >>\nstartxref\n").append(xref).append("\n%%EOF\n");
+            w(x.toString()); o.flush();
+        }
+        @Override public void close() throws Exception { o.close(); }
+    }
+    private File pdfFile(String name) {
         File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Etütler");
         if (!dir.exists() && !dir.mkdirs()) dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         String safe = name.replaceAll("[\\\\/:*?\"<>|]+", "-").trim();
         File f = new File(dir, (safe.isEmpty() ? "Route Survey Report" : safe) + ".pdf");
-        try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land, sizes)); }
-        catch (Exception e) {   // public Documents not writable on this device: the app's own folder
-            f = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), f.getName());
-            try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(pdfBytes(jpgs, dims, land, sizes)); }
-        }
+        try { new FileOutputStream(f).close(); } catch (Exception e) { f = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), f.getName()); }   // public Documents not writable: the app's own folder
         return f;
-    }
-    private static byte[] pdfBytes(List<byte[]> jpgs, List<int[]> dims, List<Boolean> land, List<double[]> sizes) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        List<Integer> offs = new ArrayList<>();
-        int n = jpgs.size(), objs = 2 + n * 3;
-        out.write("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n".getBytes("ISO-8859-1"));
-        StringBuilder kids = new StringBuilder();
-        for (int i = 0; i < n; i++) kids.append(3 + i * 3).append(" 0 R ");
-        offs.add(out.size()); out.write("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".getBytes("ISO-8859-1"));
-        offs.add(out.size()); out.write(("2 0 obj\n<< /Type /Pages /Kids [" + kids + "] /Count " + n + " >>\nendobj\n").getBytes("ISO-8859-1"));
-        for (int i = 0; i < n; i++) {
-            int po = 3 + i * 3, co = po + 1, io = po + 2;
-            double[] sz = sizes != null && i < sizes.size() ? sizes.get(i) : null;   // the page's own size in pt (A4, A3 drawing…)
-            String W = sz != null && sz[0] > 100 ? String.format(java.util.Locale.ROOT, "%.2f", sz[0]) : land.get(i) ? "841.89" : "595.28";
-            String H = sz != null && sz[1] > 100 ? String.format(java.util.Locale.ROOT, "%.2f", sz[1]) : land.get(i) ? "595.28" : "841.89";
-            offs.add(out.size());
-            out.write((po + " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + W + " " + H + "] /Resources << /XObject << /Im0 " + io + " 0 R >> >> /Contents " + co + " 0 R >>\nendobj\n").getBytes("ISO-8859-1"));
-            byte[] cs = ("q " + W + " 0 0 " + H + " 0 0 cm /Im0 Do Q").getBytes("ISO-8859-1");
-            offs.add(out.size());
-            out.write((co + " 0 obj\n<< /Length " + cs.length + " >>\nstream\n").getBytes("ISO-8859-1")); out.write(cs); out.write("\nendstream\nendobj\n".getBytes("ISO-8859-1"));
-            byte[] jpg = jpgs.get(i); int[] d = dims.get(i);
-            offs.add(out.size());
-            out.write((io + " 0 obj\n<< /Type /XObject /Subtype /Image /Width " + d[0] + " /Height " + d[1] + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpg.length + " >>\nstream\n").getBytes("ISO-8859-1"));
-            out.write(jpg); out.write("\nendstream\nendobj\n".getBytes("ISO-8859-1"));
-        }
-        int xref = out.size();
-        StringBuilder x = new StringBuilder("xref\n0 " + (objs + 1) + "\n0000000000 65535 f \n");
-        for (int o : offs) x.append(String.format(java.util.Locale.ROOT, "%010d 00000 n \n", o));
-        x.append("trailer\n<< /Size ").append(objs + 1).append(" /Root 1 0 R >>\nstartxref\n").append(xref).append("\n%%EOF\n");
-        out.write(x.toString().getBytes("ISO-8859-1"));
-        return out.toByteArray();
     }
     private void share(File f) {
         try {
@@ -211,21 +206,25 @@ public class MainActivity extends BridgeActivity {
                         JSONObject o = new JSONObject(json);
                         JSONArray pages = o.getJSONArray("pages");
                         float dens = getResources().getDisplayMetrics().density, S = (float) o.optDouble("scale", 2.0);
-                        List<byte[]> jpgs = new ArrayList<>(); List<int[]> dims = new ArrayList<>(); List<Boolean> land = new ArrayList<>(); List<double[]> sizes = new ArrayList<>();
-                        for (int i = 0; i < pages.length(); i++) {
-                            JSONObject pg = pages.getJSONObject(i);
-                            double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
-                            int bw = (int) Math.round(w * S), bh = (int) Math.round(h * S);
-                            Bitmap bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-                            Canvas c = new Canvas(bmp); c.drawColor(Color.WHITE);
-                            c.scale(S / dens, S / dens);
-                            c.translate((float) (-x * dens + web.getScrollX()), (float) (-y * dens + web.getScrollY()));
-                            web.draw(c);
-                            ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                            bmp.compress(Bitmap.CompressFormat.JPEG, 86, bo); bmp.recycle();
-                            jpgs.add(bo.toByteArray()); dims.add(new int[]{bw, bh}); land.add(w > h); sizes.add(new double[]{pg.optDouble("pw", 0), pg.optDouble("ph", 0)});
+                        File f = pdfFile(o.optString("name", "Route Survey Report"));
+                        ByteArrayOutputStream bo = new ByteArrayOutputStream(1 << 20);
+                        try (PdfOut out = new PdfOut(f)) {
+                            for (int i = 0; i < pages.length(); i++) {
+                                JSONObject pg = pages.getJSONObject(i);
+                                double x = pg.getDouble("x"), y = pg.getDouble("y"), w = pg.getDouble("w"), h = pg.getDouble("h");
+                                int bw = (int) Math.round(w * S), bh = (int) Math.round(h * S);
+                                Bitmap bmp = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+                                Canvas c = new Canvas(bmp); c.drawColor(Color.WHITE);
+                                c.scale(S / dens, S / dens);
+                                c.translate((float) (-x * dens + web.getScrollX()), (float) (-y * dens + web.getScrollY()));
+                                web.draw(c);
+                                bo.reset(); bmp.compress(Bitmap.CompressFormat.JPEG, 86, bo); bmp.recycle();
+                                double pw = pg.optDouble("pw", 0), ph = pg.optDouble("ph", 0);
+                                if (pw <= 100 || ph <= 100) { pw = w > h ? 841.89 : 595.28; ph = w > h ? 595.28 : 841.89; }
+                                out.page(bo.toByteArray(), bw, bh, pw, ph);
+                            }
+                            out.finish();
                         }
-                        File f = writePdf(o.optString("name", "Route Survey Report"), jpgs, dims, land, sizes);
                         share(f);
                         done = "window.__pdfDone && window.__pdfDone(" + JSONObject.quote(f.getAbsolutePath()) + ", null)";
                     } catch (Throwable e) {

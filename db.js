@@ -262,7 +262,7 @@
       }
       if (o.k === 'line') {
         const ck = ACOL[o.color] ? o.color : 'red'; used.add(ck);
-        lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="${ACOL[ck][0]}" stroke-width="0.8" marker-end="url(#ah-${ck})"${o.both ? ` marker-start="url(#ahs-${ck})"` : ''}/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
+        lines += `<line x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="${ACOL[ck][0]}" stroke-width="${o.sw || 0.8}" stroke-linecap="round"${o.plain ? '' : ` marker-end="url(#ah-${ck})"`}${o.both && !o.plain ? ` marker-start="url(#ahs-${ck})"` : ''}/><line data-i="${i}" x1="${o.x1 * 100}" y1="${o.y1 * 75}" x2="${o.x2 * 100}" y2="${o.y2 * 75}" stroke="transparent" stroke-width="7" style="pointer-events:stroke;touch-action:none"/>`;
         if (i === sel) h += `<span class="hd" data-i="${i}" data-h="1" style="left:${o.x1 * 100}%;top:${o.y1 * 100}%"></span><span class="hd" data-i="${i}" data-h="2" style="left:${o.x2 * 100}%;top:${o.y2 * 100}%"></span>`;
       }
     });

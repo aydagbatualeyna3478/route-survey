@@ -7,7 +7,9 @@
   const TYPES = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn',
     'Inclination', 'Declination', 'Road Condition', 'Width Obstruction', 'Railroad Crossing', 'Port Gate', 'Satellite View', 'Drone View'];
   const QUICK = ['Overhead Cable', 'Overhead Structure', 'Bridge', 'Culvert', 'Left Turn', 'Right Turn', 'Curve', 'Inclination', 'Declination'];
-  const WIDTH_TYPES = ['Port Gate', 'Width Obstruction'];   // these ask for W automatically; any other type can add it by hand
+  /* which inputs each type opens with (team's list, 18.11.2026); any type can still add H or W by hand */
+  const H_TYPES = ['Overhead Cable', 'Overhead Structure', 'Railroad Crossing', 'Port Gate'];
+  const WIDTH_TYPES = ['Overhead Structure', 'Bridge', 'Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn', 'Road Condition', 'Width Obstruction', 'Railroad Crossing', 'Port Gate'];
   const CURVES = ['Right curve. Turning radius of the curve is suitable for planned transportation operation.', 'Left curve. Turning radius of the curve is suitable for planned transportation operation.'];
   const SUB = {
     'Overhead Structure': ['L Shape Signboard', 'Signboard', 'Bridge', 'Traffic Enforcement Camera', 'L Shape Traffic Light', 'Traffic Light', 'Pedestrian Bridge', 'Pipeline'],
@@ -70,11 +72,11 @@
   const FORMAT = 'route-survey-layout';
   function defaults() {
     return {
-      format: FORMAT, version: 1, name: 'Standart',
+      format: FORMAT, version: 2, name: 'Standart',
       heightLabels: ['H', 'H1', 'H2', 'H3', 'HL', 'HM', 'HR'], widthLabels: ['W', 'W1', 'W2', 'W3'],
       types: TYPES.map(k => ({
         key: k, label: k, builtin: true, hidden: false, quick: QUICK.includes(k),
-        heights: /^Overhead/.test(k), widths: WIDTH_TYPES.includes(k),
+        heights: H_TYPES.includes(k), widths: WIDTH_TYPES.includes(k),
         subLabel: SUBLABEL[k] || 'Type', sub: (SUB[k] || []).slice(),
         nameField: k === 'Bridge' ? 'Bridge Name' : '', spansField: k === 'Bridge' || k === 'Culvert' ? 'Spans' : '',
         phrases: (PHRASES[k] || []).slice(),
@@ -91,16 +93,17 @@
     const byKey = Object.fromEntries(d.types.map(t => [t.key, t])), seen = new Set(), types = [];
     for (const t of L.types) {
       const key = str(t && (t.key || t.label)); if (!key || seen.has(key)) continue; seen.add(key);
-      const base = byKey[key] || { key, label: key, builtin: false, hidden: false, quick: false, heights: false, widths: false, subLabel: 'Type', sub: [], nameField: '', spansField: '', phrases: [] };
+      const base = byKey[key] || { key, label: key, builtin: false, hidden: false, quick: false, heights: true, widths: true, subLabel: 'Type', sub: [], nameField: '', spansField: '', phrases: [] };
       types.push({
         key, label: str(t.label) || base.label, builtin: !!byKey[key], hidden: !!t.hidden, quick: !!t.quick,
-        heights: !!t.heights, widths: !!t.widths, subLabel: str(t.subLabel) || base.subLabel,
+        // layouts saved before version 2 take the new H/W defaults for built-in types
+        heights: byKey[key] && !(L.version >= 2) ? base.heights : !!t.heights, widths: byKey[key] && !(L.version >= 2) ? base.widths : !!t.widths, subLabel: str(t.subLabel) || base.subLabel,
         sub: t.sub != null ? lines(t.sub) : base.sub, nameField: t.nameField != null ? str(t.nameField) : base.nameField,
         spansField: t.spansField != null ? str(t.spansField) : base.spansField, phrases: t.phrases != null ? lines(t.phrases) : base.phrases,
       });
     }
     for (const t of d.types) if (!seen.has(t.key)) types.push(t);
-    return { format: FORMAT, version: 1, name: str(L.name) || 'Özel düzen',
+    return { format: FORMAT, version: 2, name: str(L.name) || 'Özel düzen',
       heightLabels: L.heightLabels ? list(L.heightLabels) : d.heightLabels, widthLabels: L.widthLabels ? list(L.widthLabels) : d.widthLabels, types };
   }
   let CUR = defaults();

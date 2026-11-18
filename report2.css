@@ -51,6 +51,7 @@
 .lp .sum { left: 36pt; top: 120pt; width: 770pt; border-collapse: collapse; table-layout: fixed; font-size: 7.6pt; }
 .lp .sum th { background: var(--navy); color: #fff; font-weight: 700; height: 15pt; text-align: left; padding: 0 6pt; border: .75pt solid var(--navy); }
 .lp .sum td { background: var(--cream); border: .75pt solid #E8DDBF; height: 15.4pt; padding: 0 6pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lp .sum td.n { white-space: normal; overflow: visible; text-overflow: clip; line-height: 9.4pt; padding-top: 3pt; padding-bottom: 3pt; }
 .lp .sum tr.sub td:first-child { padding-left: 12pt; }
 
 /* dikey pafta (Nov 17): same parts on an A4 portrait page */

@@ -196,8 +196,9 @@
     toast('Kaydediliyor…');
     const parent = o.parent || null, name = o.name || '';
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
-    if (TD(name).heights) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
-    if (TD(name).widths) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
+    const own = name && !Catalog.def(name) && !['Satellite View', 'Drone View'].includes(name);   // "Kendim yazacağım": H and W
+    if (TD(name).heights || own) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
+    if (TD(name).widths || own) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
     if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; DB.viewBlob(rec.photoId).catch(() => {}); }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
@@ -216,6 +217,19 @@
   }
   /* where a new obstacle goes: right after the obstacle chosen in the list (after its INFO/BYPASS too), else at the end */
   let SCROLLTO = null;   // the obstacle the list should show next time it opens (just added)
+  /* put records (with their INFO/BYPASS) right after obstacle t and its sub-records; t null = at the start */
+  function moveAfter(sv, moving, t) {
+    const ids = new Set(moving.map(r => r.id)), all = sv.records.filter(r => ids.has(r.id) || (r.parentId && ids.has(r.parentId)));
+    sv.records = sv.records.filter(r => !all.includes(r));
+    let i = -1; if (t) { i = sv.records.indexOf(t); sv.records.forEach((r, j) => { if (r.parentId === t.id && j > i) i = j; }); }
+    sv.records.splice(i + 1, 0, ...all);
+  }
+  function askPlace(sv, title, run) {
+    const mains = orderedRecords(sv).filter(r => !r.parentId);
+    sheet(title, [{ label: 'En başa', run: () => run(null) }, ...mains.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''} sonrasına`, run: () => run(t) })),
+      ...(mains.length ? [{ label: 'En sona', cls: 'pri', run: () => run(mains[mains.length - 1]) }] : [])]);
+  }
+  let KEEPVIS = null;    // an obstacle that must stay on screen after the list is drawn again (moved up/down)
   function insertAt(sv) {
     let s = sv.insertAfter && sv.records.find(r => r.id === sv.insertAfter);
     if (s && s.parentId) s = sv.records.find(r => r.id === s.parentId);
@@ -783,7 +797,8 @@
     const pick = sv.insertAfter && sv.records.find(r => r.id === sv.insertAfter && !r.archived) ? sv.insertAfter : null;   // new obstacles go after this one
     const status = r => {
       const s = R.suggest(r, st), col = R.highlightOf(r, st);
-      if (col) return `<span class="tag bad">${COLNAME[col] || col}</span>`;
+      if (r.highlight === 'none') return '<span class="tag ok">Uygun</span>';   // white chosen by hand = suitable
+      if (col) { const c = COLORS.find(x => x[0] === col); return `<span class="tag" style="background:${c ? c[2] : '#ddd'};color:${['red', 'purple', 'blue'].includes(col) ? '#fff' : '#111'}">${COLNAME[col] || col}</span>`; }
       if (/Overhead/.test(r.obstacle) && s.action) return '<span class="tag ok">Uygun</span>';
       return '';
     };
@@ -842,6 +857,8 @@
     { const lst = document.getElementById('list'), key = id + ':' + tab;
       const tgt = SCROLLTO && lst.querySelector(`.rec[data-rec="${SCROLLTO}"]`); SCROLLTO = null;
       if (tgt) tgt.scrollIntoView({ block: 'center' }); else if (LSCROLL[key] != null) lst.scrollTop = LSCROLL[key]; else lst.scrollTop = lst.scrollHeight;
+      const kv = KEEPVIS && lst.querySelector(`.rec[data-rec="${KEEPVIS}"]`); KEEPVIS = null;
+      if (kv) requestAnimationFrame(() => { const a = kv.getBoundingClientRect(), b = lst.getBoundingClientRect(), sb = document.querySelector('.selbar'), top = Math.max(b.top, sb ? sb.getBoundingClientRect().bottom : 0) + 10; if (a.top < top) lst.scrollTop -= top - a.top; else if (a.bottom > b.bottom - 10) lst.scrollTop += a.bottom - b.bottom + 10; LSCROLL[key] = lst.scrollTop; });
       LSCROLL[key] = lst.scrollTop;
       lst.addEventListener('scroll', () => { LSCROLL[key] = lst.scrollTop; }, { passive: true }); }
 
@@ -877,7 +894,7 @@
       if (!sb) { sb = document.createElement('div'); sb.className = 'selbar'; list.appendChild(sb); }   // fixed over the top bar: the list does not shift
       const n = sel.size;
       const pool = list.querySelectorAll('.rec').length, all = n && n >= pool;
-      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="bypass" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin bypass'ı olarak tanımla">Bypass olarak tanımla</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
+      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="bypass" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin bypass'ı olarak tanımla">Bypass olarak tanımla</button><button class="btn" data-sel="info" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin INFO'su olarak tanımla">Info olarak tanımla</button><button class="btn" data-sel="copy" ${n ? '' : 'disabled'} title="Seçilen engelin kopyasını hemen altına yeni engel olarak oluştur">Kopyasını oluştur</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
         <button class="btn" data-sel="arc" ${n ? '' : 'disabled'}>Arşive gönder</button>` : `<button class="btn" data-sel="unarc" ${n ? '' : 'disabled'}>Etüde geri al</button>`}
         <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi bırak, sırayı seçimden önceki haline getir">İptal</button><button class="btn" data-sel="done">Bitti</button>`;
       remember();
@@ -904,7 +921,7 @@
         if (dir < 0) u.parentElement.insertBefore(u, nb); else u.parentElement.insertBefore(nb, u);
         moved = true;
       }
-      if (moved) await applyDom(); else toast(dir < 0 ? 'Zaten en üstte' : 'Zaten en altta');
+      if (moved) { const lead = ordered[0] && (ordered[0].querySelector('.rec') || ordered[0]); KEEPVIS = lead && lead.dataset.rec; await applyDom(); } else toast(dir < 0 ? 'Zaten en üstte' : 'Zaten en altta');
     };
     const startDrag = (rec, pid) => {
       lp = null; suppressClick = true; if (navigator.vibrate) navigator.vibrate(25);
@@ -975,15 +992,28 @@
             { label: 'Yatay pafta (A4 yatay)', cls: 'pri', run: () => open('l') },
           ]);
         }
-        if (k === 'bypass') {   // the selected obstacles become BYPASS records of the obstacle chosen next
+        if (k === 'copy') {   // a new obstacle with the same data (photos copied too) right under each selected one
+          const picked = sv.records.filter(r => sel.has(r.id));
+          for (const r of picked) {
+            const c = JSON.parse(JSON.stringify(r)); c.id = DB.uid(); c.t = Date.now(); delete c.archived;
+            const dup = async b => b ? DB.putBlob(await DB.getBlob(b)) : b;
+            c.photoId = await dup(r.photoId); c.extras = await Promise.all((r.extras || []).map(dup));
+            if (r.insets) { c.insets = {}; for (const [k2, b] of Object.entries(r.insets)) c.insets[k2] = await dup(b); }
+            let i = sv.records.indexOf(r); if (!r.parentId) sv.records.forEach((x, j) => { if (x.parentId === r.id && j > i) i = j; });   // after the obstacle and its INFO/BYPASS
+            sv.records.splice(i + 1, 0, c);
+          }
+          SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv); toast(picked.length > 1 ? `${picked.length} engelin kopyası oluşturuldu` : 'Kopya engel hemen altına oluşturuldu'); return V.survey(id);
+        }
+        if (k === 'bypass' || k === 'info') {   // the selected obstacles become BYPASS / INFO records of the obstacle chosen next
+          const FL = k === 'info' ? 'INFO' : 'BYPASS', fl = k === 'info' ? "info'su" : "bypass'ı";
           const after = (t) => { let i = sv.records.indexOf(t); sv.records.forEach((r, j) => { if (r.parentId === t.id && j > i) i = j; }); return i + 1; };
           const done = async msg => { SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv); toast(msg); return V.survey(id); };
           const makeBypass = async t => {
             const moving = sv.records.filter(r => sel.has(r.id) || (r.parentId && sel.has(r.parentId)));
-            for (const r of moving) { if (sel.has(r.id)) r.flag = 'BYPASS'; r.parentId = t.id; delete r.solo; }
+            for (const r of moving) { if (sel.has(r.id)) r.flag = FL; r.parentId = t.id; delete r.solo; }
             if (moving.some(r => r.id === sv.bypassParent)) sv.bypassParent = null;
             sv.records = sv.records.filter(r => !moving.includes(r)); sv.records.splice(after(t), 0, ...moving);
-            return done(`${sel.size} engel ${t.no} numaralı engelin bypass'ı oldu`);
+            return done(`${sel.size} engel ${t.no} numaralı engelin ${fl} oldu`);
           };
           const unBypass = async () => {
             const subs = sv.records.filter(r => sel.has(r.id) && r.parentId);
@@ -996,10 +1026,18 @@
           const targets = recs.filter(r => !r.parentId && !sel.has(r.id));
           const items = targets.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''}`, run: () => makeBypass(t) }));
           if (sv.records.some(r => sel.has(r.id) && r.parentId)) items.unshift({ label: 'Bypass / Info tanımını kaldır (ana engel yap)', run: unBypass });
-          if (!items.length) return toast('Bypass olarak bağlanacak başka engel yok');
-          return sheet(`Seçilen ${sel.size} engel hangi engelin bypass'ı olsun?`, items);
+          if (!items.length) return toast('Bağlanacak başka engel yok');
+          return sheet(`Seçilen ${sel.size} engel hangi engelin ${fl} olsun?`, items);
         }
         if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
+        if (k === 'unarc') {   // back from the archive: asks after which obstacle it goes
+          const hit = sv.records.filter(x => sel.has(x.id));
+          return askPlace(sv, `${hit.length} engel etüde geri alınacak: hangi engelden sonra?`, async t => {
+            for (const x of hit) x.archived = false;
+            moveAfter(sv, hit.filter(x => !x.parentId), t);   // a lone INFO/BYPASS goes back to its own obstacle
+            SELST[id] = { on: false, ids: [], tab: 's' }; await DB.putSurvey(sv); toast(`${hit.length} engel etüde geri alındı`); return V.survey(id);
+          });
+        }
         if (k === 'arc' || k === 'unarc') {   // archive: kept with the survey, left out of the report, numbering and KM
           const on = k === 'arc', hit = sv.records.filter(x => sel.has(x.id));
           for (const x of hit) x.archived = on;
@@ -1032,9 +1070,10 @@
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'export') return exportNow(sv, a);
       if (a.dataset.act === 'sat') {   // satellite view goes straight under the obstacle chosen in the list (as INFO)
-        let p = pick && sv.records.find(r => r.id === pick); if (p && p.parentId) p = sv.records.find(r => r.id === p.parentId);
+        const pr = pick && sv.records.find(r => r.id === pick); let p = pr; if (p && p.parentId) p = sv.records.find(r => r.id === p.parentId);
         if (!p) return go(`#/add/${sv.id}?mode=sat`);
         await createRecord(sv, { parent: p, flag: 'INFO', name: 'Satellite View', pending: 'sat', go: false });
+        if (pr !== p) { const nr0 = sv.records.find(r => r.id === sv.selected); sv.records = sv.records.filter(r => r !== nr0); sv.records.splice(sv.records.indexOf(pr) + 1, 0, nr0); sv.insertAfter = nr0.id; await DB.putSurvey(sv); }   // right after the chosen INFO/BYPASS
         orderedRecords(sv); const nr = sv.records.find(r => r.id === sv.selected);
         toast(`Uydu görüntüsü ${p.no} numaralı engelin altına ${nr && nr.no ? nr.no + ' ' : ''}INFO olarak eklendi`); return V.survey(id);
       }
@@ -1223,8 +1262,9 @@
         toast('Kaydediliyor…');
         const name = (ct.value || '').trim() || type || 'Road Condition';
         const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag, obstacle: name, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
-        if (TD(name).heights) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
-        if (TD(name).widths) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
+        const own = name && !Catalog.def(name) && !['Satellite View', 'Drone View'].includes(name);
+        if (TD(name).heights || own) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
+        if (TD(name).widths || own) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
         if (file) { rec.photoId = await DB.putBlob(await to43(file)); rec.aspect = 4 / 3; }
         const pos = useGps ? await GPS.current() : null;
         if (pos) {
@@ -1273,7 +1313,9 @@
         return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
             <option value="" ${h.label ? '' : 'selected'}>Seç</option>${opts.map(o => `<option ${o === h.label ? 'selected' : ''}>${o}</option>`).join('')}</select><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${st.general || v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
-          ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>`;
+          ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>
+          ${r.heights.length > 1 ? `<div class="hrem"><input data-hr="${i}" value="${esc(h.remark || '')}" placeholder="${esc(h.label || 'H' + (i + 1))} remark: yaz ya da listeden seç" aria-label="${esc(h.label || 'H')} remark">
+            <select data-hrs="${i}" aria-label="Hazır remark"><option value="">Seç…</option>${(PHRASES[r.obstacle] || []).map((t, j) => `<option value="${j}">${esc(t.length > 70 ? t.slice(0, 68) + '…' : t)}</option>`).join('')}</select></div>` : ''}`;   // H1, H2…: each its own remark (report: one line each)
       };
       const sub = SUB[r.obstacle];
       const cw = st.general ? null : pn((sv.project.cargo || {}).width);
@@ -1319,7 +1361,7 @@
           ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
           ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${(r.heights || []).map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : r.obstacle ? '<button class="btn dash sm" id="hadd">+ Yükseklik (H) ekle</button>' : ''}
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
-          ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
+          ${r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
           ${(() => { const own = ownPhrases(sv, r.obstacle, textKey); OWN = own; return own.length ? `<div class="sec" style="margin-top:2px">Bu etütte yazdıkların</div><div class="chips">${own.slice(0, 3).map((t, i) => `<button class="chip own ${r[textKey] === t ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-own="${i}">${esc(t)}</button>`).join('')}${own.length > 3 ? `<button class="chip dash" id="ownall" style="font-size:13px;border-radius:10px;min-height:40px">Tümü (${own.length})</button>` : ''}</div>` : ''; })()}
           ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].slice(0, isSlope ? 99 : 4).map((p, i) => `<button class="chip ${isSlope && r[textKey] === p ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px${isSlope ? ';min-width:58px;justify-content:center;font-weight:600' : ''}" data-ph="${i}">${esc(isSlope ? phLabel(p) : p)}</button>`).join('')}${!isSlope && PHRASES[r.obstacle].length > 4 ? `<button class="chip dash" id="phall" style="font-size:13px;border-radius:10px;min-height:40px">Tüm hazır cümleler (${PHRASES[r.obstacle].length})</button>` : ''}</div>` : ''}
@@ -1343,6 +1385,7 @@
       if (g('sp')) r.fields.spans = g('sp').value.trim();
       document.querySelectorAll('[data-hv]').forEach(i => { r.heights[i.dataset.hv].value = pn(i.value); });
       document.querySelectorAll('[data-hl]').forEach(i => { r.heights[i.dataset.hl].label = i.value; });
+      document.querySelectorAll('[data-hr]').forEach(i => { const h = r.heights[i.dataset.hr]; if (h) h.remark = i.value.trim(); });
       document.querySelectorAll('[data-wv]').forEach(i => { r.widths[i.dataset.wv].value = pn(i.value); });
       document.querySelectorAll('[data-wl]').forEach(i => { r.widths[i.dataset.wl].label = i.value; });
       const tx = g('tx').value;
@@ -1354,9 +1397,18 @@
       document.querySelectorAll('[data-hv]').forEach(i => i.addEventListener('change', () => { read(); autoAct(); draw(); }));
       if (g('tt')) g('tt').addEventListener('change', () => { read(); autoAct(); draw(); });
       const setType = t => { read(); r.obstacle = t; r.fields = {}; r.actionAuto = true;
-        if (TD(t).heights && !r.heights.length) r.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
-        if (WIDTH_TYPES.includes(t) && !(r.widths || []).length) r.widths = [{ label: 'W', value: null }];
+        const own = t && !Catalog.def(t) && !['Satellite View', 'Drone View'].includes(t);   // own type: H and W
+        if ((TD(t).heights || own) && !(r.heights || []).length) r.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
+        if ((WIDTH_TYPES.includes(t) || own) && !(r.widths || []).length) r.widths = [{ label: 'W', value: null }];
         if (!r.remarks && PHRASES[t] && PHRASES[t].length === 1 && !/%/.test(PHRASES[t][0]) && !/Overhead|Bridge|Culvert/.test(t)) r.remarks = PHRASES[t][0];
+        /* INFO/BYPASS given the same type as its obstacle (e.g. a bridge's INFO set to Bridge): starts with that obstacle's details and remarks */
+        const pa = r.parentId && sv.records.find(x => x.id === r.parentId);
+        if (pa && pa.obstacle === t) {
+          const cp = v => JSON.parse(JSON.stringify(v == null ? null : v));
+          r.fields = cp(pa.fields) || {}; r.heights = cp(pa.heights) || []; r.widths = cp(pa.widths) || [];
+          r.remarks = pa.remarks || ''; r.actions = pa.actions || ''; r.highlight = pa.highlight || null; r.actionAuto = pa.actionAuto !== false;
+          toast(`${pa.no || 'Ana engel'} bilgileri ve remark'ı alındı; değiştirebilirsin`);
+        }
         DB.putSurvey(sv).then(() => V.record(id, rid)); };
       g('cnv').onchange = () => { if (g('cnv').value.trim()) setType(g('cnv').value.trim()); };
       const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
@@ -1372,6 +1424,7 @@
       if (g('wadd')) g('wadd').onclick = () => { read(); r.widths = r.widths || []; r.widths.push({ label: r.widths.length ? '' : 'W', value: null }); draw(); };
       document.querySelectorAll('[data-wv],[data-wl]').forEach(i => i.addEventListener('change', () => { read(); autoW(); draw(); }));
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
+      document.querySelectorAll('[data-hrs]').forEach(sel => sel.addEventListener('change', () => { const t = (PHRASES[r.obstacle] || [])[sel.value]; if (t == null) return; const inp = document.querySelector(`[data-hr="${sel.dataset.hrs}"]`); inp.value = t; sel.value = ''; read(); }));
       if (g('orig')) g('orig').onclick = () => showOriginal(r.photoId);
       g('rep').onclick = () => sheet(u ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle', [
         { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?replace=${r.id}`); } },
@@ -1382,7 +1435,11 @@
         { label: 'Galeriden seç (birden çok)', icon: imgSvg, file: true, multi: true, run: async fs => { read(); toast('Ekleniyor…'); for (const f of fs) r.extras.push(await DB.putBlob(await to43(f))); await DB.putSurvey(sv); picker(); } },
       ]);
       if (g('arc')) g('arc').onclick = async () => {
-        read(); r.archived = !r.archived;
+        read();
+        if (r.archived && !r.parentId) return askPlace(sv, 'Etüde geri alınacak: hangi engelden sonra?', async t => {
+          r.archived = false; moveAfter(sv, [r], t); await DB.putSurvey(sv); SELST[sv.id] = { on: false, ids: [], tab: 's' }; toast('Etüde geri alındı'); go(`#/s/${sv.id}`);
+        });
+        r.archived = !r.archived;
         if (r.archived && sv.bypassParent === r.id) sv.bypassParent = null;
         await DB.putSurvey(sv); SELST[sv.id] = { on: false, ids: [], tab: r.archived ? 'a' : 's' };
         toast(r.archived ? 'Arşive gönderildi; rapora girmez' : 'Etüde geri alındı'); go(`#/s/${sv.id}`);
@@ -1570,7 +1627,7 @@
           <div class="sec">Tabela</div>
           <div class="tools signs">${[['turnL', 'Sola dönüş'], ['turnR', 'Sağa dönüş'], ['uturn', 'U dönüşü'], ['up', 'Yokuş %'], ['down', 'İniş %']].map(([t, l]) => `<button class="btn sm" data-add="s:${t}" title="${l}"><span style="width:26px;height:23px;display:inline-block">${annSign({ t, text: '' })}</span> ${l}</button>`).join('')}</div>
           <div class="sec">Diğer</div>
-          <div class="tools"><button class="btn sm" data-add="text">+ Not kutusu</button><button class="btn sm" data-add="line">+ Kırmızı ok</button></div>
+          <div class="tools"><button class="btn sm" data-add="text">+ Not kutusu</button><button class="btn sm" data-add="line">+ Kırmızı ok</button><button class="btn sm" data-add="pline">+ Çizgi</button></div>
           <div class="hint">Öğeye dokunup sürükle. Okların iki ucunu ayrı ayrı taşıyabilirsin.</div>
           <div id="ctl"></div>
         </div>
@@ -1586,7 +1643,7 @@
         <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
         ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Yassılaştır</button><button class="btn sm" data-c="tall">Diklet</button>' : ''}
         ${o.k === 'garrow' ? ['straight', 'left', 'right'].map(d => `<button class="btn sm ${o.dir === d ? 'pri' : ''}" data-c="dir:${d}">${annGArrow(d)}</button>`).join('') : ''}
-        ${o.k === 'line' ? `<button class="btn sm ${o.both ? 'pri' : ''}" data-c="both">Çift uçlu</button>` : ''}
+        ${o.k === 'line' ? `<button class="btn sm ${o.plain ? 'pri' : ''}" data-c="plain">Düz çizgi</button><button class="btn sm ${!o.plain && !o.both ? 'pri' : ''}" data-c="one">Tek uçlu ok</button><button class="btn sm ${o.both && !o.plain ? 'pri' : ''}" data-c="both">Çift uçlu</button><button class="btn sm" data-c="lthick">Kalınlaştır</button><button class="btn sm" data-c="lthin">İncelt</button>` : ''}
         ${o.k === 'yarrow' ? '<button class="btn sm" data-c="thick">Kalınlaştır</button><button class="btn sm" data-c="thin">İncelt</button>' : ''}</div>
         ${o.k === 'text' || o.k === 'line' ? `<div class="sec">Renk</div><div class="tools">${Object.entries(ANNCOL).map(([k, [c, bg]]) => `<button class="btn sm" data-c="col:${k}" aria-label="${k}" title="${({ red: 'Kırmızı', black: 'Siyah', blue: 'Mavi', green: 'Yeşil', yellow: 'Sarı', white: 'Beyaz' })[k]}" style="min-width:44px;${(o.color || 'red') === k ? 'outline:3px solid var(--navy);outline-offset:2px;' : ''}background:${bg};"><span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${c};border:1px solid #0003"></span></button>`).join('')}</div>` : ''}
         <div class="tools">
@@ -1615,6 +1672,7 @@
         if (k === 'arrow') items.push({ k, x: 0.46, y: 0.62, w: 0.08, h: 0.17, rot: 0 });
         if (k === 'text') items.push({ k, x: 0.08, y: 0.08, w: 0.45, text: '' });
         if (k === 'line') items.push({ k, x1: 0.3, y1: 0.3, x2: 0.45, y2: 0.5 });
+        if (k === 'pline') items.push({ k: 'line', plain: true, x1: 0.25, y1: 0.5, x2: 0.6, y2: 0.5 });   // plain line, no arrow heads
         if (k === 'yarrow') items.push({ k, x1: 0.3, y1: 0.84, x2: 0.52, y2: 0.72, w: 0.05 });
         const minOf = list => { const v = (list || []).map(h => pn(h.value)).filter(x => x != null); return v.length ? Math.min(...v) : null; };
         if (k === 'h') {
@@ -1638,7 +1696,11 @@
         if (k === 'big' || k === 'small') { const f = k === 'big' ? 1.2 : 1 / 1.2; if (o.k === 'text') o.fs = (o.fs || 1) * f; else { o.w *= f; if (o.h) o.h *= f; } }
         if (k === 'flat') o.h *= 0.85; if (k === 'tall') o.h /= 0.85;
         if (k.startsWith('dir:')) o.dir = k.slice(4);
-        if (k === 'both') o.both = !o.both;
+        if (k === 'both') { if (o.plain) { o.plain = false; o.both = true; } else o.both = !o.both; }
+        if (k === 'plain') { o.plain = true; o.both = false; }
+        if (k === 'one') { o.plain = false; o.both = false; }
+        if (k === 'lthick') o.sw = Math.min(3, (o.sw || 0.8) * 1.4);
+        if (k === 'lthin') o.sw = Math.max(0.3, (o.sw || 0.8) / 1.4);
         if (k === 'thick') o.w = Math.min(0.2, (o.w || 0.05) * 1.2); if (k === 'thin') o.w = Math.max(0.015, (o.w || 0.05) / 1.2);
         if (k.startsWith('col:')) o.color = k.slice(4);
         if (k === 'del') { items.splice(sel, 1); sel = -1; }
