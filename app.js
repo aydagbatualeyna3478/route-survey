@@ -1317,7 +1317,7 @@
         </div>
         <div class="pane">
           ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
-          ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${r.heights.map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : ''}
+          ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${(r.heights || []).map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : r.obstacle ? '<button class="btn dash sm" id="hadd">+ Yükseklik (H) ekle</button>' : ''}
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
           ${!isOH && r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
@@ -1368,7 +1368,7 @@
       if (g('insq')) g('insq').onclick = () => insetSheet(sv, r, read);
       g('simq').onclick = async () => { await keep(); createRecord(sv, { parent: mainRec, flag: 'INFO', name: 'Satellite View', pending: 'sat' }); };
       if (bypq) bypq.onclick = async () => { read(); autoAct(); sv.bypassParent = r.id; await DB.putSurvey(sv); go(`#/cam/${sv.id}`); };
-      if (g('hadd')) g('hadd').onclick = () => { read(); r.heights.push({ label: '', value: null }); draw(); };
+      if (g('hadd')) g('hadd').onclick = () => { read(); (r.heights = r.heights || []).push({ label: '', value: null }); draw(); };
       if (g('wadd')) g('wadd').onclick = () => { read(); r.widths = r.widths || []; r.widths.push({ label: r.widths.length ? '' : 'W', value: null }); draw(); };
       document.querySelectorAll('[data-wv],[data-wl]').forEach(i => i.addEventListener('change', () => { read(); autoW(); draw(); }));
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
