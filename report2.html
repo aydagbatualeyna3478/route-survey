@@ -7,11 +7,12 @@
 <link rel="stylesheet" href="report.css">
 <link rel="stylesheet" href="report2.css">
 <style>
+@keyframes pgw{from{margin-left:0}to{margin-left:65%}}
 #tb{position:sticky;top:0;z-index:10;background:#1E3A5F;color:#fff;display:flex;gap:10px;align-items:center;padding:10px 12px;font:15px system-ui,sans-serif}
 #tb button,#tb a{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 14px;min-height:44px;background:#fff;color:#1E3A5F;text-decoration:none}
 #tb span{flex:1;font-size:13px}
 @media screen{#report{zoom:var(--z,1)}}
-@media print{#tb{display:none}}
+@media print{#tb,.np{display:none!important}}
 html.cap #tb{display:none}
 html.cap.cap1 #tb{display:flex}
 html.cap1 #report .page:not(.capon){display:none}
@@ -22,15 +23,15 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="prn" hidden>Yazdır</button><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=57"></script>
+<script src="auth.js?v=58"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=57"></script>
-<script src="rules.js?v=57"></script>
-<script src="catalog.js?v=57"></script>
-<script src="pdfcap.js?v=57"></script>
-<script src="drawing.js?v=57"></script>
-<script src="vendor/html-to-image.js?v=57"></script>
-<script src="deskpdf.js?v=57"></script>
+<script src="db.js?v=58"></script>
+<script src="rules.js?v=58"></script>
+<script src="catalog.js?v=58"></script>
+<script src="pdfcap.js?v=58"></script>
+<script src="drawing.js?v=58"></script>
+<script src="vendor/html-to-image.js?v=58"></script>
+<script src="deskpdf.js?v=58"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -355,7 +356,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=57'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=58'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
@@ -365,10 +366,11 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   if (!ROADKM && recs.some(r => r.latDec != null)) MAPNOTE += ' Yol güzergahı hesaplanamadı (internet?); KM ve güzergah düz çizgiyle.';
   const noSat = recs.filter(r => r.latDec != null && !r.sat).length;
   if (noSat) MAPNOTE += ` ${noSat} engelin uydu görüntüsü indirilemedi (internet bağlantısını kontrol et).`;
-  const DESK = !window.AndroidPdf && !window.AndroidPrint && !!window.htmlToImage;   // computer: the app writes the PDF itself
-  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf || DESK ? '"PDF kaydet" ile PDF\'i kaydet.' : '"Yazdır / PDF" ile hedef olarak "PDF olarak kaydet" seç (Microsoft Print to PDF değil), kenar boşluğu "Yok".'}${MAPNOTE}`;
-  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf || DESK) pr.textContent = 'PDF kaydet';
-  const prn = document.getElementById('prn'); if (DESK) { prn.hidden = false; prn.onclick = () => printHelp(); }
+  const WINAPP = !!window.DesktopPdf;   // GoSurvey for Windows: Chromium prints the PDF itself (vector, page sizes from CSS)
+  const DESK = !WINAPP && !window.AndroidPdf && !window.AndroidPrint && !!window.htmlToImage;   // computer: the app writes the PDF itself
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf || DESK || WINAPP ? '"PDF kaydet" ile PDF\'i kaydet.' : '"Yazdır / PDF" ile hedef olarak "PDF olarak kaydet" seç (Microsoft Print to PDF değil), kenar boşluğu "Yok".'}${MAPNOTE}`;
+  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf || DESK || WINAPP) pr.textContent = 'PDF kaydet';
+  const prn = document.getElementById('prn'); if (DESK || WINAPP) { prn.hidden = false; prn.onclick = () => printHelp(); }
   pr.onclick = async () => {
     if (window.AndroidPdf) {   // tablet: the app makes the PDF (each page in its own size), saves it to Belgeler/Etütler and opens the share menu
       pr.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF hazırlanıyor…';
@@ -377,6 +379,21 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
       return;
     }
     if (window.AndroidPrint) return AndroidPrint.print(document.title);
+    if (WINAPP) {
+      pr.disabled = prn.disabled = true; const m0 = msg.textContent;
+      const ov = progressBox(); ov.querySelector('#pgc').hidden = true;
+      ov.querySelector('#pgt').textContent = `${window.REPORT_STATS.pages} sayfa`; ov.querySelector('#pgl').textContent = 'Kaydetme penceresinde yeri seç; sonra PDF yazılır (uzun raporda 1–2 dakika).';
+      ov.querySelector('#pgb').style.cssText += ';width:35%;animation:pgw 1.2s ease-in-out infinite alternate';
+      const r = await window.DesktopPdf.save(document.title);
+      pr.disabled = prn.disabled = false;
+      if (r.cancelled || r.err) { ov.remove(); msg.textContent = r.err ? 'PDF oluşturulamadı: ' + r.err : m0; return; }
+      msg.textContent = `PDF kaydedildi: ${r.path}`;
+      ov.querySelector('#pgb').style.cssText = 'height:100%;width:100%;background:#1E8E5A';
+      ov.querySelector('#pgt').textContent = '✓ PDF kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${(r.size / 1048576).toFixed(1)} MB`;
+      const c = ov.querySelector('#pgc'); c.hidden = false; c.textContent = 'Kapat'; c.onclick = () => ov.remove();
+      const o = document.createElement('button'); o.textContent = 'PDF\'i aç'; o.style.cssText = c.style.cssText + ';margin-left:8px;background:#0D2E4F;color:#fff;border:0'; o.onclick = () => { window.DesktopPdf.open(r.path); ov.remove(); }; c.after(o);
+      return;
+    }
     if (DESK) {   // no print dialog: each page drawn and written into the PDF file chosen in the save window
       pr.disabled = prn.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF hazırlanıyor…';
       let ov = null; const t0 = Date.now();
@@ -403,7 +420,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
      printer drivers such as Microsoft Print to PDF force one orientation, so say how to set the dialog first */
   /* big progress window while the computer writes the PDF (the file shows 0 bytes until the last page is written) */
   function progressBox() {
-    const d = document.createElement('div');
+    const d = document.createElement('div'); d.className = 'np';
     d.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML = `<div style="background:#fff;color:#111;border-radius:14px;max-width:480px;width:100%;padding:22px 24px;font:15px/1.5 system-ui,Segoe UI,Arial;box-shadow:0 10px 40px rgba(0,0,0,.3)">
       <b style="font-size:18px">PDF hazırlanıyor</b>

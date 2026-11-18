@@ -6,7 +6,7 @@ name: Android APK
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'KURULUM.txt']
+    paths-ignore: ['**.md', 'KURULUM.txt', 'desktop/**', '.github/workflows/windows-app.yml']
   workflow_dispatch:
 
 permissions:

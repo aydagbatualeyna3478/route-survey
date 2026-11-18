@@ -1,0 +1,43 @@
+name: Windows app (GoSurvey)
+# Builds GoSurvey-Setup.exe (Electron window around the web app + native PDF) when desktop/ changes,
+# and publishes it as a GitHub release "desktop-v1.0.N" (not marked latest, so the APK link stays the same).
+on:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/windows-app.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: windows-app
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build installer
+        working-directory: desktop
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm pkg set version=1.0.${{ github.run_number }}
+          npm install --no-audit --no-fund
+          npx electron-builder --win nsis --x64 --publish never
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoSurvey-Setup
+          path: desktop/dist/GoSurvey-Setup.exe
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "desktop-v1.0.${{ github.run_number }}" desktop/dist/GoSurvey-Setup.exe \
+            --title "GoSurvey (Windows) 1.0.${{ github.run_number }}" \
+            --notes "Windows 10/11 kurulum dosyası, commit ${GITHUB_SHA::7}. İndirip çalıştırın; uyarı çıkarsa Ek bilgi → Yine de çalıştır." --latest=false

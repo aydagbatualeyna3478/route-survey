@@ -1,0 +1,20 @@
+{
+  "name": "gosurvey",
+  "productName": "GoSurvey",
+  "version": "1.0.0",
+  "description": "GoSurvey – güzergah etüdü (masaüstü)",
+  "author": "Çaba Misnak",
+  "main": "main.js",
+  "private": true,
+  "scripts": { "dist": "electron-builder --win nsis --x64 --publish never" },
+  "devDependencies": { "electron": "33.2.1", "electron-builder": "25.1.8" },
+  "build": {
+    "appId": "com.cabamisnak.gosurvey",
+    "productName": "GoSurvey",
+    "artifactName": "GoSurvey-Setup.${ext}",
+    "files": ["main.js", "preload.js", "offline.html", "build/icon.png"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "icon": "build/icon.png", "target": ["nsis"] },
+    "nsis": { "oneClick": true, "perMachine": false, "allowElevation": false, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "GoSurvey", "deleteAppDataOnUninstall": false }
+  }
+}
