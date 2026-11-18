@@ -57,9 +57,9 @@
   /* photos on screen use the working copy (≤1600 px); the full-quality photo opens with "Orijinal" (showOriginal) */
   async function viewUrl(id) { if (!id) return null; const k = 'md:' + id; if (!urls.has(k)) { const b = await DB.viewBlob(id); if (!b) return null; urls.set(k, URL.createObjectURL(b)); } return urls.get(k); }
   const forget = id => { for (const k of [id, 'md:' + id, 'th:' + id]) { const u = urls.get(k); if (u) URL.revokeObjectURL(u); urls.delete(k); } };
-  /* stored photo quality (Ayarlar → Fotoğraf): high by default, so obstacles can be inspected later; the PDF uses smaller copies */
-  const PQ = { normal: [1600, 0.82], high: [3200, 0.88], max: [4608, 0.92] };
-  let PQK = 'high'; DB.getSetting('photoQuality').then(v => { if (PQ[v]) PQK = v; }).catch(() => {});
+  /* stored photo: 2560×1920 JPEG (~1 MB) — sharp enough to inspect obstacles later, light enough for the MatePad 12 X;
+     screens and the PDF use smaller copies */
+  const PHOTO_W = 2560, PHOTO_Q = 0.86;
   async function showOriginal(id) {
     const b = await DB.getBlob(id); if (!b) return toast('Fotoğraf bulunamadı');
     const u = URL.createObjectURL(b), d = document.createElement('div'); d.className = 'origv';
@@ -120,12 +120,11 @@
     catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
     const sw = bmp.width, sh = bmp.height, ar = 4 / 3;
     let cw = sw, ch = sw / ar; if (ch > sh) { ch = sh; cw = sh * ar; }
-    const [MX, QQ] = PQ[PQK] || PQ.high;
-    const W = Math.min(MX, Math.round(cw)), H = Math.round(W / ar);   // stored in good quality; screens and the PDF use smaller copies
+    const W = Math.min(PHOTO_W, Math.round(cw)), H = Math.round(W / ar);   // stored in good quality; screens and the PDF use smaller copies
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     c.getContext('2d').drawImage(bmp, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
     if (bmp.close) bmp.close();
-    const out = await new Promise(res => c.toBlob(res, 'image/jpeg', QQ));
+    const out = await new Promise(res => c.toBlob(res, 'image/jpeg', PHOTO_Q));
     c.width = c.height = 0; return out;
   }
   async function shrink(file, max) { // logos / drawings: keep aspect, PNG keeps transparency
@@ -1149,17 +1148,17 @@
       if (window.ImageCapture && trk && !busy) {
         document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
         try {
-          const ic = new ImageCapture(trk); let opt = {};
-          try { const cap = await ic.getPhotoCapabilities(); if (cap && cap.imageWidth && cap.imageWidth.max) opt = { imageWidth: cap.imageWidth.max }; } catch (e) {}
-          const ph = await ic.takePhoto(opt);
-          if (ph && ph.size > 50000) return save(ph, false, false);   // cropped to 4:3 at the chosen quality in save()
+          const ic = new ImageCapture(trk);   // default settings: the camera's photo size, the preview is not reconfigured
+          const ph = await Promise.race([ic.takePhoto(), new Promise(r => setTimeout(() => r(null), 4000))]);
+          if (vid.paused) vid.play().catch(() => {});
+          if (ph && ph.size > 50000) return save(ph, false, false);   // cropped to 4:3, 2560 px in save()
         } catch (e) { console.warn('takePhoto', e); }
       }
       const w = vid.videoWidth, h = vid.videoHeight; let cw = w, ch = w * 3 / 4; if (ch > h) { ch = h; cw = h * 4 / 3; }
-      const c = document.createElement('canvas'); c.width = Math.min((PQ[PQK] || PQ.high)[0], Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
+      const c = document.createElement('canvas'); c.width = Math.min(PHOTO_W, Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
       c.getContext('2d').drawImage(vid, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height);
       document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
-      c.toBlob(b => save(b, false, true), 'image/jpeg', (PQ[PQK] || PQ.high)[1]);
+      c.toBlob(b => save(b, false, true), 'image/jpeg', PHOTO_Q);
     };
     document.getElementById('cgal').onchange = async e => {
       const fs = [...e.target.files]; if (!fs.length) return;
@@ -1170,7 +1169,7 @@
     document.getElementById('cclose').onclick = () => go(extraFor && shots ? back + '?pick=1' : back);
     // buttons are wired first, so the gallery works while the camera permission is still being asked
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 4032 }, height: { ideal: 3024 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
       vid.srcObject = stream; await vid.play().catch(() => {});
     } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
   };
@@ -1807,9 +1806,7 @@
     const lookPane = `<div class="pane" style="max-width:720px;gap:14px"><div class="sec">Tema</div>
         <div class="g3">${[['light', 'Açık tema'], ['dark', 'Koyu tema'], ['auto', 'Cihaza göre']].map(([k, l]) => `<button class="chip ${theme() === k ? 'on' : ''}" data-theme="${k}" style="border-radius:12px;min-height:64px">${l}</button>`).join('')}</div>
         <span class="hint">Seçim bu cihazda hatırlanır. Raporlar ve PDF her zaman beyaz zeminle çıkar.</span>
-        <div class="sec" style="margin-top:10px">Fotoğraf kalitesi</div>
-        <div class="g3">${[['normal', 'Normal', '1600 px · ~0,4 MB'], ['high', 'Yüksek (önerilen)', '3200 px · ~1,5 MB'], ['max', 'En yüksek', 'kamera çözünürlüğü · ~3 MB']].map(([k, l, d]) => `<button class="chip ${PQK === k ? 'on' : ''}" data-pq="${k}" style="border-radius:12px;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px"><b style="font-size:15px;display:block">${l}</b><span style="font-size:12px;font-weight:500;display:block">${d}</span></button>`).join('')}</div>
-        <span class="hint">Etüde kaydedilen fotoğrafın kalitesi. Engel ekranında <b>🔍 Orijinal</b> ile büyütüp incelenir; ekranlar ve PDF raporu daha küçük kopyalarla çalışır, o yüzden yüksek kalite uygulamayı yavaşlatmaz. Yedek ve "Dışa Aktar" fotoğrafları bu kalitede alır.</span></div>`;
+</div>`;
     const mapsPane = `<div class="pane" style="max-width:860px;gap:14px"><div class="sec">Rapordaki uydu ve güzergah görüntüleri</div>
         ${[['google', 'Google Maps (API anahtarı gerekir)'], ['esri', 'Esri uydu (anahtarsız)']].map(([v, l]) => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:12px;background:var(--card2)"><input type="radio" name="mprov" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:20px;height:20px">${l}</label>`).join('')}
         <label class="f">Google Maps API anahtarı (Maps Static API açık olmalı)<input id="mkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label>
@@ -1827,7 +1824,6 @@
       const t = e.target;
       const st = t.closest('[data-stab]'); if (st) { SET.tab = st.dataset.stab; return V.settings(); }
       const th = t.closest('[data-theme]'); if (th) { setTheme(th.dataset.theme); return V.settings(); }
-      const pq = t.closest('[data-pq]'); if (pq) { PQK = pq.dataset.pq; await DB.setSetting('photoQuality', PQK); toast('Yeni fotoğraflar bu kalitede kaydedilecek'); return V.settings(); }
       const tk = t.closest('[data-tk]'); if (tk) { SET.key = tk.dataset.tk; return V.settings(); }
       const tg = t.closest('[data-tg]'); if (tg) { T[tg.dataset.tg] = !T[tg.dataset.tg]; persist(); return V.settings(); }
       const mv = t.closest('[data-mv]'); if (mv) { const j = ti + +mv.dataset.mv; D.types.splice(ti, 1); D.types.splice(j, 0, T); persist(); return V.settings(); }
