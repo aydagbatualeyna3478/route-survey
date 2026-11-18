@@ -1,3 +1,5 @@
+/* colours and fills always print, even when the print dialog's "Background graphics" is off */
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 @font-face { font-family: Carlito; src: url(fonts/Carlito-Regular.ttf); font-weight: 400; font-style: normal; }
 @font-face { font-family: Carlito; src: url(fonts/Carlito-Bold.ttf); font-weight: 700; font-style: normal; }
 @font-face { font-family: Carlito; src: url(fonts/Carlito-Italic.ttf); font-weight: 400; font-style: italic; }

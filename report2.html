@@ -18,13 +18,13 @@ html.cap #tb{display:none}
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=53"></script>
+<script src="auth.js?v=54"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=53"></script>
-<script src="rules.js?v=53"></script>
-<script src="catalog.js?v=53"></script>
-<script src="pdfcap.js?v=53"></script>
-<script src="drawing.js?v=53"></script>
+<script src="db.js?v=54"></script>
+<script src="rules.js?v=54"></script>
+<script src="catalog.js?v=54"></script>
+<script src="pdfcap.js?v=54"></script>
+<script src="drawing.js?v=54"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -349,7 +349,7 @@ html.cap #tb{display:none}
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=53'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=54'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
@@ -359,7 +359,7 @@ html.cap #tb{display:none}
   if (!ROADKM && recs.some(r => r.latDec != null)) MAPNOTE += ' Yol güzergahı hesaplanamadı (internet?); KM ve güzergah düz çizgiyle.';
   const noSat = recs.filter(r => r.latDec != null && !r.sat).length;
   if (noSat) MAPNOTE += ` ${noSat} engelin uydu görüntüsü indirilemedi (internet bağlantısını kontrol et).`;
-  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf ? '"PDF kaydet" ile PDF\'i kaydet.' : 'Yazıcı olarak "PDF olarak kaydet" seç, kenar boşluklarını "Yok" yap.'}${MAPNOTE}`;
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf ? '"PDF kaydet" ile PDF\'i kaydet.' : '"Yazdır / PDF" ile hedef olarak "PDF olarak kaydet" seç (Microsoft Print to PDF değil), kenar boşluğu "Yok".'}${MAPNOTE}`;
   const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf) pr.textContent = 'PDF kaydet';
   pr.onclick = async () => {
     if (window.AndroidPdf) {   // tablet: the app makes the PDF (each page in its own size), saves it to Belgeler/Etütler and opens the share menu
@@ -368,8 +368,30 @@ html.cap #tb{display:none}
       msg.textContent = r.path ? `PDF kaydedildi: ${r.path.replace(/^.*\/(Documents|Download)\//, 'Belgeler/')}` : 'PDF oluşturulamadı: ' + (r.err || '') + ' · ' + m0;
       return;
     }
-    if (window.AndroidPrint) AndroidPrint.print(document.title); else window.print();
-  };   // tablet app: Android print dialog → Save as PDF
+    if (window.AndroidPrint) return AndroidPrint.print(document.title);
+    printHelp();
+  };
+  /* computer: the browser's own "Save as PDF" keeps every page in its own size (portrait / landscape / A3);
+     printer drivers such as Microsoft Print to PDF force one orientation, so say how to set the dialog first */
+  function printHelp() {
+    let skip = false; try { skip = localStorage.getItem('rs-printhelp') === '1'; } catch (e) {}
+    if (skip) return window.print();
+    const d = document.createElement('div'); d.className = 'np';
+    d.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML = `<div style="background:#fff;color:#111;border-radius:14px;max-width:520px;width:100%;padding:22px 24px;font:15px/1.5 system-ui,Segoe UI,Arial;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+      <b style="font-size:18px">PDF olarak kaydetmeden önce</b>
+      <ol style="margin:12px 0 14px;padding-left:20px">
+        <li><b>Hedef / Yazıcı:</b> <b>“PDF olarak kaydet”</b> seçin. <span style="color:#B42318">“Microsoft Print to PDF”, “Adobe PDF” gibi yazıcıları seçmeyin</span> — sayfaları tek yöne çevirir, yatay paftalar dikey sayfaya sıkışır.</li>
+        <li><b>Düzen (Dikey/Yatay):</b> pencerede çıkarsa <b>değiştirmeyin</b>; her pafta kendi yönünde çıkar.</li>
+        <li><b>Diğer ayarlar → Kenar boşlukları:</b> <b>Yok</b>, <b>Ölçek:</b> Varsayılan.</li>
+        <li><b>Arka plan grafikleri</b> açık olsun (remark renkleri için; kapalı olsa da renkler artık basılır).</li>
+      </ol>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#444;margin-bottom:14px"><input type="checkbox" id="phs"> Bir daha gösterme</label>
+      <div style="display:flex;gap:10px;justify-content:flex-end"><button id="phc" style="padding:10px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;cursor:pointer">Vazgeç</button><button id="pho" style="padding:10px 18px;border-radius:10px;border:0;background:#0D2E4F;color:#fff;font-size:15px;font-weight:700;cursor:pointer">Yazdır penceresini aç</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelector('#phc').onclick = () => d.remove();
+    d.querySelector('#pho').onclick = () => { try { if (d.querySelector('#phs').checked) localStorage.setItem('rs-printhelp', '1'); } catch (e) {} d.remove(); setTimeout(() => window.print(), 50); };
+  }   // tablet app: Android print dialog → Save as PDF
 })().catch(e => { document.getElementById('msg').textContent = 'Hata: ' + e.message; console.error(e); });
 </script>
 </body>

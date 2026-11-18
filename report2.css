@@ -1,3 +1,5 @@
+/* colours and fills always print, even when the print dialog's "Background graphics" is off */
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 /* Landscape record pages of the new draft (Nov 2026), placed inside the portrait report (report.css) as section 3.
    Every rule is scoped to .lp so nothing clashes with the portrait pages. Measurements in pt follow the draft PDF
    (841.89 × 595.28 pt). */
