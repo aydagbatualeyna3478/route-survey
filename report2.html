@@ -22,15 +22,15 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
 <body>
 <div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="prn" hidden>Yazdır</button><button id="pr" disabled>PDF al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=56"></script>
+<script src="auth.js?v=57"></script>
 <script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=56"></script>
-<script src="rules.js?v=56"></script>
-<script src="catalog.js?v=56"></script>
-<script src="pdfcap.js?v=56"></script>
-<script src="drawing.js?v=56"></script>
-<script src="vendor/html-to-image.js?v=56"></script>
-<script src="deskpdf.js?v=56"></script>
+<script src="db.js?v=57"></script>
+<script src="rules.js?v=57"></script>
+<script src="catalog.js?v=57"></script>
+<script src="pdfcap.js?v=57"></script>
+<script src="drawing.js?v=57"></script>
+<script src="vendor/html-to-image.js?v=57"></script>
+<script src="deskpdf.js?v=57"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -355,7 +355,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
   msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=56'; s.onload = res; document.body.appendChild(s); });
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=57'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
   msg.textContent = 'Görseller yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
@@ -379,15 +379,42 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     if (window.AndroidPrint) return AndroidPrint.print(document.title);
     if (DESK) {   // no print dialog: each page drawn and written into the PDF file chosen in the save window
       pr.disabled = prn.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF hazırlanıyor…';
-      const r = await deskPdf(document.title, (i, n) => { msg.textContent = `PDF hazırlanıyor… ${i} / ${n} sayfa`; });
+      let ov = null; const t0 = Date.now();
+      const r = await deskPdf(document.title, (i, n) => {
+        if (!ov) ov = progressBox();   // after the save window, so it is not hidden behind it
+        const left = Math.round((Date.now() - t0) / i * (n - i) / 1000), pc = Math.round(i / n * 100);
+        msg.textContent = `PDF hazırlanıyor… ${i} / ${n} sayfa`;
+        ov.querySelector('#pgb').style.width = pc + '%';
+        ov.querySelector('#pgt').textContent = `${i} / ${n} sayfa · %${pc}`;
+        ov.querySelector('#pgl').textContent = i < n ? `Kalan süre yaklaşık ${left >= 60 ? Math.floor(left / 60) + ' dk ' : ''}${left % 60} sn` : 'Dosya kapatılıyor…';
+      });
       pr.disabled = prn.disabled = false;
-      msg.textContent = r.cancelled ? m0 : r.err ? 'PDF oluşturulamadı: ' + r.err + ' · "Yazdır" ile de alınabilir.' : `PDF kaydedildi: ${r.path} (${r.pages} sayfa)`;
+      const txt = r.cancelled || r.err === 'İptal edildi' ? m0 : r.err ? 'PDF oluşturulamadı: ' + r.err + ' · "Yazdır" ile de alınabilir.' : `PDF kaydedildi: ${r.path} (${r.pages} sayfa)`;
+      msg.textContent = txt;
+      if (ov) {
+        if (r.err || r.cancelled) ov.remove();
+        else { ov.querySelector('#pgb').style.width = '100%'; ov.querySelector('#pgt').textContent = '✓ PDF kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${r.pages} sayfa. Dosyayı seçtiğin klasörde açabilirsin.`; const c = ov.querySelector('#pgc'); c.textContent = 'Tamam'; c.onclick = () => ov.remove(); }
+      }
       return;
     }
     printHelp();
   };
   /* computer: the browser's own "Save as PDF" keeps every page in its own size (portrait / landscape / A3);
      printer drivers such as Microsoft Print to PDF force one orientation, so say how to set the dialog first */
+  /* big progress window while the computer writes the PDF (the file shows 0 bytes until the last page is written) */
+  function progressBox() {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML = `<div style="background:#fff;color:#111;border-radius:14px;max-width:480px;width:100%;padding:22px 24px;font:15px/1.5 system-ui,Segoe UI,Arial;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+      <b style="font-size:18px">PDF hazırlanıyor</b>
+      <div style="height:14px;border-radius:7px;background:#E5E7EB;overflow:hidden;margin:14px 0 8px"><div id="pgb" style="height:100%;width:0;background:#1E8E5A;transition:width .2s"></div></div>
+      <div id="pgt" style="font-weight:700">0 sayfa</div><div id="pgl" style="color:#555;font-size:14px">Başlıyor…</div>
+      <div style="color:#777;font-size:13px;margin-top:10px">Dosya bitene kadar klasörde <b>0 bayt</b> görünür; bu normal. Bu sekmeyi kapatma.</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button id="pgc" style="padding:10px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;cursor:pointer">İptal</button></div></div>`;
+    document.body.appendChild(d);
+    d.querySelector('#pgc').onclick = () => { window.__pdfCancel = true; d.querySelector('#pgl').textContent = 'İptal ediliyor…'; };
+    return d;
+  }
   function printHelp() {
     let skip = false; try { skip = localStorage.getItem('rs-printhelp') === '1'; } catch (e) {}
     if (skip) return window.print();

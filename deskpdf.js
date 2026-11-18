@@ -30,6 +30,7 @@
       await put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n'); obj(1); await put('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
       let fontCSS = ''; try { fontCSS = await window.htmlToImage.getFontEmbedCSS(pages[0]); } catch (e) { fontCSS = ''; }
       for (let i = 0; i < pages.length; i++) {
+        if (window.__pdfCancel) throw Object.assign(new Error('İptal edildi'), { cancel: true });
         const p = pages[i], b = p.getBoundingClientRect();
         const cv = await window.htmlToImage.toCanvas(p, { pixelRatio: 2, backgroundColor: '#ffffff', fontEmbedCSS: fontCSS, cacheBust: false, skipAutoScale: true, width: b.width, height: b.height, style: { margin: '0', transform: 'none', boxShadow: 'none' } });
         const jpg = new Uint8Array(await (await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.86))).arrayBuffer());
@@ -48,7 +49,8 @@
       const xref = pos, n = offs.length;
       let x = `xref\n0 ${n + 1}\n0000000000 65535 f \n`; for (const o of offs) x += `${pad(o)} 00000 n \n`;
       await put(x + `trailer\n<< /Size ${n + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
-    } catch (e) { console.error(e); err = (e && e.message) || 'PDF yazılamadı'; }
+    } catch (e) { if (!e.cancel) console.error(e); err = (e && e.message) || 'PDF yazılamadı'; }
+    window.__pdfCancel = false;
     root.classList.remove('cap'); root.style.setProperty('--z', z || '1'); window.dispatchEvent(new Event('resize'));
     if (w) { try { if (err) await w.abort(); else await w.close(); } catch (e) { err = err || e.message; } return { path: err ? null : safe + '.pdf', err, pages: pages.length }; }
     if (err) return { err };
