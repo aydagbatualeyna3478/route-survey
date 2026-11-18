@@ -111,6 +111,12 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .grp{border-bottom:1px solid var(--line);padding-bottom:6px;display:flex;flex-direction:column;gap:4px}
 /* reorder / multi-select in the obstacle list */
 .rec{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.origv{position:fixed;inset:0;z-index:60;background:#000;display:flex;flex-direction:column}
+.origv .ov-sc{flex:1;overflow:auto;touch-action:pan-x pan-y;display:flex}
+.origv .ov-sc img{width:100%;max-width:none;height:auto;margin:auto;flex-shrink:0}
+.origv .ov-bar{display:flex;gap:8px;align-items:center;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:#111;color:#E5E7EB;font-size:13px}
+.origv .ov-bar span{flex:1;min-width:0}
+.origv .ov-bar .btn{min-width:56px}
 #prepbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--navy);color:#fff;border-radius:12px;padding:10px 16px;display:flex;flex-direction:column;gap:6px;min-width:min(420px,calc(100vw - 32px));box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:14px;font-weight:600;pointer-events:none}
 #prepbar i{display:block;height:6px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden}
 #prepbar i b{display:block;height:100%;background:#4CC38A;transition:width .2s}
@@ -240,13 +246,13 @@ html.narrow .photo-stage .photo{height:auto;width:100%}
 </head>
 <body>
 <div id="app"></div>
-<script src="db.js?v=49"></script>
-<script src="transfer.js?v=49"></script>
-<script src="backup.js?v=49"></script>
-<script src="rules.js?v=49"></script>
-<script src="catalog.js?v=49"></script>
-<script src="qr.js?v=49"></script>
-<script src="auth.js?v=49"></script>
-<script src="app.js?v=49"></script>
+<script src="db.js?v=50"></script>
+<script src="transfer.js?v=50"></script>
+<script src="backup.js?v=50"></script>
+<script src="rules.js?v=50"></script>
+<script src="catalog.js?v=50"></script>
+<script src="qr.js?v=50"></script>
+<script src="auth.js?v=50"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>

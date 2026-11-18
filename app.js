@@ -54,6 +54,36 @@
   }
   const urls = new Map();
   async function blobUrl(id) { if (!id) return null; if (!urls.has(id)) urls.set(id, await DB.blobUrl(id)); return urls.get(id); }
+  /* photos on screen use the working copy (≤1600 px); the full-quality photo opens with "Orijinal" (showOriginal) */
+  async function viewUrl(id) { if (!id) return null; const k = 'md:' + id; if (!urls.has(k)) { const b = await DB.viewBlob(id); if (!b) return null; urls.set(k, URL.createObjectURL(b)); } return urls.get(k); }
+  const forget = id => { for (const k of [id, 'md:' + id, 'th:' + id]) { const u = urls.get(k); if (u) URL.revokeObjectURL(u); urls.delete(k); } };
+  /* stored photo quality (Ayarlar → Fotoğraf): high by default, so obstacles can be inspected later; the PDF uses smaller copies */
+  const PQ = { normal: [1600, 0.82], high: [3200, 0.88], max: [4608, 0.92] };
+  let PQK = 'high'; DB.getSetting('photoQuality').then(v => { if (PQ[v]) PQK = v; }).catch(() => {});
+  async function showOriginal(id) {
+    const b = await DB.getBlob(id); if (!b) return toast('Fotoğraf bulunamadı');
+    const u = URL.createObjectURL(b), d = document.createElement('div'); d.className = 'origv';
+    let z = 1;
+    d.innerHTML = `<div class="ov-sc"><img src="${u}" alt="Orijinal fotoğraf"></div><div class="ov-bar"><span id="ovinfo">Orijinal fotoğraf</span><button class="btn sm" data-z="-">−</button><button class="btn sm" data-z="1">Sığdır</button><button class="btn sm" data-z="+">+</button><button class="btn sm" data-z="x">Kapat</button></div>`;
+    document.body.appendChild(d);
+    const sc = d.querySelector('.ov-sc'), im = d.querySelector('img');
+    const base = () => { const r = sc.getBoundingClientRect(); return Math.min(r.width, r.height * (im.naturalWidth || 4) / (im.naturalHeight || 3)); };   // "Sığdır": whole photo on screen
+    im.onload = () => { im.style.width = base() + 'px'; d.querySelector('#ovinfo').textContent = `Orijinal · ${im.naturalWidth}×${im.naturalHeight} px · ${b.size >= 1048576 ? (b.size / 1048576).toFixed(1) + ' MB' : Math.round(b.size / 1024) + ' KB'}`; };
+    const setZ = (nz, cx, cy) => {   // keep the point under the finger / centre in place
+      const r = sc.getBoundingClientRect(); cx = cx == null ? r.width / 2 : cx; cy = cy == null ? r.height / 2 : cy;
+      const fx = (sc.scrollLeft + cx) / (im.offsetWidth || 1), fy = (sc.scrollTop + cy) / (im.offsetHeight || 1);
+      z = Math.max(1, Math.min(8, nz)); im.style.width = z * base() + 'px';
+      sc.scrollLeft = fx * im.offsetWidth - cx; sc.scrollTop = fy * im.offsetHeight - cy;
+    };
+    d.querySelector('.ov-bar').onclick = e => { const k = (e.target.closest('[data-z]') || {}).dataset; if (!k) return; if (k.z === 'x') { d.remove(); URL.revokeObjectURL(u); } else setZ(k.z === '+' ? z * 1.6 : k.z === '-' ? z / 1.6 : 1); };
+    sc.ondblclick = e => { const r = sc.getBoundingClientRect(); setZ(z > 1.5 ? 1 : 3, e.clientX - r.left, e.clientY - r.top); };
+    const P = new Map(); let d0 = 0, z0 = 1;   // two-finger pinch
+    sc.addEventListener('pointerdown', e => { P.set(e.pointerId, e); if (P.size === 2) { const [a, c] = [...P.values()]; d0 = Math.hypot(a.clientX - c.clientX, a.clientY - c.clientY); z0 = z; } });
+    sc.addEventListener('pointermove', e => { if (!P.has(e.pointerId)) return; P.set(e.pointerId, e); if (P.size === 2 && d0) { const [a, c] = [...P.values()], r = sc.getBoundingClientRect(); setZ(z0 * Math.hypot(a.clientX - c.clientX, a.clientY - c.clientY) / d0, (a.clientX + c.clientX) / 2 - r.left, (a.clientY + c.clientY) / 2 - r.top); } });
+    const up = e => { P.delete(e.pointerId); if (P.size < 2) d0 = 0; };
+    sc.addEventListener('pointerup', up); sc.addEventListener('pointercancel', up);
+    sc.addEventListener('wheel', e => { if (!e.ctrlKey && Math.abs(e.deltaY) < 1) return; e.preventDefault(); const r = sc.getBoundingClientRect(); setZ(z * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+  }
   const go = h => { location.hash = h; };
   const settingsOf = sv => ({ general: !!sv.project.general, minHeight: pn((sv.project.cargo && sv.project.cargo.height) ?? sv.project.minHeight) ?? 0, refLV: pn(sv.project.refLV), refMV: pn(sv.project.refMV), refHV: pn(sv.project.refHV) });
   const pinSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.6"/></svg>';
@@ -73,7 +103,7 @@
     let b = await DB.getBlob(k);
     if (!b && lazy) { thumbLater(id); return blobUrl(id); }   // first time: the full photo now, the small copy next time
     if (!b) {
-      const full = await DB.getBlob(id); if (!full) return null;
+      const full = (await DB.getBlob('md:' + id)) || await DB.getBlob(id); if (!full) return null;
       try {
         const bmp = await createImageBitmap(full, { resizeWidth: 320, resizeQuality: 'medium' });
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
@@ -83,18 +113,19 @@
     }
     const u = URL.createObjectURL(b); urls.set(k, u); return u;
   }
-  // image -> 4:3 JPEG (centre crop), max 1400 px wide
+  // image -> 4:3 JPEG (centre crop), size from the photo quality setting
   async function to43(file) {
     let bmp;
     try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
     catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
     const sw = bmp.width, sh = bmp.height, ar = 4 / 3;
     let cw = sw, ch = sw / ar; if (ch > sh) { ch = sh; cw = sh * ar; }
-    const W = Math.min(1400, Math.round(cw)), H = Math.round(W / ar);   // the report prints photos at 1400×1050: more only slows the tablet
+    const [MX, QQ] = PQ[PQK] || PQ.high;
+    const W = Math.min(MX, Math.round(cw)), H = Math.round(W / ar);   // stored in good quality; screens and the PDF use smaller copies
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     c.getContext('2d').drawImage(bmp, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
     if (bmp.close) bmp.close();
-    const out = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.8));
+    const out = await new Promise(res => c.toBlob(res, 'image/jpeg', QQ));
     c.width = c.height = 0; return out;
   }
   async function shrink(file, max) { // logos / drawings: keep aspect, PNG keeps transparency
@@ -169,7 +200,7 @@
     if (TD(name).heights) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
     if (TD(name).widths) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
-    if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; }
+    if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; DB.viewBlob(rec.photoId).catch(() => {}); }
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
     if (pos) {
       rec.latDec = pos.lat; rec.lonDec = pos.lon; rec.acc = pos.acc;   // KM is worked out at report time (routeKm)
@@ -1026,7 +1057,7 @@
     let h = '';
     for (const [k] of CORNERS) {
       const b = (r.insets || {})[k]; if (!b) continue;
-      const x = await blobUrl(b); if (!x) continue;
+      const x = await viewUrl(b); if (!x) continue;
       h += `<img src="${x}" alt="" style="position:absolute;inset:auto;${k[0] === 't' ? 'top' : 'bottom'}:3%;${k[1] === 'l' ? 'left' : 'right'}:3%;width:30%;height:auto;aspect-ratio:4/3;object-fit:cover;border:2px solid #fff;box-shadow:0 1px 4px #0006">`;
     }
     return h;
@@ -1103,7 +1134,7 @@
       if (pos) await placeLate(pos);          // an earlier photo still waiting gets this fix first (keeps the KM order)
       stop();
       if (target) {   // replace the photo, keep the record's position (fill it in if it had none)
-        await DB.delBlob(target.photoId); urls.delete(target.photoId);
+        await DB.delBlob(target.photoId); forget(target.photoId);
         target.photoId = await DB.putBlob(ready ? blob : await to43(blob)); target.pendingImage = null;
         if (target.latDec == null && pos) { target.latDec = pos.lat; target.lonDec = pos.lon; target.lat = Geo.dms(pos.lat, true); target.lon = Geo.dms(pos.lon, false); }
         await DB.putSurvey(sv); return go(back);
@@ -1111,13 +1142,24 @@
       if (infoParent) return createRecord(sv, { file: blob, ready, parent: infoParent, flag: 'INFO', name: infoParent.obstacle === 'Satellite View' ? 'Satellite View' : '' });
       createRecord(sv, { file: blob, ready, pos: fromGallery ? null : pos, useGps: false, late: !fromGallery && !pos, parent: bp || null, flag: bp ? 'BYPASS' : '' });
     }
-    document.getElementById('shut').onclick = () => {
+    document.getElementById('shut').onclick = async () => {
       if (!stream || !vid.videoWidth) return;
+      /* full camera resolution when the device allows it (ImageCapture); otherwise the largest preview frame */
+      const trk = stream.getVideoTracks()[0];
+      if (window.ImageCapture && trk && !busy) {
+        document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
+        try {
+          const ic = new ImageCapture(trk); let opt = {};
+          try { const cap = await ic.getPhotoCapabilities(); if (cap && cap.imageWidth && cap.imageWidth.max) opt = { imageWidth: cap.imageWidth.max }; } catch (e) {}
+          const ph = await ic.takePhoto(opt);
+          if (ph && ph.size > 50000) return save(ph, false, false);   // cropped to 4:3 at the chosen quality in save()
+        } catch (e) { console.warn('takePhoto', e); }
+      }
       const w = vid.videoWidth, h = vid.videoHeight; let cw = w, ch = w * 3 / 4; if (ch > h) { ch = h; cw = h * 4 / 3; }
-      const c = document.createElement('canvas'); c.width = Math.min(1600, Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
+      const c = document.createElement('canvas'); c.width = Math.min((PQ[PQK] || PQ.high)[0], Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
       c.getContext('2d').drawImage(vid, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height);
       document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
-      c.toBlob(b => save(b, false, true), 'image/jpeg', 0.82);
+      c.toBlob(b => save(b, false, true), 'image/jpeg', (PQ[PQK] || PQ.high)[1]);
     };
     document.getElementById('cgal').onchange = async e => {
       const fs = [...e.target.files]; if (!fs.length) return;
@@ -1128,7 +1170,7 @@
     document.getElementById('cclose').onclick = () => go(extraFor && shots ? back + '?pick=1' : back);
     // buttons are wired first, so the gallery works while the camera permission is still being asked
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 4032 }, height: { ideal: 3024 } }, audio: false });
       vid.srcObject = stream; await vid.play().catch(() => {});
     } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
   };
@@ -1215,10 +1257,10 @@
     const par = r.parentId && sv.records.find(x => x.id === r.parentId), inArc = !!(r.archived || (par && par.archived));
     if (sv.selected !== r.id) { sv.selected = r.id; }
     const st = settingsOf(sv), refs = R.refs(st);
-    const u = await blobUrl(r.photoId), INS = await insetHtml(r);
+    const u = await viewUrl(r.photoId), INS = await insetHtml(r);
     r.extras = r.extras || [];
     const thumbs = [];   // [blobId, url] — the photo used in the report first, then the extra shots
-    for (const b of [r.photoId, ...r.extras].filter(Boolean)) thumbs.push([b, await blobUrl(b)]);
+    for (const b of [r.photoId, ...r.extras].filter(Boolean)) thumbs.push([b, await thumbUrl(b)]);
     const isOH = /^Overhead/.test(r.obstacle), isBr = r.obstacle === 'Bridge', isCu = r.obstacle === 'Culvert';
     let OWN = [];
     const textKey = isOH ? 'actions' : 'remarks', isSlope = /^(In|De)clination$/.test(r.obstacle);
@@ -1250,7 +1292,8 @@
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">${INS}` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
-            <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button></div>
+            <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button>
+            ${u ? `<button class="btn sm" id="orig" style="position:absolute;right:10px;top:10px" title="Fotoğrafı tam kalitede büyütüp incele">🔍 Orijinal</button>` : ''}</div>
           ${u ? `<div class="thumbs" aria-label="Bu engelin fotoğrafları">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
             <button class="th add" id="xadd">${camSvg}<span>Ek fotoğraf</span></button></div>` : ''}
           <div class="loc"><div class="g3">
@@ -1330,9 +1373,10 @@
       if (g('wadd')) g('wadd').onclick = () => { read(); r.widths = r.widths || []; r.widths.push({ label: r.widths.length ? '' : 'W', value: null }); draw(); };
       document.querySelectorAll('[data-wv],[data-wl]').forEach(i => i.addEventListener('change', () => { read(); autoW(); draw(); }));
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
+      if (g('orig')) g('orig').onclick = () => showOriginal(r.photoId);
       g('rep').onclick = () => sheet(u ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle', [
         { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?replace=${r.id}`); } },
-        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { read(); await DB.delBlob(r.photoId); urls.delete(r.photoId); r.photoId = await DB.putBlob(await to43(f)); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); } },
+        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { read(); await DB.delBlob(r.photoId); forget(r.photoId); r.photoId = await DB.putBlob(await to43(f)); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); } },
       ]);
       if (g('xadd')) g('xadd').onclick = () => sheet(`${r.no} · Ek fotoğraf`, [
         { label: 'Fotoğraf çek (art arda)', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?extra=${r.id}`); } },
@@ -1389,7 +1433,7 @@
       const paint = async () => {
         const list = [r.photoId, ...r.extras].filter(Boolean); let h = '';
         for (let i = 0; i < list.length; i++) {
-          const b = list[i], x = await blobUrl(b);
+          const b = list[i], x = await viewUrl(b);
           h += `<button class="pc ${b === chosen ? 'on' : ''}" data-c="${b}"><img src="${x}" alt="Fotoğraf ${i + 1}"><span class="lb">${b === chosen ? 'Raporda kullanılacak' : i + 1}</span>${b !== r.photoId ? `<span class="dl" data-del="${b}" role="button" aria-label="Bu fotoğrafı sil">×</span>` : ''}</button>`;
         }
         d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(OL(r.obstacle) || 'Engel')} — raporda kullanılacak fotoğrafı seç</b><span style="font-size:13px;color:#D1D5DB">${list.length} fotoğraf</span></div>
@@ -1404,7 +1448,7 @@
         const del = e.target.closest('[data-del]');
         if (del) {
           if (del.dataset.sure !== '1') { del.dataset.sure = '1'; del.textContent = 'Sil?'; del.style.width = 'auto'; del.style.padding = '0 10px'; del.style.background = '#B4232A'; return; }
-          const b = del.dataset.del; r.extras = r.extras.filter(x => x !== b); await DB.delBlob(b); urls.delete(b);
+          const b = del.dataset.del; r.extras = r.extras.filter(x => x !== b); await DB.delBlob(b); forget(b);
           if (chosen === b) chosen = r.photoId; await DB.putSurvey(sv); return paint();
         }
         const c = e.target.closest('[data-c]'); if (c) { chosen = c.dataset.c; return paint(); }
@@ -1515,7 +1559,7 @@
   V.annotate = async (id, rid) => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const r = sv.records.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
-    const u = await blobUrl(r.photoId), items = JSON.parse(JSON.stringify(r.ann || [])); let sel = -1;
+    const u = await viewUrl(r.photoId), items = JSON.parse(JSON.stringify(r.ann || [])); let sel = -1;
     $app.innerHTML = `${bar('Fotoğrafı işaretle', `#/r/${id}/${rid}`)}
       <div class="split wide">
         <div class="pane photo-stage" style="overflow:hidden"><div class="photo" id="stage">${u ? `<img src="${u}" alt="">` : ''}<div id="lay" style="position:absolute;inset:0"></div></div></div>
@@ -1762,7 +1806,10 @@
         </div></div>`;
     const lookPane = `<div class="pane" style="max-width:720px;gap:14px"><div class="sec">Tema</div>
         <div class="g3">${[['light', 'Açık tema'], ['dark', 'Koyu tema'], ['auto', 'Cihaza göre']].map(([k, l]) => `<button class="chip ${theme() === k ? 'on' : ''}" data-theme="${k}" style="border-radius:12px;min-height:64px">${l}</button>`).join('')}</div>
-        <span class="hint">Seçim bu cihazda hatırlanır. Raporlar ve PDF her zaman beyaz zeminle çıkar.</span></div>`;
+        <span class="hint">Seçim bu cihazda hatırlanır. Raporlar ve PDF her zaman beyaz zeminle çıkar.</span>
+        <div class="sec" style="margin-top:10px">Fotoğraf kalitesi</div>
+        <div class="g3">${[['normal', 'Normal', '1600 px · ~0,4 MB'], ['high', 'Yüksek (önerilen)', '3200 px · ~1,5 MB'], ['max', 'En yüksek', 'kamera çözünürlüğü · ~3 MB']].map(([k, l, d]) => `<button class="chip ${PQK === k ? 'on' : ''}" data-pq="${k}" style="border-radius:12px;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px"><b style="font-size:15px;display:block">${l}</b><span style="font-size:12px;font-weight:500;display:block">${d}</span></button>`).join('')}</div>
+        <span class="hint">Etüde kaydedilen fotoğrafın kalitesi. Engel ekranında <b>🔍 Orijinal</b> ile büyütüp incelenir; ekranlar ve PDF raporu daha küçük kopyalarla çalışır, o yüzden yüksek kalite uygulamayı yavaşlatmaz. Yedek ve "Dışa Aktar" fotoğrafları bu kalitede alır.</span></div>`;
     const mapsPane = `<div class="pane" style="max-width:860px;gap:14px"><div class="sec">Rapordaki uydu ve güzergah görüntüleri</div>
         ${[['google', 'Google Maps (API anahtarı gerekir)'], ['esri', 'Esri uydu (anahtarsız)']].map(([v, l]) => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:12px;background:var(--card2)"><input type="radio" name="mprov" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:20px;height:20px">${l}</label>`).join('')}
         <label class="f">Google Maps API anahtarı (Maps Static API açık olmalı)<input id="mkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label>
@@ -1780,6 +1827,7 @@
       const t = e.target;
       const st = t.closest('[data-stab]'); if (st) { SET.tab = st.dataset.stab; return V.settings(); }
       const th = t.closest('[data-theme]'); if (th) { setTheme(th.dataset.theme); return V.settings(); }
+      const pq = t.closest('[data-pq]'); if (pq) { PQK = pq.dataset.pq; await DB.setSetting('photoQuality', PQK); toast('Yeni fotoğraflar bu kalitede kaydedilecek'); return V.settings(); }
       const tk = t.closest('[data-tk]'); if (tk) { SET.key = tk.dataset.tk; return V.settings(); }
       const tg = t.closest('[data-tg]'); if (tg) { T[tg.dataset.tg] = !T[tg.dataset.tg]; persist(); return V.settings(); }
       const mv = t.closest('[data-mv]'); if (mv) { const j = ti + +mv.dataset.mv; D.types.splice(ti, 1); D.types.splice(j, 0, T); persist(); return V.settings(); }

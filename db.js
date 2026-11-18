@@ -34,8 +34,22 @@
     delSurvey: id => tx('surveys', 'readwrite', s => s.delete(id)),
     getBlob: id => id ? tx('blobs', 'readonly', s => s.get(id)) : Promise.resolve(null),
     putBlob: async blob => { const id = uid(); await tx('blobs', 'readwrite', s => s.put(blob, id)); return id; },
+    /* working copy of a photo for screens and the PDF (blob 'md:<id>', ≤1600 px): the stored photo stays in full quality
+       for close inspection and backups; small photos are used as they are */
+    viewBlob: async (id, max = 1600) => {
+      if (!id) return null;
+      const k = 'md:' + id; let b = await DB.getBlob(k); if (b) return b;
+      const full = await DB.getBlob(id); if (!full || full.size < 700000 || !/^image\/(jpeg|png|webp)/.test(full.type || 'image/jpeg')) return full;
+      try {
+        const bm = await createImageBitmap(full, { resizeWidth: max, resizeQuality: 'high' });
+        const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close();
+        b = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.84)); c.width = c.height = 0;
+        if (b) { await DB.putBlobAt(k, b); return b; }
+      } catch (e) { /* decoder could not resize */ }
+      return full;
+    },
     putBlobAt: async (id, blob) => { await tx('blobs', 'readwrite', s => s.put(blob, id)); return id; },
-    delBlob: id => id ? tx('blobs', 'readwrite', s => { s.delete('th:' + id); return s.delete(id); }) : Promise.resolve(),   // a photo's list thumbnail goes with it
+    delBlob: id => id ? tx('blobs', 'readwrite', s => { s.delete('th:' + id); s.delete('md:' + id); return s.delete(id); }) : Promise.resolve(),   // a photo's thumbnail and working copy go with it
     getSetting: k => tx('settings', 'readonly', s => s.get(k)),
     setSetting: (k, v) => tx('settings', 'readwrite', s => s.put(v, k)),
     async blobUrl(id) { const b = await DB.getBlob(id); return b ? URL.createObjectURL(b) : null; },
