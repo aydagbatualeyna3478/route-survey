@@ -265,11 +265,11 @@
   async function adminView(bar) {
     const $ = $app();
     if (!S || S.role !== 'admin') { location.hash = '#/'; return; }
-    $.innerHTML = `${bar('Yönetim', '#/')}<div class="full"><div class="empty">Yükleniyor…</div></div>`;
+    $.innerHTML = `${bar('Yönetim', '#/profile')}<div class="full"><div class="empty">Yükleniyor…</div></div>`;
     let users, devs, logs;
     try {
       [users, devs, logs] = await Promise.all([rest('profiles?select=*&order=created_at.asc'), rest('devices?select=*&order=created_at.desc'), rest('access_log?select=*&order=at.desc&limit=300')]);
-    } catch (err) { $.innerHTML = `${bar('Yönetim', '#/')}<div class="full"><div class="note w">${esc(err.message)}</div></div>`; return; }
+    } catch (err) { $.innerHTML = `${bar('Yönetim', '#/profile')}<div class="full"><div class="note w">${esc(err.message)}</div></div>`; return; }
     const uname = id => { const u = users.find(x => x.id === id); return u ? (u.full_name || u.email) : '—'; };
     const pend = devs.filter(d => !d.approved);
     const tabs = [['dev', `Cihazlar${pend.length ? ` · ${pend.length} onay bekliyor` : ''}`], ['usr', `Kullanıcılar · ${users.length}`], ['log', 'Giriş kayıtları']];
@@ -290,7 +290,7 @@
           <div class="tiles">${users.map(usrRow).join('')}</div>`
       : `<div class="card" style="padding:0;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg);text-align:left"><th style="padding:8px">Zaman</th><th style="padding:8px">Kişi</th><th style="padding:8px">Olay</th><th style="padding:8px">Cihaz</th><th style="padding:8px">Ayrıntı</th></tr></thead>
           <tbody>${logs.map(l => `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;white-space:nowrap">${when(l.at)}</td><td style="padding:7px 8px">${esc(l.email || uname(l.user_id))}</td><td style="padding:7px 8px">${esc(EVT[l.event] || l.event)}</td><td style="padding:7px 8px">${esc(l.device_label || (l.device_id || '').slice(0, 8).toUpperCase())}</td><td style="padding:7px 8px">${esc(l.detail || '')}</td></tr>`).join('') || '<tr><td style="padding:10px" colspan="5">Kayıt yok.</td></tr>'}</tbody></table></div>`;
-    $.innerHTML = `${bar('Yönetim', '#/', `<button class="btn" id="arf">Yenile</button>`)}<div class="full"><div class="row" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="btn ${ATAB === k ? 'pri' : ''}" data-atab="${k}">${esc(l)}</button>`).join('')}</div>${body}</div>`;
+    $.innerHTML = `${bar('Yönetim', '#/profile', `<button class="btn" id="arf">Yenile</button>`)}<div class="full"><div class="row" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="btn ${ATAB === k ? 'pri' : ''}" data-atab="${k}">${esc(l)}</button>`).join('')}</div>${body}</div>`;
     const again = () => adminView(bar);
     document.getElementById('arf').onclick = again;
     const act = async (b, f) => { busy(b, true); try { await f(); again(); } catch (err) { busy(b, false); toastMsg(err.message); } };
@@ -334,5 +334,20 @@
     return true;
   }
 
-  window.Auth = { start, adminView, accountSheet, pageGuard, isAdmin: () => !!(S && S.role === 'admin'), user: () => S && { email: S.email, name: S.name, role: S.role } };
+  // ---------- profile (#/profile in app.js) ----------
+  const uid = () => S && S.access ? jwt(S.access).sub : null;
+  async function me() {   // the signed-in user's own account (display name kept in the account's metadata)
+    await fresh(); const u = await api('/auth/v1/user');
+    const md = (u && u.user_metadata) || {};
+    if (md.display_name != null) { S.dname = md.display_name; save(); }
+    return { email: u.email, created: u.created_at, lastSignIn: u.last_sign_in_at, display: md.display_name || '', factors: (u.factors || []).filter(f => f.status === 'verified').length };
+  }
+  async function setName(n) { await fresh(); await api('/auth/v1/user', { method: 'PUT', body: { data: { display_name: String(n || '').trim().slice(0, 80) } } }); S.dname = String(n || '').trim(); save(); }
+  async function myDevices() { const id = uid(); if (!id) return []; return (await rest(`devices?user_id=eq.${id}&select=id,label,platform,approved,approved_at,created_at,last_seen&order=last_seen.desc.nullslast`)) || []; }
+  const thisDevice = () => Object.assign({ platform: platform() }, deviceId());
+  function setDeviceLabel(l) { const x = deviceId(); x.label = String(l || '').trim().slice(0, 80); ls.set(LSD, x); }
+
+  window.Auth = { start, adminView, accountSheet, pageGuard, isAdmin: () => !!(S && S.role === 'admin'),
+    user: () => S && { email: S.email, name: S.dname || S.name, role: S.role, okAt: S.okAt },
+    me, setName, myDevices, thisDevice, setDeviceLabel, changePassword: pwSheet, signOut, platform };
 })();

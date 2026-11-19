@@ -48,6 +48,9 @@
       } catch (e) { /* decoder could not resize */ }
       return full;
     },
+    /* thumbnails ('th:') and screen copies ('md:') can always be made again from the photos: count / clear them */
+    cacheInfo: async () => { const keys = (await tx('blobs', 'readonly', s => s.getAllKeys())) || []; return { all: keys.length, cache: keys.filter(k => /^(th|md):/.test(k)).length }; },
+    clearCaches: async () => { const keys = ((await tx('blobs', 'readonly', s => s.getAllKeys())) || []).filter(k => /^(th|md):/.test(k)); await tx('blobs', 'readwrite', s => { keys.forEach(k => s.delete(k)); }); return keys.length; },
     putBlobAt: async (id, blob) => { await tx('blobs', 'readwrite', s => s.put(blob, id)); return id; },
     delBlob: id => id ? tx('blobs', 'readwrite', s => { s.delete('th:' + id); s.delete('md:' + id); return s.delete(id); }) : Promise.resolve(),   // a photo's thumbnail and working copy go with it
     getSetting: k => tx('settings', 'readonly', s => s.get(k)),
