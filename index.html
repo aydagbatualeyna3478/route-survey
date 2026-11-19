@@ -122,7 +122,7 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .hrem select{width:96px;flex:0 0 auto;padding:8px 4px;border:1px solid var(--line2);border-radius:8px;font-size:14px;background:var(--card2);color:var(--ink)}
 
 /* start screen (after sign-in) */
-.launch{min-height:100vh;display:flex;flex-direction:column;background:radial-gradient(120% 90% at 50% 0%,#24476E 0%,#132B47 55%,#0B1C30 100%);color:#fff;padding:calc(18px + env(safe-area-inset-top,0px)) max(22px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(22px,env(safe-area-inset-left,0px));gap:18px}
+.launch{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;background:radial-gradient(120% 90% at 50% 0%,#24476E 0%,#132B47 55%,#0B1C30 100%);color:#fff;padding:calc(18px + env(safe-area-inset-top,0px)) max(22px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(22px,env(safe-area-inset-left,0px));gap:18px}
 .ltop{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .lchip{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:16px;padding:9px 16px 9px 10px;min-height:56px;cursor:pointer;font:inherit;text-align:left;max-width:48vw}
 .lchip:hover{background:rgba(255,255,255,.14)}
@@ -130,7 +130,7 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .lname{display:flex;flex-direction:column;min-width:0}.lname b{font-size:15px}.lname small{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
 .lav{width:38px;height:38px;border-radius:50%;background:#E8EEF5;color:#132B47;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:0 0 auto}
 .lav.big{width:64px;height:64px;font-size:24px;background:var(--navy);color:#fff}
-.lmid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:200px}
+.lmid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:0}
 .llogo{width:min(300px,70vw);height:110px;border-radius:18px;background:rgba(255,255,255,.07);border:1px dashed rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
 .llogo img{max-width:100%;max-height:100%;object-fit:contain;position:relative;z-index:1;background:transparent}
 .llogo img~.lfall{display:none}
@@ -139,7 +139,7 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .lmid p{margin:0;opacity:.7;font-size:15px;letter-spacing:.04em}
 .lresume{margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:14px;padding:10px 16px;font:inherit;font-size:14px;cursor:pointer;max-width:100%}
 .lresume:hover{background:rgba(255,255,255,.16)}
-.ltiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(12px,2.5vw,28px);max-width:1100px;width:100%;margin:0 auto}
+.ltiles{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(12px,2.5vw,28px);max-width:1100px;width:100%;margin:0 auto}
 .ltile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:clamp(150px,24vh,220px);border-radius:22px;background:#fff;color:#132B47;border:0;cursor:pointer;font:inherit;padding:18px 12px;box-shadow:0 10px 30px rgba(0,0,0,.25);transition:transform .12s}
 .ltile:hover{transform:translateY(-2px)}.ltile:active{transform:scale(.98)}
 .ltile .lic{width:76px;height:76px;border-radius:20px;background:#E8F0F8;display:flex;align-items:center;justify-content:center;color:#1E4D7B}
@@ -148,6 +148,7 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .ltile b{font-size:clamp(17px,2vw,21px)}.ltile span:last-child{font-size:13px;color:#5B6B7D}
 .lfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;opacity:.85}
 .lbkb{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+@media (max-height:760px){.launch{gap:10px}.llogo{height:clamp(56px,13vh,110px)}.lmid h1{font-size:clamp(24px,5vh,40px);margin-top:2px}.lmid p{font-size:13px}.ltile{min-height:clamp(110px,22vh,170px);padding:12px}.ltile .lic{width:58px;height:58px}.ltile .lic svg{width:34px;height:34px}}
 @media (max-width:640px){.ltiles{grid-template-columns:1fr}.ltile{min-height:96px;flex-direction:row;justify-content:flex-start;padding:14px 18px;gap:14px;text-align:left}.ltile .lic{width:58px;height:58px}.ltile b{flex:1}.ltile span:last-child{display:none}.lname small{display:none}}
 /* profile */
 .phead{flex-direction:row;align-items:center;gap:14px}
@@ -283,13 +284,13 @@ html.narrow .photo-stage .photo{height:auto;width:100%}
 </head>
 <body>
 <div id="app"></div>
-<script src="db.js?v=59"></script>
-<script src="transfer.js?v=59"></script>
-<script src="backup.js?v=59"></script>
-<script src="rules.js?v=59"></script>
-<script src="catalog.js?v=59"></script>
-<script src="qr.js?v=59"></script>
-<script src="auth.js?v=59"></script>
-<script src="app.js?v=59"></script>
+<script src="db.js?v=61"></script>
+<script src="transfer.js?v=61"></script>
+<script src="backup.js?v=61"></script>
+<script src="rules.js?v=61"></script>
+<script src="catalog.js?v=61"></script>
+<script src="qr.js?v=61"></script>
+<script src="auth.js?v=61"></script>
+<script src="app.js?v=61"></script>
 </body>
 </html>
