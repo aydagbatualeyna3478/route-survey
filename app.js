@@ -200,7 +200,7 @@
     if (TD(name).heights || own) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
     if (TD(name).widths || own) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
-    if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; DB.viewBlob(rec.photoId).catch(() => {}); }
+    if (o.file) { rec.photoId = await DB.putBlob(o.ready ? o.file : await to43(o.file)); rec.aspect = 4 / 3; }   // the screen copy is made later, when first needed
     const pos = o.pos || (o.useGps ? await GPS.current() : null);
     if (pos) {
       rec.latDec = pos.lat; rec.lonDec = pos.lon; rec.acc = pos.acc;   // KM is worked out at report time (routeKm)
@@ -502,7 +502,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w63)';
+  const APP_VER = '2.0 (w64)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -1257,17 +1257,8 @@
     }
     document.getElementById('shut').onclick = async () => {
       if (!stream || !vid.videoWidth) return;
-      /* full camera resolution when the device allows it (ImageCapture); otherwise the largest preview frame */
-      const trk = stream.getVideoTracks()[0];
-      if (window.ImageCapture && trk && !busy) {
-        document.getElementById('vf').style.outline = '4px solid #fff'; setTimeout(() => { const v = document.getElementById('vf'); if (v) v.style.outline = ''; }, 150);
-        try {
-          const ic = new ImageCapture(trk);   // default settings: the camera's photo size, the preview is not reconfigured
-          const ph = await Promise.race([ic.takePhoto(), new Promise(r => setTimeout(() => r(null), 4000))]);
-          if (vid.paused) vid.play().catch(() => {});
-          if (ph && ph.size > 50000) return save(ph, false, false);   // cropped to 4:3, 2560 px in save()
-        } catch (e) { console.warn('takePhoto', e); }
-      }
+      /* the shot is the preview frame (1920×1440): instant, no waiting after the shutter. Full camera resolution
+         (taking several seconds on the MatePad) is available with "Cihazın kamera uygulamasıyla çek". */
       const w = vid.videoWidth, h = vid.videoHeight; let cw = w, ch = w * 3 / 4; if (ch > h) { ch = h; cw = h * 4 / 3; }
       const c = document.createElement('canvas'); c.width = Math.min(PHOTO_W, Math.round(cw)); c.height = Math.round(c.width * 3 / 4);
       c.getContext('2d').drawImage(vid, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, c.width, c.height);

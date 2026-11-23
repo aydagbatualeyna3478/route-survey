@@ -39,7 +39,7 @@
     viewBlob: async (id, max = 1600) => {
       if (!id) return null;
       const k = 'md:' + id; let b = await DB.getBlob(k); if (b) return b;
-      const full = await DB.getBlob(id); if (!full || full.size < 700000 || !/^image\/(jpeg|png|webp)/.test(full.type || 'image/jpeg')) return full;
+      const full = await DB.getBlob(id); if (!full || full.size < 1200000 || !/^image\/(jpeg|png|webp)/.test(full.type || 'image/jpeg')) return full;
       try {
         const bm = await createImageBitmap(full, { resizeWidth: max, resizeQuality: 'high' });
         const c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height; c.getContext('2d').drawImage(bm, 0, 0); if (bm.close) bm.close();
