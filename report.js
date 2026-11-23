@@ -70,7 +70,7 @@
     const pg = newPage('cover');
     pg.innerHTML += `
     <div class="box top"><div class="stack">${stack(CV.tl, 16, 10.5)}</div>
-      <div class="ttl">Route Survey Report /<br>Güzergah Etüdü Rapor</div>
+      <div class="ttl">Route Survey Report /<br>Güzergah Etüdü Raporu</div>
       <div class="stack">${stack(CV.tr, 20, 12)}</div></div>
     <div class="box main">
       <div class="r logo stack">${stack(CV.mid, 19, 15, 70)}</div>
@@ -80,12 +80,12 @@
       <div class="r grid g1">
         <div><span class="k">PREPARED BY / HAZIRLAYAN:</span><span class="v">${P.preparedBy.map(esc).join('<br>')}</span></div>
         <div><span class="k">DATE PREPARED / HAZIRLAMA TARİHİ:</span><span class="v">${esc(P.date)}</span></div>
-        <div><span class="k">REV. NO VE TARİHİ / REVISION NO AND DATE:</span><span class="v">${esc(P.rev)}</span></div>
+        <div><span class="k">REV. NO AND DATE / REVİZYON NO VE TARİHİ:</span><span class="v">${esc(P.rev)}</span></div>
       </div>
       <div class="r grid g2">
-        <div><span class="k">PROJECT REFERENCE / PROJENIN REFERANSI:</span><span class="v">${esc(P.reference)}</span></div>
+        <div><span class="k">PROJECT REFERENCE / PROJE REFERANSI:</span><span class="v">${esc(P.reference)}</span></div>
         <div><span class="k">CLIENT NAME / MÜŞTERİ UNVANI:</span><span class="v">${esc(P.client)}</span></div>
-        <div><span class="k">PREPARED FOR/ KİMİN İÇİN HAZIRLANDIĞI:</span><span class="v">${esc(P.preparedFor)}</span></div>
+        <div><span class="k">PREPARED FOR / HAZIRLANDIĞI KURUM:</span><span class="v">${esc(P.preparedFor)}</span></div>
       </div>
       ${A.coverPhoto ? `<div class="r photo"><img src="${A.coverPhoto}" alt=""></div>` : ''}
     </div>
@@ -93,10 +93,10 @@
   })();
 
   // ---------- contents (filled after pagination) ----------
-  const TOC = [['1', 'Introduction'], ['1.1', 'Scope'], ['1.2', 'Abbreviations and signs'], ['1.3', 'Route'], ['1.4', 'Obstacles on the route'],
+  const TOC = [['1', 'Introduction'], ['1.1', 'Scope'], ['1.2', 'Abbreviations and Symbols'], ['1.3', 'Route'], ['1.4', 'Obstacles on the Route'],
     ['1.5', 'Brief Information'], ['2', 'Transportation Drawing'], ['3', 'Route Survey'], ['4', 'Conclusion'], ['4.1', 'Bridge'],
-    ['4.2', 'Overhead Structures'], ['4.3', 'Inclination and declination'], ['4.4', 'Power lines and cables'], ['4.5', 'Curves and turns'],
-    ['4.6', 'Road condition'], ['4.7', 'Climate conditions'], ['4.8', 'Permissions']];
+    ['4.2', 'Overhead Structures'], ['4.3', 'Inclinations and Declinations'], ['4.4', 'Power Lines and Cables'], ['4.5', 'Curves and Turns'],
+    ['4.6', 'Road Condition'], ['4.7', 'Climatic Conditions'], ['4.8', 'Permits']];
   (function contents() {
     const pg = newPage('text');
     pg.appendChild(el(`<div class="content toc"><h1>Contents</h1>${TOC.map(([n, t]) =>
@@ -107,11 +107,11 @@
   const S = P.start.name, E = P.end.name, CO = P.companyShort;
   flowPage();
   keep(`${H1('1', 'Introduction')}${H2('1.1', 'Scope')}
-    <p>This route survey report is from ${esc(S)} to ${esc(E)} for over dimensional cargos’ overland transportations. <i>All rights of the report are reserved to ${CO} Transportation Limited and ${CO} shall not be responsible for any external use of this report without permission.</i></p>`);
+    <p>This route survey report presents the technical assessment of the route for the overland transportation of out-of-gauge (OOG) cargo from ${esc(S)} to ${esc(E)}. <i>All rights to this report are reserved by ${CO} . ${CO} accepts no responsibility for any use of this report by third parties without prior written permission.</i></p>`);
   keep(`<div class="abbr">${H2('1.2', 'Abbreviations and signs')}
     <p>KM = Kilometer(s)</p><p>m = meter(s)</p><p>w = Width of an obstacle</p><p>H= Height of an obstacle</p><p>HR/L/M= Height in the right/left/middle side of an obstacle</p></div>`);
   flow(el(`<div class="sym"><img src="${A.iconTurn}" style="height:7mm" alt=""><img src="${A.iconTurn}" style="height:7mm;transform:scaleX(-1)" alt=""><span>= left and right turns which may become critical based on the trailer combination and final details of the cargo.</span></div>`));
-  flow(el(`<p style="margin-top:5mm">There are also yellow arrows on some of the figures which are showing the direction of transportation and angle of the photo.</p>`));
+  flow(el(`<p style="margin-top:5mm">Yellow arrows shown on the photographs indicate the direction of travel and the angle from which each photograph was taken.</p>`));
   flow(el(`<div class="sym"><svg width="9mm" height="11mm" viewBox="0 0 100 120" aria-hidden="true"><polygon points="50,0 100,55 75,55 75,120 25,120 25,55 0,55" fill="#FFFF00"/></svg><span>=Showing the direction of transportation and angle of the photo.</span></div>`));
   flow(el(`<div class="sym" style="display:block"><img src="${A.barGreen}" style="height:5mm;width:22mm;vertical-align:middle" alt=""> = Numbering of the figures which are presented to provide more information regarding an obstacle or showing the bypass road of an obstacle is highlighted with green.</div>`));
   flow(el(`<div class="sym" style="display:block"><img src="${A.barRed}" style="height:5mm;width:22mm;vertical-align:middle" alt=""> = Overhead obstacles or cables which are having insufficient clearance height are highlighted with red. These obstacles must be either bypassed or removed.</div>`));
@@ -160,20 +160,20 @@
   }
   keep(`${H2('1.3', 'Route')}${routeMap()}`);
 
-  keep(`${H2('1.4', 'Obstacles on the route')}<p><b>Bridge:</b> Current bridges on the route are defined as obstacles. Adequacy of the bridges must be analyzed carefully before using them for transportation. A static analysis report of the bridges (based on AASHTO code) must be prepared and submitted to the General Directorate of Highways of Turkey in order to get the required road permit for the cargoes that total load (Trailer+Truck+cargo) exceeds 150tons. It should be added that even based on the calculations it would be clear that a bridge has sufficient capacity, KGM can refuse to give permit for crossing.</p>`);
+  keep(`${H2('1.4', 'Obstacles on the route')}<p><b>Bridge:</b> All bridges along the route are classified as obstacles, and the load-bearing adequacy of each bridge must be verified before use. For loads with a gross combination weight (truck + trailer + cargo) exceeding 150 tonnes, a static load analysis of the bridges in accordance with the AASHTO code must be prepared and submitted to the General Directorate of Highways of Türkiye (KGM) to obtain the required road permit. KGM may decline to issue a crossing permit even where the calculations demonstrate sufficient structural capacity.</p>`);
   [
-    'Span lengths and current condition of the bridges are important and defined in this survey. Indeed, number of axles to be used for heavy cargos should be defined carefully for transporting heavy cargoes through the bridges.',
-    'In some cases if the capacity of the bridge would not be adequate, strengthening of the bridge can be an option. For this purpose, even the current bridge parts can be strengthened or a new flyover bridge can be placed over the bridge during the crossing. Both these operations are subjected to permission of the authority. Bridges on the roads are usually belonging to KGM but some of them which located in the cities may belong to local authority and city municipality.',
-    'Strengthening of a bridge is not always a solution; because of the length of the bridge or type of the structure in some cases it would be costly or inefficient. Therefore another alternative would be construction of a bypass road on one side of the bridge. This can be done if the water flow would not be so high and the height of the bridge would not be so deep. In this case the bypass road can be constructed via putting some pipes on river bed and then backfilling and compaction of area. River beds are usually belonging to General Directorate of State Hydraulic Works and permission should be obtained. This bypass road may also pass private lands that the owner of the land should be asked for the permit.',
+    'The span lengths and current structural condition of the bridges are documented in this survey. The axle configuration of the transport system must be determined accordingly before crossing the bridges.',
+    'Where the capacity of a bridge is insufficient, structural strengthening may be considered: the existing bridge members can be reinforced, or a temporary flyover bridge can be installed over the bridge for the duration of the crossing. Both measures are subject to the approval of the competent authority. Highway bridges are generally under the jurisdiction of KGM, while some urban bridges are owned by local authorities or municipalities.',
+    'Strengthening is not always a viable solution, as it may be uneconomical or impractical depending on the length and structural type of the bridge. An alternative is the construction of a temporary bypass road alongside the bridge, provided that the water flow is low and the riverbed is shallow. In this case, the bypass road is formed by placing culvert pipes in the riverbed, followed by backfilling and compaction. Riverbeds are generally under the jurisdiction of the General Directorate of State Hydraulic Works (DSİ), whose permission must be obtained. Where the bypass road crosses private land, the consent of the landowner is also required.',
     '<b>Power Lines:</b> Several power lines take place crossing the road one side to another on the transportation route. These are cables for industrial or urban electricity and can be classified as per below:',
   ].forEach(t => flow(el(`<p>${t}</p>`)));
-  flow(el(`<ol class="alpha"><li><b>High Voltage Power Lines:</b> These are main electric cables between cities which carries high voltage electric. They have a potential arc risk to the cargo within a range of 3 to 4 meters.</li>
-    <li><b>Medium Voltage Power Lines:</b> These are electric cables networking inside cities. They have an arc risk within a range of 0.5 to 3 meters.</li>
-    <li><b>Low Voltage Power Lines:</b> These are electric cables networking inside cities. They don’t have a potential arc risk unless touched (clearance of 15cm would be enough). They can be lifted up with a plastic or wooden stick.</li></ol>`));
+  flow(el(`<ol class="alpha"><li><b>High Voltage Power Lines:</b> Transmission lines between cities carrying high voltage. They present a potential flashover (arc) risk to the cargo within a distance of 3 to 4 metres.</li>
+    <li><b>Medium Voltage Power Lines:</b> Distribution lines within urban areas. They present a flashover (arc) risk within a distance of 0.5 to 3 metres.</li>
+    <li><b>Low Voltage Power Lines:</b> Distribution lines within urban areas. They present no flashover risk unless contacted (a clearance of 15 cm is sufficient) and can be lifted using an insulated stick.</li></ol>`));
   [
-    'To switch off electricity of the high voltage power lines, permissions and escorts are required from Ministry of Electricity. For the other ones, local authorities can arrange the necessities. In this report, some of the high voltage and medium voltage power lines are determined and information provided.',
+    'De-energising high voltage power lines requires permits and escorts from the relevant electricity authority. For other lines, the necessary arrangements can be made through the local authorities. The high and medium voltage power lines identified along the route are presented in this report.',
     '<b>Overhead Structure:</b> Overhead Structure can be an obstacle to the transportation when passing under them. When passing beneath a structure, heights must be regarded since widths are adequate for current transportation. For this route, most common overhead structures are bridges, traffic light and signboards. Some of the structures may be lifted up with the permission of local authorities and some of them may be by-passed.',
-    '<b>Left and Right Turns and curves:</b> Considering the transportation combination and also dimensions of the cargo, turns are crucial obstacles for transportation. In this route survey report, critical turns and curves are determined and for long trailer combinations and long cargoes the turns should be inspected by detail and civil work requirement should be determined.',
+    '<b>Left and Right Turns and Curves:</b> Considering the transportation combination and also dimensions of the cargo, turns are crucial obstacles for transportation. In this route survey report, critical turns and curves are determined and for long trailer combinations and long cargoes the turns should be inspected by detail and civil work requirement should be determined.',
     '<b>Inclinations and Declinations:</b> The possibility of the transportation over the inclinations and declinations should be calculated carefully by taking into account the weight of the cargo, transportation system, degree of inclination and road condition.',
   ].forEach(t => flow(el(`<p>${t}</p>`)));
 
@@ -181,13 +181,13 @@
   keep(`${H2('1.5', 'Brief Information')}<table class="brief">
     <tr><td>Starting Point:</td><td>${esc(S)}(<a href="${mapsUrl(stats.first)}">${pt(stats.first)}</a>)</td></tr>
     <tr><td>End Point:</td><td>${esc(E)}(<a href="${mapsUrl(stats.last)}">${pt(stats.last)}</a>)</td></tr>
-    <tr><td>Date of Survey:</td><td>${esc(P.surveyDate)}</td></tr>
+    <tr><td>Survey Date:</td><td>${esc(P.surveyDate)}</td></tr>
     <tr><td>Executed By:</td><td>${esc(P.executedBy)}</td></tr>
     <tr><td>Total Distance:</td><td>${stats.distance} km</td></tr>
     <tr><td>Total Number of Bridges:</td><td>${stats.bridges}</td></tr>
     <tr><td>Total Number of Left/Right Turns and Curves:</td><td>${stats.turns}</td></tr>
     <tr><td>Total Number of Overhead Structures:</td><td>${stats.overhead}</td></tr></table>`);
-  keep(`<div style="margin-top:7mm">${H1('2', 'Transportation Drawing')}</div><p>Preliminary transportation drawing.</p>`);
+  keep(`<div style="margin-top:7mm">${H1('2', 'Transportation Drawing')}</div><p>Preliminary transport drawing.</p>`);
 
   // ---------- 2 drawing page (uploaded PDF page, keeps its own size) ----------
   for (const d of A.drawings || []) {   // PDF drawing: one page each, landscape pages on A3 landscape
@@ -201,8 +201,8 @@
 
   // ---------- 3 Route Survey ----------
   flowPage();
-  keep(`${H1('3', 'Route Survey')}<p>It should be mentioned that on the following tables, information about the longitude, latitude and the distance from the initial point is given for each obstacle. The numbering sequence for the obstacles is given in such a format that the bypass roads or satellite view and etc. are clarified.</p>
-    <p>Moreover, there are some images without any kind of obstacles which is presented in order to identify the road type and no action is required on them. In some cases, to illustrate the bypass road, the satellite view is also added.</p>`);
+  keep(`${H1('3', 'Route Survey')}<p>The following tables present the latitude, longitude and chainage (distance from the starting point) of each obstacle. Obstacles are numbered so that bypass roads, satellite views and other supplementary records can be readily identified.</p>
+    <p>In addition, some photographs without obstacles are included to document the road type; no mitigation is required for these. Where necessary, a satellite view is provided to illustrate the bypass road.</p>`);
   flowArea = null;
 
   const hl = r => window.SurveyRules.highlightOf(r, { general: !!P.general, minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV });
@@ -287,33 +287,33 @@
   flowPage();
   const fig = (src, cap) => `<figure class="ref" style="width:${Math.min(150, 105 * (A.refAR[src] || 1.6)).toFixed(1)}mm"><img src="${A.ref[src]}" style="aspect-ratio:${A.refAR[src] || 1.6}" alt="">${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`;
   const CB = {
-    done_ok: 'Static analysis of all the bridges on the transportation route has been performed and based on results of static analysis, all the bridges are having suitable bearing capacity for current axle loads and there is no need for any additional action regarding the bridges.',
-    required: 'Static analysis of the bridges on the transportation route must be performed before the transportation and the results must be submitted to the related authorities for the road permit.',
+    done_ok: 'A static load analysis of all bridges on the transportation route has been carried out. The results confirm that all bridges have adequate load-bearing capacity for the planned axle loads, and no further mitigation is required.',
+    required: 'A static load analysis of the bridges on the transportation route must be carried out prior to transport, and the results must be submitted to the relevant authorities to obtain the road permit.',
   };
-  keep(`${H1('4', 'Conclusion')}${H2('4.1', 'Bridge')}<p>${P.conclusion.bridge === 'custom' ? esc(P.conclusion.bridgeText) : (CB[P.conclusion.bridge] || '')}</p><p>Examples of critical bridges which were crossed with different methods during CABA MISNAK’s past operation:</p>`);
-  [['r17', 'Crossing Using Temporary Flyover Bridge'], ['r18', 'Distributing the Load Using Girder Bridge System'], ['r23', 'Distributing the Load Over Bridge'],
-   ['r24', 'Construction of Bypass Road'], ['r25', 'Construction of Bypass Road'], ['r30', 'Construction of Bypass Road'], ['r31', 'Construction of Bypass Road']].forEach(([s, c]) => flow(el(fig(s, c))));
-  keep(`${H2('4.2', 'Overhead Structures')}<p>Location, dimension and by-pass availability information are provided for overhead structures in the route survey section. Using girder bridge system it’s possible to cross below all the overhead obstacles in this route and there is no need for any additional action regarding the overhead obstacles.</p><p>Examples of overhead obstacles which were lifted during CABA MISNAK’s past operation:</p>`);
-  [['r36', 'Pedestrian Bridge Lifting – Turkey'], ['r37', 'Traffic Light Lifting – Turkey'], ['r42', 'Moving the Cargo over the Obstacle Using Crane – Georgea']].forEach(([s, c]) => flow(el(fig(s, c))));
+  keep(`${H1('4', 'Conclusion')}${H2('4.1', 'Bridge')}<p>${P.conclusion.bridge === 'custom' ? esc(P.conclusion.bridgeText) : (CB[P.conclusion.bridge] || '')}</p><p>Examples of critical bridges crossed using different methods during previous ÇABA MİSNAK operations:</p>`);
+  [['r17', 'Crossing Using a Temporary Flyover Bridge'], ['r18', 'Load Distribution Using a Girder Bridge System'], ['r23', 'Load Distribution over the Bridge'],
+   ['r24', 'Construction of a Bypass Road'], ['r25', 'Construction of Bypass Road'], ['r30', 'Construction of Bypass Road'], ['r31', 'Construction of Bypass Road']].forEach(([s, c]) => flow(el(fig(s, c))));
+  keep(`${H2('4.2', 'Overhead Structures')}<p>The location, dimensions and bypass options of all overhead structures are provided in the route survey section. Using a girder bridge transport system, all overhead obstacles on this route can be passed underneath, and no further mitigation is required.</p><p>Examples of overhead obstacles lifted during previous ÇABA MİSNAK operations:</p>`);
+  [['r36', 'Pedestrian Bridge Lifting – Türkiye'], ['r37', 'Traffic Light Lifting – Türkiye'], ['r42', 'Moving the Cargo over an Obstacle Using a Crane – Georgia']].forEach(([s, c]) => flow(el(fig(s, c))));
   const mg = stats.maxGrade ? stats.maxGrade.v : 0;
-  keep(`${H2('4.3', 'Inclination and declination')}<p>Inclinations and declinations on the transportation route are determined and information provided in this route survey. The number of necessary puller trucks required for transportation over inclinations and declinations should be calculated carefully depending on the final weight of the cargo, transportation system, degree of inclination and road condition.</p>
-    ${mg ? `<p>The most serious inclination observed in this route survey is approximately ${num(mg)}% and the road is paved with asphalt in this place.</p>` : ''}<p>Examples of inclined roads during CABA MISNAK’s past operations:</p>`);
+  keep(`${H2('4.3', 'Inclination and declination')}<p>Inclines and declines along the transportation route are identified and documented in this route survey. The number of puller trucks required must be calculated on the basis of the gross combination weight, the transport system, the gradient and the road surface condition.</p>
+    ${mg ? `<p>The most serious inclination observed in this route survey is approximately ${num(mg)}% and the road is paved with asphalt in this place.</p>` : ''}<p>Examples of inclined roads during previous ÇABA MİSNAK operations:</p>`);
   [['r43', '%12 Inclination – Kazakhstan –<br>580ton load + Transporter load'], ['r48', '%14 Inclination – Turkey –<br>600ton load + Transporter load'], ['r49', '%4 Inclination – Turkey –<br>2650ton load + Transporter load']].forEach(([s, c]) => flow(el(fig(s, c))));
-  keep(`${H2('4.4', 'Power lines and cables')}<p>Low voltage power lines which are on the transportation route can be lifted up or removed by permission of the local authorities. To switch off electricity of the high voltage power lines, permissions and escorts are required from Ministry of Electricity.</p>
-    <p>For information, Minimum Clearance distance for passing under exposed electrical equipment or conductors is provided on the table below:</p>`);
-  flow(el(`<table class="clear"><tr><th rowspan="2">Voltage</th><th colspan="2">Minimum Clearance distance for<br>passing under exposed electrical<br>equipment or conductors</th></tr>
-    <tr><th>Meters</th><th>Feet</th></tr><tr><td>Phase to Phase</td><td></td><td></td></tr><tr><td>Over 750 V to 75 kV</td><td>2</td><td>6,5</td></tr>
+  keep(`${H2('4.4', 'Power lines and cables')}<p>Low voltage power lines along the transportation route can be lifted or temporarily removed with the permission of the local authorities. De-energising high voltage power lines requires permits and escorts from the relevant electricity authority.</p>
+    <p>For reference, the minimum clearance distances for passing under exposed electrical equipment or conductors are given in the table below:</p>`);
+  flow(el(`<table class="clear"><tr><th rowspan="2">Voltage</th><th colspan="2">Minimum clearance distance for<br>passing under exposed electrical<br>equipment or conductors</th></tr>
+    <tr><th>Metres</th><th>Feet</th></tr><tr><td>Phase to Phase</td><td></td><td></td></tr><tr><td>Over 750 V to 75 kV</td><td>2</td><td>6,5</td></tr>
     <tr><td>Over 75 kV to 250 kV</td><td>3</td><td>10</td></tr><tr><td>Over 250 kV to 550 kV</td><td>4</td><td>13</td></tr></table>`));
-  flow(el(`<p>Examples of crossing below electric cables during CABA MISNAK’s past operation:</p>`));
-  [['r54', 'Shut Down and Lifting'], ['r55', 'Excavating, Shut Down and Lifting'], ['r60', 'Shut Down and Lifting']].forEach(([s, c]) => flow(el(fig(s, c))));
-  keep(`${H2('4.5', 'Curves and turns')}<p>All the critical curves for this transportation has been presented in this report. In addition, related simulation of the curve may be seen in the report.</p>`);
+  flow(el(`<p>Examples of passing under power lines during previous ÇABA MİSNAK operations:</p>`));
+  [['r54', 'Shutdown and Lifting'], ['r55', 'Excavation, Shutdown and Lifting'], ['r60', 'Shut Down and Lifting']].forEach(([s, c]) => flow(el(fig(s, c))));
+  keep(`${H2('4.5', 'Curves and turns')}<p>All critical curves on this route are presented in this report, together with the related swept-path simulations where applicable.</p>`);
   [['r61', 'L:36m, W:15m, H:13m<br>Weight:2650Ton'], ['r66', 'L:78m, W:5.5m, H:6.5m<br>Weight:484Ton'], ['r67', 'Girder L:50m, W:7.2m, H:6.1m<br>Weight:600Ton'],
    ['r72', 'L:72m, W:10m, H:13m<br>Weight:712Ton'], ['r73', 'Girder L:63m, W:12m, H:18m<br>Weight:850Ton']].forEach(([s, c]) => flow(el(fig(s, c))));
-  keep(`${H2('4.6', 'Road condition')}<p>${P.conclusion.road === 'custom' ? esc(P.conclusion.roadText) : 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.'}</p><p>Examples of crossing narrow roads during CABA MISNAK’s past operation:</p>`);
+  keep(`${H2('4.6', 'Road condition')}<p>${P.conclusion.road === 'custom' ? esc(P.conclusion.roadText) : 'The road condition on this route is suitable for the planned transportation. The entire route is asphalt-paved with no critical pinch points.'}</p><p>Examples of passing through narrow roads during previous ÇABA MİSNAK operations:</p>`);
   [['r78', ''], ['r79', '']].forEach(([s, c]) => flow(el(fig(s, c))));
-  keep(`${H2('4.7', 'Climate conditions')}<p>Transportation during winter season is not recommended because the cold weather both affects the functionality of the hydraulic trailer and road condition. The frozen road surface would reduce the friction force which reduced the effective traction force and also increases the break distance (risky transportation condition).</p>`);
-  flow(el(`<p>Transportation during wet season should also considered in advance because the number of puller trucks should be calculated based on the condition of the road surface.</p>`));
-  keep(`${H2('4.8', 'Permissions')}<p>It should be noted that in addition to road permits, all application of all necessary improvements presented in this report are subject to the permission of the authorities.</p>`);
+  keep(`${H2('4.7', 'Climate conditions')}<p>Transportation during the winter season is not recommended, as low temperatures affect both the performance of the hydraulic trailer and the road surface. A frozen road surface reduces friction, lowering the effective tractive force and increasing braking distances, which results in hazardous transport conditions.</p>`);
+  flow(el(`<p>Transportation during the rainy season must also be planned in advance, as the number of puller trucks must be determined based on the condition of the road surface.</p>`));
+  keep(`${H2('4.8', 'Permissions')}<p>In addition to road permits, the implementation of all mitigation measures presented in this report is subject to the approval of the relevant authorities.</p>`);
 
   // ---------- fill contents page numbers ----------
   const at = {};

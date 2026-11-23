@@ -15,15 +15,15 @@ html.cap #tb{display:none}
 </style>
 </head>
 <body>
-<div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="pr" disabled>PDF al / Yazdır</button></div>
+<div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor oluşturuluyor…</span><button id="pr" disabled>PDF Olarak Al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=64"></script>
-<script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=64"></script>
-<script src="rules.js?v=64"></script>
-<script src="catalog.js?v=64"></script>
-<script src="pdfcap.js?v=64"></script>
-<script src="drawing.js?v=64"></script>
+<script src="auth.js?v=65"></script>
+<script>if (!Auth.pageGuard()) throw new Error("Giriş yapılması gerekiyor");</script>
+<script src="db.js?v=65"></script>
+<script src="rules.js?v=65"></script>
+<script src="catalog.js?v=65"></script>
+<script src="pdfcap.js?v=65"></script>
+<script src="drawing.js?v=65"></script>
 <script>
 (async () => {
   const id = location.hash.slice(1), msg = document.getElementById('msg');
@@ -37,7 +37,7 @@ html.cap #tb{display:none}
 
   let routeLine = routeKm(sv);   // final order -> route line and every obstacle's KM
   const recs = orderedRecords(sv);
-  { const road = await roadRoute(sv, recs, () => { msg.textContent = 'Yol güzergahı ve KM hesaplanıyor…'; });   // KM and route along the roads
+  { const road = await roadRoute(sv, recs, () => { msg.textContent = 'Güzergah ve KM değerleri hesaplanıyor…'; });   // KM and route along the roads
     if (road && road.line.length > 1) { routeLine = road.line; applyRoadKm(recs, road.cum); } }
   /* photos for the report: 1200×900 JPEG (quality 0.72) with Excel's 2.5 pt soft edges baked in.
      Small, plain JPEGs keep the PDF light; nothing has to be rasterised when printing. */
@@ -53,7 +53,7 @@ html.cap #tb{display:none}
     fade(0, 0, f, 0, 0, 0, f, H); fade(W, 0, W - f, 0, W - f, 0, f, H); fade(0, 0, 0, f, 0, 0, W, f); fade(0, H, 0, H - f, 0, H - f, W, f);
     return new Promise(res => c.toBlob(b => res(URL.createObjectURL(b)), 'image/jpeg', 0.72));
   }
-  msg.textContent = 'Fotoğraflar hazırlanıyor…';
+  msg.textContent = 'Fotoğraflar işleniyor…';
   for (const r of recs) { r.photo = await reportPhoto(r.photoId); r.crop = null; }
   window.SURVEY = { project: sv.project, records: recs };
 
@@ -84,7 +84,7 @@ html.cap #tb{display:none}
   const step = Math.max(1, Math.ceil(line.length / 800)); A.routeLine = line.filter((_, i) => i % step === 0 || i === line.length - 1);
   const W = 1186, H = 884; A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: 1, lon: 0 }, b: { x: 1, y: 1, lat: 0, lon: 1 } };
   if (A.routeLine.length >= 2) {
-    msg.textContent = 'Harita hazırlanıyor…';
+    msg.textContent = 'Harita oluşturuluyor…';
     const wx = (lon, n) => (lon + 180) / 360 * n, wy = (lat, n) => (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
     const ilat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI, ilon = (x, n) => x / n * 360 - 180;
     const las = A.routeLine.map(p => p[0]), los = A.routeLine.map(p => p[1]);
@@ -111,16 +111,16 @@ html.cap #tb{display:none}
   }
   await Promise.all([...A.logos.map(l => l.src), A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito'].map(f => document.fonts.load(f)));
-  msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=64'; s.onload = res; document.body.appendChild(s); });
+  msg.textContent = 'Paftalar düzenleniyor…';
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=65'; s.onload = res; document.body.appendChild(s); });
   await Promise.all([...document.images].map(i => i.decode ? i.decode().catch(() => {}) : null));
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (Math.min(screen.width, document.documentElement.clientWidth) - 8) / 794));
   fit(); window.addEventListener('resize', fit);
-  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet" seç.`;
-  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf) pr.textContent = 'PDF kaydet';
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. Yazıcı olarak "PDF olarak kaydet"i seçin.`;
+  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf) pr.textContent = 'PDF Olarak Kaydet';
   pr.onclick = async () => {
     if (window.AndroidPdf) {   // tablet: the app makes the PDF (each page in its own size), saves it to Belgeler/Etütler and opens the share menu
-      pr.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF hazırlanıyor…';
+      pr.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF oluşturuluyor…';
       const r = await nativePdf(document.title); pr.disabled = false;
       msg.textContent = r.path ? `PDF kaydedildi: ${r.path.replace(/^.*\/(Documents|Download)\//, 'Belgeler/')}` : 'PDF oluşturulamadı: ' + (r.err || '') + ' · ' + m0;
       return;

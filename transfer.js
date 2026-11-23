@@ -82,15 +82,15 @@
     if (r.fields && r.fields.spans) L.push(`Açıklıklar: ${r.fields.spans}`);
     if (r.latDec != null) L.push(`Konum: ${r.lat} · ${r.lon} (${r.latDec.toFixed(6)}, ${r.lonDec.toFixed(6)})${r.acc ? ' ±' + Math.round(r.acc) + ' m' : ''}`);
     else L.push('Konum: yok');
-    if (r.kmManual != null) L.push(`KM (elle): ${fmt(r.kmManual, 3)}`);
+    if (r.kmManual != null) L.push(`KM (elle giriş): ${fmt(r.kmManual, 3)}`);
     const hs = (r.heights || []).filter(h => h.value != null); if (hs.length) L.push('Yükseklikler: ' + hs.map(h => `${h.label || 'H'} ${fmt(h.value)} m`).join(', '));
     const ws = (r.widths || []).filter(w => w.value != null); if (ws.length) L.push('Genişlikler: ' + ws.map(w => `${w.label || 'W'} ${fmt(w.value)} m`).join(', '));
     if (r.remarks) L.push(`Remarks: ${r.remarks}`);
     if (r.actions) L.push(`Actions: ${r.actions}`);
     if (r.highlight && r.highlight !== 'none') L.push(`Renk: ${r.highlight}`);
-    if (!r.photoId) L.push(r.pendingImage ? 'Görsel: ofiste eklenecek' : 'Görsel: yok');
+    if (!r.photoId) L.push(r.pendingImage ? 'Fotoğraf: ofiste eklenecek' : 'Fotoğraf: yok');
     const ins = Object.keys(r.insets || {}).filter(k => r.insets[k]); if (ins.length) L.push('Köşe fotoğrafları: ' + ins.map(k => ({ tl: 'sol üst', tr: 'sağ üst', bl: 'sol alt', br: 'sağ alt' }[k])).join(', '));
-    if (r.archived) L.push('Arşivde: evet (rapora girmez)');
+    if (r.archived) L.push('Arşivde: evet (rapora dahil edilmez)');
     if (r.t) L.push(`Kayıt zamanı: ${new Date(r.t).toLocaleString('tr-TR')}`);
     return L.join('\r\n') + '\r\n';
   }
@@ -163,7 +163,7 @@
     await z.add(root + 'etut-bilgileri.txt', enc.encode(surveyText(sv, P.live, P.arc)));
     const result = await z.close();
     if (native()) {
-      try { await call('Share', 'share', { title: fileName, files: [result], dialogTitle: 'Etüt dosyasını gönder' }); } catch (e) { /* closed the share sheet */ }
+      try { await call('Share', 'share', { title: fileName, files: [result], dialogTitle: 'Etüt Paketini Paylaş' }); } catch (e) { /* closed the share sheet */ }
       return { fileName, where, count: P.all.length };
     }
     return { fileName, blob: result, count: P.all.length };
@@ -185,7 +185,7 @@
   async function readZip(file) {
     const buf = new Uint8Array(await file.arrayBuffer()), v = new DataView(buf.buffer);
     let e = buf.length - 22; while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
-    if (e < 0) throw new Error('ZIP okunamadı');
+    if (e < 0) throw new Error('Etüt paketi okunamadı.');
     const count = v.getUint16(e + 10, true); let p = v.getUint32(e + 16, true);
     const dec = new TextDecoder(), out = {};
     for (let i = 0; i < count; i++) {
@@ -203,7 +203,7 @@
       const it = out[name]; if (!it) return null;
       if (it.method === 0) return new Blob([it.data]);
       if (it.method === 8) return new Response(new Blob([it.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
-      throw new Error('Desteklenmeyen sıkıştırma: ' + it.method);
+      throw new Error('Desteklenmeyen sıkıştırma biçimi: ' + it.method);
     };
     return { names: Object.keys(out), get };
   }
@@ -223,10 +223,10 @@
   async function readSurvey(src) {
     src = tolerant(src);
     const jsonName = src.names.filter(n => /(^|\/)etut\.json$/.test(n)).sort((a, b) => a.length - b.length)[0];
-    if (!jsonName) throw new Error('Bu dosyada etüt bulunamadı (etut.json yok)');
+    if (!jsonName) throw new Error('Bu pakette etüt verisi bulunamadı (etut.json eksik).');
     const base = jsonName.slice(0, jsonName.length - 'etut.json'.length);
     const doc = JSON.parse(await (await src.get(jsonName)).text());
-    if (doc.format !== FORMAT) throw new Error('Bu dosya bir etüt dosyası değil');
+    if (doc.format !== FORMAT) throw new Error('Bu dosya geçerli bir etüt paketi değil.');
     return { doc, base, src };
   }
   async function saveImported({ doc, base, src }, mode, onStep) {   // mode: 'replace' | 'copy'

@@ -2,8 +2,8 @@
    one sub-folder per obstacle (nothing runs in the background while a survey is being worked on).
      <A>-<B> Arası Etüt Raporu/  1 - Bridge/ foto.jpg, ek-1.jpg, bilgiler.txt   1-1 - INFO/ …   Arşiv/ …   etut.json
    Tablet (APK): Belgeler/Etütler/ on the tablet itself.  Computer (Edge/Chrome): a folder the user picks once — a folder
-   inside OneDrive goes to the cloud by itself. The folder is the same layout as the ZIP, so "Etüt dosyası aç" → folder
-   (or "Yedekten geri yükle" on the tablet) opens it again.
+   inside OneDrive goes to the cloud by itself. The folder is the same layout as the ZIP, so "Etüt Dosyası Aç" → folder
+   (or "Yedekten Geri Yükle" on the tablet) opens it again.
    Only what changed is written: photos are tracked by their id (moved, not rewritten, when numbers shift), texts by a hash. */
 (function (g) {
   'use strict';
@@ -31,7 +31,7 @@
   };
   let HANDLE = null;   // computer: the chosen folder (FileSystemDirectoryHandle), kept in IndexedDB
   const desktop = {
-    kind: 'desktop', get label() { return HANDLE ? 'Klasör · ' + HANDLE.name : 'Klasör seçilmedi'; },
+    kind: 'desktop', get label() { return HANDLE ? 'Klasör · ' + HANDLE.name : 'Yedekleme konumu tanımlanmadı'; },
     async ready(ask) {
       if (!HANDLE) return false;
       const o = { mode: 'readwrite' };
@@ -85,10 +85,10 @@
   function schedule() { /* backups run only when asked for */ }
   /* back up the chosen surveys now; onStep(text) shows the progress */
   async function backupSurveys(ids, onStep) {
-    if (ST.busy) throw new Error('Yedekleme zaten sürüyor');
+    if (ST.busy) throw new Error('Yedekleme işlemi zaten devam ediyor.');
     const t = target();
-    if (t.kind === 'desktop' && !(await desktop.ready(true))) { ST.needsPermission = true; emit(); throw new Error(HANDLE ? 'Klasöre yazma izni verilmedi' : 'Önce yedek konumunu seç'); }
-    if (t.kind === 'saf' && !(await saf.ready())) { ST.needsPermission = true; emit(); throw new Error('Yedek klasörüne yazılamıyor; konumu yeniden seç'); }
+    if (t.kind === 'desktop' && !(await desktop.ready(true))) { ST.needsPermission = true; emit(); throw new Error(HANDLE ? 'Klasöre yazma izni verilmedi.' : 'Lütfen önce yedekleme konumunu tanımlayın.'); }
+    if (t.kind === 'saf' && !(await saf.ready())) { ST.needsPermission = true; emit(); throw new Error('Yedekleme klasörüne yazılamıyor; lütfen konumu yeniden tanımlayın.'); }
     if (t.kind === 'android') { try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }
     ST.busy = true; ST.needsPermission = false; ST.error = ''; emit();
     let n = 0;
@@ -101,7 +101,7 @@
       }
       ST.last = Date.now(); const cfg = (await DB.getSetting('backup')) || {}; cfg.last = ST.last; await setCfg(cfg);
     } catch (e) {
-      console.error('backup', e); ST.error = (e && e.message) || 'Yedek yazılamadı';
+      console.error('backup', e); ST.error = (e && e.message) || 'Yedekleme verisi yazılamadı.';
       if (/permission|izin|NotAllowed/i.test(ST.error)) ST.needsPermission = true;
       throw e;
     } finally { ST.busy = false; emit(); }
@@ -156,7 +156,7 @@
     }
     // 2) texts
     const texts = P.entries.filter(x => x.text != null).map(x => [x.path, x.text]);
-    texts.push(['etut-bilgileri.txt', T().surveyText(sv, P.live, P.arc).replace(/Dışa aktarma: [^\r\n]*/, 'Son yedek: ' + new Date().toLocaleString('tr-TR'))]);
+    texts.push(['etut-bilgileri.txt', T().surveyText(sv, P.live, P.arc).replace(/Dışa aktarma: [^\r\n]*/, 'Son yedekleme: ' + new Date().toLocaleString('tr-TR'))]);
     for (const [pth, txt] of texts) {
       tick();
       const sig = 't:' + hash(txt.replace(/Son yedek: [^\r\n]*/, ''));

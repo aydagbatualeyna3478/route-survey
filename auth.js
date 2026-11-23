@@ -29,9 +29,9 @@
   // ---------- HTTP ----------
   class ApiError extends Error { constructor(m, s, c) { super(m); this.status = s; this.code = c; } }
   const TR = {
-    invalid_credentials: 'Mail ya da şifre hatalı.', user_banned: 'Bu hesap kapatılmış. Bir admin ile görüş.', mfa_verification_failed: 'Kod hatalı ya da süresi geçmiş.',
-    weak_password: 'Şifre çok zayıf (en az 8 karakter).', same_password: 'Yeni şifre eskisiyle aynı olamaz.', over_request_rate_limit: 'Çok fazla deneme. Biraz bekleyip tekrar dene.',
-    email_not_confirmed: 'Mail adresi onaylanmamış. Bir admin ile görüş.',
+    invalid_credentials: 'E-posta adresi veya şifre hatalı.', user_banned: 'Bu hesap devre dışı bırakılmış. Lütfen yönetici ile görüşünüz.', mfa_verification_failed: 'Kod hatalı veya süresi dolmuş.',
+    weak_password: 'Şifre çok zayıf (en az 8 karakter olmalıdır).', same_password: 'Yeni şifre eski şifrenizle aynı olamaz.', over_request_rate_limit: 'Çok sayıda başarısız deneme yapıldı. Güvenlik nedeniyle lütfen bir süre bekleyip tekrar deneyin.',
+    email_not_confirmed: 'E-posta adresi doğrulanmamış. Lütfen yönetici ile görüşünüz.',
   };
   async function api(path, { method = 'GET', body, auth = true, headers = {}, timeout = 15000 } = {}) {
     const h = { apikey: KEY, 'Content-Type': 'application/json', ...headers };
@@ -39,7 +39,7 @@
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeout);
     let r;
     try { r = await fetch(SB + path, { method, headers: h, body: body == null ? undefined : JSON.stringify(body), signal: ctl.signal }); }
-    catch (e) { throw new ApiError('Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.', 0, 'offline'); }
+    catch (e) { throw new ApiError('Sunucuya erişilemiyor. Lütfen ağ bağlantınızı kontrol edin.', 0, 'offline'); }
     finally { clearTimeout(t); }
     const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (e) {}
     if (!r.ok) {
@@ -54,7 +54,7 @@
     save();
   }
   async function refresh() {
-    if (!S || !S.refresh) throw new ApiError('Oturum yok', 401, 'no_session');
+    if (!S || !S.refresh) throw new ApiError('Oturum bulunamadı', 401, 'no_session');
     const j = await api('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: S.refresh }, auth: false });
     setTokens(j);
   }
@@ -78,16 +78,16 @@
     <div class="card" style="width:min(460px,100%);gap:14px">${inner}</div></div>`;
   const errBox = id => `<div class="note w" id="${id}" hidden></div>`;
   const showErr = (id, m) => { const e = document.getElementById(id); if (e) { e.textContent = m; e.hidden = !m; } };
-  const busy = (b, on, label) => { if (!b) return; if (on) { b.dataset.l = b.textContent; b.textContent = label || 'Bekle…'; b.disabled = true; } else { b.textContent = b.dataset.l || b.textContent; b.disabled = false; } };
+  const busy = (b, on, label) => { if (!b) return; if (on) { b.dataset.l = b.textContent; b.textContent = label || 'Lütfen bekleyin…'; b.disabled = true; } else { b.textContent = b.dataset.l || b.textContent; b.disabled = false; } };
 
   function loginView(done, msg) {
-    $app().innerHTML = shell('GoSurvey · Giriş', `<b style="font-size:18px">Şirket hesabınla gir</b>
-      <div class="hint">Hesapları adminler açar. Hesabın yoksa bir admin ile görüş.</div>
+    $app().innerHTML = shell('GO Survey', `<b style="font-size:18px">Lütfen Giriş Yapın</b>
+      <div class="hint">Hesabınız yönetici tarafından oluşturulur. Eğer bir hesaba sahip değilseniz lütfen yönetici ile görüşünüz.</div>
       ${msg ? `<div class="note w">${esc(msg)}</div>` : ''}
       <form id="lf" style="display:flex;flex-direction:column;gap:12px">
-        <label class="f">Mail<input id="le" type="email" autocomplete="username" inputmode="email" required value="${esc((S && S.email) || '')}"></label>
+        <label class="f">Giriş Kimliği (E-posta)<input id="le" type="email" autocomplete="username" inputmode="email" required value="${esc((S && S.email) || '')}"></label>
         <label class="f">Şifre<input id="lp" type="password" autocomplete="current-password" required></label>
-        ${errBox('lerr')}<button class="btn pri" id="lb">Giriş yap</button></form>`);
+        ${errBox('lerr')}<button class="btn pri" id="lb">Giriş Yap</button></form>`);
     document.getElementById('lf').onsubmit = async e => {
       e.preventDefault(); const b = document.getElementById('lb'); showErr('lerr', ''); busy(b, true, 'Giriş yapılıyor…');
       try {
@@ -102,18 +102,18 @@
   async function afterAal2(done, event) {
     const r = await checkIn(event);
     if (r.ok) return done();
-    if (!r.active) { signOutLocal(); return loginView(done, 'Bu hesap kapatılmış. Bir admin ile görüş.'); }
+    if (!r.active) { signOutLocal(); return loginView(done, 'Bu hesap devre dışı bırakılmış. Bir yönetici ile görüş.'); }
     pendingView(done);
   }
 
   function pendingView(done) {
     const d = deviceId();
-    $app().innerHTML = shell('Cihaz onayı', `<b style="font-size:18px">Bu cihaz onay bekliyor</b>
-      <div class="hint">${esc(S && S.email)} hesabı bu cihazda ilk kez açılıyor. Adminlerden biri onaylayınca uygulama açılır.</div>
-      <label class="f">Bu cihazın adı (admin listede bu adı görür)<input id="dl" maxlength="60" value="${esc(d.label || '')}" placeholder="ör. Saha tableti 2 · Ahmet"></label>
-      <div class="hint">Cihaz kodu: <b style="color:var(--ink)">${esc(d.id.slice(0, 8).toUpperCase())}</b> · ${esc(platform())}</div>
-      ${errBox('perr')}<button class="btn pri" id="pb">Onaylandı mı? Kontrol et</button>
-      <button class="btn dash" id="px">Çıkış yap</button>`);
+    $app().innerHTML = shell('Cihaz Yetkilendirme', `<b style="font-size:18px">Cihaz Yetkilendirme Onayı Bekleniyor</b>
+      <div class="hint">${esc(S && S.email)} hesabı bu cihazda ilk kez kullanılıyor. Güvenlik politikası gereği cihazın sistem yöneticisi tarafından yetkilendirilmesi gerekmektedir.</div>
+      <label class="f">Cihaz Tanımı (yönetim panelinde bu adla listelenir)<input id="dl" maxlength="60" value="${esc(d.label || '')}" placeholder="Örn. Saha Tableti 2 · Ahmet"></label>
+      <div class="hint">Cihaz Kimliği: <b style="color:var(--ink)">${esc(d.id.slice(0, 8).toUpperCase())}</b> · ${esc(platform())}</div>
+      ${errBox('perr')}<button class="btn pri" id="pb">Yetkilendirme Durumunu Sorgula</button>
+      <button class="btn dash" id="px">Oturumu Kapat</button>`);
     document.getElementById('dl').onchange = e => { const x = deviceId(); x.label = e.target.value.trim(); ls.set(LSD, x); };
     document.getElementById('px').onclick = signOut;
     const chk = async () => {
@@ -121,8 +121,8 @@
       try {
         const r = await checkIn('check');
         if (r.ok) return done();
-        if (!r.active) { signOutLocal(); return loginView(done, 'Bu hesap kapatılmış.'); }
-        busy(b, false); showErr('perr', 'Henüz onaylanmadı.');
+        if (!r.active) { signOutLocal(); return loginView(done, 'Bu hesap devre dışı bırakılmış.'); }
+        busy(b, false); showErr('perr', 'Cihaz yetkilendirmesi henüz tamamlanmadı.');
       } catch (err) { busy(b, false); showErr('perr', err.message); }
     };
     document.getElementById('pb').onclick = chk;
@@ -130,8 +130,8 @@
   }
 
   function lockedView(done, msg) {
-    $app().innerHTML = shell('Bağlantı gerekli', `<b style="font-size:18px">İnternete bağlanman gerekiyor</b>
-      <div class="hint">${esc(msg)}</div>${errBox('oerr')}<button class="btn pri" id="ob">Tekrar dene</button><button class="btn dash" id="ox">Çıkış yap</button>`);
+    $app().innerHTML = shell('Sunucu Bağlantısı Gerekli', `<b style="font-size:18px">Sunucu Doğrulaması İçin İnternet Bağlantısı Gerekli</b>
+      <div class="hint">${esc(msg)}</div>${errBox('oerr')}<button class="btn pri" id="ob">Bağlantıyı Yeniden Dene</button><button class="btn dash" id="ox">Oturumu Kapat</button>`);
     document.getElementById('ox').onclick = signOut;
     document.getElementById('ob').onclick = () => start(done);
   }
@@ -149,9 +149,9 @@
       if (err.code === 'offline' || err.status === 0 || err.status >= 500) {
         const age = Date.now() - (S.okAt || 0);
         if (S.okAt && age < GRACE_DAYS * 864e5) return go();   // approved device, offline: carry on
-        return lockedView(go, S.okAt ? `Bu cihaz ${GRACE_DAYS} günden uzun süredir sunucuya bağlanmadı. Bağlanınca kontrol edilip açılacak.` : 'İlk giriş için internet bağlantısı gerekli.');
+        return lockedView(go, S.okAt ? `Bu cihaz ${GRACE_DAYS} günü aşkın süredir sunucuyla doğrulama yapmadı. Bağlantı sağlandığında cihaz doğrulanarak erişim yeniden açılacaktır.` : 'İlk oturum açma işlemi için internet bağlantısı gereklidir.');
       }
-      signOutLocal(); return loginView(go, 'Oturumun sona ermiş, tekrar giriş yap.');
+      signOutLocal(); return loginView(go, 'Oturum süreniz doldu. Güvenliğiniz için lütfen yeniden oturum açın.');
     }
   }
   // while the app is open: re-check when the connection comes back and every 30 minutes
@@ -172,9 +172,9 @@
   function accountSheet() {
     document.querySelectorAll('.sheet').forEach(x => x.remove());
     const d = document.createElement('div'); d.className = 'sheet';
-    d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="Hesap"><b>${esc((S && S.name) || 'Hesap')}</b><div class="hint">${esc(S && S.email)} · ${S && S.role === 'admin' ? 'Admin' : 'Kullanıcı'} · ${esc(platform())}</div>
-      ${S && S.role === 'admin' ? '<button class="btn pri" data-a="admin">Yönetim (kullanıcılar, cihazlar, girişler)</button>' : ''}
-      <button class="btn" data-a="pw">Şifremi değiştir</button><button class="btn" data-a="out" style="color:var(--badtx)">Çıkış yap</button><button class="btn dash" data-x="1">Kapat</button></div>`;
+    d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="Hesap"><b>${esc((S && S.name) || 'Hesap')}</b><div class="hint">${esc(S && S.email)} · ${S && S.role === 'admin' ? 'Yönetici' : 'Kullanıcı'} · ${esc(platform())}</div>
+      ${S && S.role === 'admin' ? '<button class="btn pri" data-a="admin">Sistem Yönetimi (Kullanıcılar, Cihazlar, Erişim Kayıtları)</button>' : ''}
+      <button class="btn" data-a="pw">Şifreyi Güncelle</button><button class="btn" data-a="out" style="color:var(--badtx)">Oturumu Kapat</button><button class="btn dash" data-x="1">Kapat</button></div>`;
     document.body.appendChild(d);
     d.onclick = e => {
       if (e.target.closest('[data-x]')) return d.remove();
@@ -186,17 +186,17 @@
   }
   function pwSheet() {
     const d = document.createElement('div'); d.className = 'sheet';
-    d.innerHTML = `<div class="sheet-bg" data-x="1"></div><form class="sheet-box" id="pwf"><b>Şifremi değiştir</b>
+    d.innerHTML = `<div class="sheet-bg" data-x="1"></div><form class="sheet-box" id="pwf"><b>Şifre Güncelleme</b>
       <label class="f">Yeni şifre (en az 8 karakter)<input id="p1" type="password" autocomplete="new-password" minlength="8" required></label>
       <label class="f">Yeni şifre (tekrar)<input id="p2" type="password" autocomplete="new-password" minlength="8" required></label>
-      ${errBox('pwerr')}<button class="btn pri" id="pwb">Kaydet</button><button type="button" class="btn dash" data-x="1">Vazgeç</button></form>`;
+      ${errBox('pwerr')}<button class="btn pri" id="pwb">Şifreyi Güncelle</button><button type="button" class="btn dash" data-x="1">İptal</button></form>`;
     document.body.appendChild(d);
     d.onclick = e => { if (e.target.closest('[data-x]')) d.remove(); };
     document.getElementById('pwf').onsubmit = async e => {
       e.preventDefault(); const p1 = document.getElementById('p1').value, p2 = document.getElementById('p2').value, b = document.getElementById('pwb');
-      if (p1 !== p2) return showErr('pwerr', 'İki şifre aynı değil.');
+      if (p1 !== p2) return showErr('pwerr', 'Girdiğiniz şifreler eşleşmiyor.');
       busy(b, true, 'Kaydediliyor…');
-      try { await fresh(); await api('/auth/v1/user', { method: 'PUT', body: { password: p1 } }); d.remove(); toastMsg('Şifren değişti'); }
+      try { await fresh(); await api('/auth/v1/user', { method: 'PUT', body: { password: p1 } }); d.remove(); toastMsg('Şifreniz başarıyla güncellendi.'); }
       catch (err) { busy(b, false); showErr('pwerr', err.message); }
     };
   }
@@ -204,37 +204,37 @@
 
   // ---------- admin screen (#/admin) ----------
   const when = t => { if (!t) return '—'; const d = new Date(t); return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }); };
-  const EVT = { login: 'Giriş', open: 'Uygulama açıldı', check: 'Kontrol', pending: 'Onay bekleyen cihaz', blocked: 'Engellendi', device_approved: 'Cihaz onaylandı', device_removed: 'Cihaz kaldırıldı',
-    user_created: 'Kullanıcı açıldı', password_set: 'Şifre belirlendi', user_disabled: 'Kullanıcı kapatıldı', user_enabled: 'Kullanıcı açıldı (tekrar)', user_deleted: 'Kullanıcı silindi', mfa_reset: 'Authenticator sıfırlandı', role_changed: 'Yetki değişti' };
+  const EVT = { login: 'Oturum açma', open: 'Uygulama Başlatıldı', check: 'Periyodik Doğrulama', pending: 'Onay Bekleyen Cihaz', blocked: 'Erişim engellendi', device_approved: 'Cihaz yetkilendirildi', device_removed: 'Cihaz yetkisi kaldırıldı',
+    user_created: 'Kullanıcı hesabı oluşturuldu', password_set: 'Şifre tanımlandı', user_disabled: 'Kullanıcı hesabı askıya alındı', user_enabled: 'Kullanıcı hesabı yeniden etkinleştirildi', user_deleted: 'Kullanıcı hesabı silindi', mfa_reset: 'İki faktörlü doğrulama sıfırlandı', role_changed: 'Kullanıcı yetkisi değiştirildi' };
   let ATAB = 'dev';
   async function adminView(bar) {
     const $ = $app();
     if (!S || S.role !== 'admin') { location.hash = '#/'; return; }
-    $.innerHTML = `${bar('Yönetim', '#/profile')}<div class="full"><div class="empty">Yükleniyor…</div></div>`;
+    $.innerHTML = `${bar('Sistem Yönetimi', '#/profile')}<div class="full"><div class="empty">Yükleniyor…</div></div>`;
     let users, devs, logs;
     try {
       [users, devs, logs] = await Promise.all([rest('profiles?select=*&order=created_at.asc'), rest('devices?select=*&order=created_at.desc'), rest('access_log?select=*&order=at.desc&limit=300')]);
     } catch (err) { $.innerHTML = `${bar('Yönetim', '#/profile')}<div class="full"><div class="note w">${esc(err.message)}</div></div>`; return; }
     const uname = id => { const u = users.find(x => x.id === id); return u ? (u.full_name || u.email) : '—'; };
     const pend = devs.filter(d => !d.approved);
-    const tabs = [['dev', `Cihazlar${pend.length ? ` · ${pend.length} onay bekliyor` : ''}`], ['usr', `Kullanıcılar · ${users.length}`], ['log', 'Giriş kayıtları']];
+    const tabs = [['dev', `Cihaz Yetkilendirmeleri${pend.length ? ` · ${pend.length} onay bekliyor` : ''}`], ['usr', `Kullanıcı Hesapları · ${users.length}`], ['log', 'Erişim Kayıtları']];
     const devRow = d => `<div class="card" style="gap:6px;${d.approved ? '' : 'border:2px solid var(--warntx)'}"><div class="row" style="justify-content:space-between"><b>${esc(d.label || d.platform || 'Cihaz')}</b>${d.approved ? '<span class="tag ok">Onaylı</span>' : '<span class="tag warn">Onay bekliyor</span>'}</div>
-      <div class="hint">${esc(uname(d.user_id))} · ${esc(d.platform)} · kod ${esc(d.id.slice(0, 8).toUpperCase())}</div><div class="hint">İlk: ${when(d.created_at)} · Son: ${when(d.last_seen)}${d.approved_at ? ' · Onay: ' + when(d.approved_at) + ' (' + esc(uname(d.approved_by)) + ')' : ''}</div>
-      <div class="row">${d.approved ? '' : `<button class="btn pri sm grow" data-dok="${esc(d.id)}|${d.user_id}">Onayla</button>`}<button class="btn sm grow" data-ddel="${esc(d.id)}|${d.user_id}" style="color:var(--badtx)">${d.approved ? 'Onayı kaldır' : 'Reddet'}</button></div></div>`;
-    const usrRow = u => { const n = devs.filter(d => d.user_id === u.id); return `<div class="card" style="gap:6px;${u.active ? '' : 'opacity:.65'}"><div class="row" style="justify-content:space-between"><b>${esc(u.full_name || u.email)}</b><span class="row" style="gap:6px">${u.role === 'admin' ? '<span class="tag sub">ADMİN</span>' : ''}${u.active ? '<span class="tag ok">Açık</span>' : '<span class="tag bad">Kapalı</span>'}</span></div>
+      <div class="hint">${esc(uname(d.user_id))} · ${esc(d.platform)} · kimlik ${esc(d.id.slice(0, 8).toUpperCase())}</div><div class="hint">İlk: ${when(d.created_at)} · Son: ${when(d.last_seen)}${d.approved_at ? ' · Yetkilendir: ' + when(d.approved_at) + ' (' + esc(uname(d.approved_by)) + ')' : ''}</div>
+      <div class="row">${d.approved ? '' : `<button class="btn pri sm grow" data-dok="${esc(d.id)}|${d.user_id}">Onayla</button>`}<button class="btn sm grow" data-ddel="${esc(d.id)}|${d.user_id}" style="color:var(--badtx)">${d.approved ? 'Yetkiyi Kaldır' : 'Reddet'}</button></div></div>`;
+    const usrRow = u => { const n = devs.filter(d => d.user_id === u.id); return `<div class="card" style="gap:6px;${u.active ? '' : 'opacity:.65'}"><div class="row" style="justify-content:space-between"><b>${esc(u.full_name || u.email)}</b><span class="row" style="gap:6px">${u.role === 'admin' ? '<span class="tag sub">YÖNETİCİ</span>' : ''}${u.active ? '<span class="tag ok">Aktif</span>' : '<span class="tag bad">Askıda</span>'}</span></div>
       <div class="hint">${esc(u.email)} · ${n.filter(d => d.approved).length} onaylı cihaz${n.some(d => !d.approved) ? ', ' + n.filter(d => !d.approved).length + ' bekleyen' : ''} · açılış ${when(u.created_at)}</div>
-      ${u.id === jwt(S.access).sub ? '<div class="hint">Bu sensin.</div>' : `<div class="row" style="flex-wrap:wrap">
+      ${u.id === jwt(S.access).sub ? '<div class="hint">Bu sizsiniz.</div>' : `<div class="row" style="flex-wrap:wrap">
         <button class="btn sm grow" data-ua="password" data-u="${u.id}">Şifre belirle</button>
-        <button class="btn sm grow" data-ua="${u.active ? 'disable' : 'enable'}" data-u="${u.id}">${u.active ? 'Kapat' : 'Aç'}</button>
-        <button class="btn sm grow" data-ua="role" data-u="${u.id}">${u.role === 'admin' ? 'Admin yetkisini al' : 'Admin yap'}</button>
+        <button class="btn sm grow" data-ua="${u.active ? 'disable' : 'enable'}" data-u="${u.id}">${u.active ? 'Hesabı Askıya Al' : 'Hesabı Etkinleştir'}</button>
+        <button class="btn sm grow" data-ua="role" data-u="${u.id}">${u.role === 'admin' ? 'Yönetici Yetkisini Kaldır' : 'Yönetici Yetkisi Ver'}</button>
         <button class="btn sm grow" data-ua="delete" data-u="${u.id}" style="color:var(--badtx)">Sil</button></div>`}</div>`; };
-    const body = ATAB === 'dev' ? (devs.length ? `<div class="tiles">${[...pend, ...devs.filter(d => d.approved)].map(devRow).join('')}</div>` : '<div class="empty">Henüz cihaz yok.</div>')
-      : ATAB === 'usr' ? `<form class="card" id="nu"><b>Yeni kullanıcı</b><div class="g2"><label class="f">Ad Soyad<input id="nn" required maxlength="60"></label><label class="f">Mail<input id="ne" type="email" required></label></div>
-          <div class="g2"><label class="f">İlk şifre (en az 8 karakter, kullanıcıya sen ilet)<input id="np" type="text" minlength="8" required autocomplete="off"></label><label class="f">Yetki<select id="nr"><option value="user">Kullanıcı</option><option value="admin">Admin</option></select></label></div>
-          ${errBox('nuerr')}<button class="btn pri" id="nub">Kullanıcıyı aç</button><div class="hint">Kullanıcı e-posta ve şifreyle girer; her yeni cihazı bir kez yönetici onayı bekler (yöneticilerin cihazları onay beklemez). Şifresini sonra kendisi değiştirebilir.</div></form>
+    const body = ATAB === 'dev' ? (devs.length ? `<div class="tiles">${[...pend, ...devs.filter(d => d.approved)].map(devRow).join('')}</div>` : '<div class="empty">Henüz yetkilendirilmiş cihaz yok.</div>')
+      : ATAB === 'usr' ? `<form class="card" id="nu"><b>Yeni Kullanıcı Hesabı</b><div class="g2"><label class="f">Ad Soyad<input id="nn" required maxlength="60"></label><label class="f">E-posta<input id="ne" type="email" required></label></div>
+          <div class="g2"><label class="f">Geçici şifre (en az 8 karakter; kullanıcıya güvenli bir kanalla iletin)<input id="np" type="text" minlength="8" required autocomplete="off"></label><label class="f">Yetki<select id="nr"><option value="user">Kullanıcı</option><option value="admin">Yönetici</option></select></label></div>
+          ${errBox('nuerr')}<button class="btn pri" id="nub">Kullanıcı Hesabı Oluştur</button><div class="hint">Kullanıcı e-posta ve şifreyle oturum açar; her yeni cihaz bir kez yönetici tarafından yetkilendirilir (yönetici cihazları yetkilendirme gerektirmez). Kullanıcı şifresini daha sonra kendisi güncelleyebilir.</div></form>
           <div class="tiles">${users.map(usrRow).join('')}</div>`
-      : `<div class="card" style="padding:0;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg);text-align:left"><th style="padding:8px">Zaman</th><th style="padding:8px">Kişi</th><th style="padding:8px">Olay</th><th style="padding:8px">Cihaz</th><th style="padding:8px">Ayrıntı</th></tr></thead>
-          <tbody>${logs.map(l => `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;white-space:nowrap">${when(l.at)}</td><td style="padding:7px 8px">${esc(l.email || uname(l.user_id))}</td><td style="padding:7px 8px">${esc(EVT[l.event] || l.event)}</td><td style="padding:7px 8px">${esc(l.device_label || (l.device_id || '').slice(0, 8).toUpperCase())}</td><td style="padding:7px 8px">${esc(l.detail || '')}</td></tr>`).join('') || '<tr><td style="padding:10px" colspan="5">Kayıt yok.</td></tr>'}</tbody></table></div>`;
+      : `<div class="card" style="padding:0;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg);text-align:left"><th style="padding:8px">Tarih / Saat</th><th style="padding:8px">Kullanıcı</th><th style="padding:8px">İşlem</th><th style="padding:8px">Cihaz</th><th style="padding:8px">Ayrıntı</th></tr></thead>
+          <tbody>${logs.map(l => `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;white-space:nowrap">${when(l.at)}</td><td style="padding:7px 8px">${esc(l.email || uname(l.user_id))}</td><td style="padding:7px 8px">${esc(EVT[l.event] || l.event)}</td><td style="padding:7px 8px">${esc(l.device_label || (l.device_id || '').slice(0, 8).toUpperCase())}</td><td style="padding:7px 8px">${esc(l.detail || '')}</td></tr>`).join('') || '<tr><td style="padding:10px" colspan="5">Kayıt bulunmuyor.</td></tr>'}</tbody></table></div>`;
     $.innerHTML = `${bar('Yönetim', '#/profile', `<button class="btn" id="arf">Yenile</button>`)}<div class="full"><div class="row" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="btn ${ATAB === k ? 'pri' : ''}" data-atab="${k}">${esc(l)}</button>`).join('')}</div>${body}</div>`;
     const again = () => adminView(bar);
     document.getElementById('arf').onclick = again;
@@ -263,9 +263,9 @@
   function askPw(u) {
     return new Promise(res => {
       const d = document.createElement('div'); d.className = 'sheet';
-      d.innerHTML = `<div class="sheet-bg" data-x="1"></div><form class="sheet-box" id="apf"><b>${esc(u.full_name || u.email)} · yeni şifre</b>
-        <label class="f">Şifre (en az 8 karakter, kullanıcıya sen ilet)<input id="ap" type="text" minlength="8" required autocomplete="off"></label>
-        <button class="btn pri">Kaydet</button><button type="button" class="btn dash" data-x="1">Vazgeç</button></form>`;
+      d.innerHTML = `<div class="sheet-bg" data-x="1"></div><form class="sheet-box" id="apf"><b>${esc(u.full_name || u.email)} · Şifre Sıfırlama</b>
+        <label class="f">Yeni şifre (en az 8 karakter; kullanıcıya güvenli bir kanalla iletin)<input id="ap" type="text" minlength="8" required autocomplete="off"></label>
+        <button class="btn pri">Kaydet</button><button type="button" class="btn dash" data-x="1">İptal</button></form>`;
       document.body.appendChild(d);
       d.onclick = e => { if (e.target.closest('[data-x]')) { d.remove(); res(null); } };
       document.getElementById('apf').onsubmit = e => { e.preventDefault(); const p = document.getElementById('ap').value; d.remove(); res(p); };

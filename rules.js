@@ -11,12 +11,12 @@
     refHV: null,       // high voltage             (default: minHeight + 4.0)
   };
   const TEXT = {
-    none: 'No Action Required',
-    structure: 'Structure must be removed.',
-    lvLift: 'Power must be turned off and the cables must be lifted.',
-    lvOff: 'Power must be turned off.',
+    none: 'No mitigation required.',
+    structure: 'The structure must be temporarily removed prior to the passage of the convoy.',
+    lvLift: 'The power line must be de-energised and the cables lifted for the passage of the convoy.',
+    lvOff: 'The power line must be de-energised for the passage of the convoy.',
     mvOff: 'Power must be turned off.',
-    hvOff: 'Power must be turned off before transportation.',
+    hvOff: 'The power line must be de-energised prior to transport.',
   };
   function refs(settings) {
     const s = Object.assign({}, DEFAULTS, settings || {});

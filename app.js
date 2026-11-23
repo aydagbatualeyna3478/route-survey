@@ -61,14 +61,14 @@
      screens and the PDF use smaller copies */
   const PHOTO_W = 2560, PHOTO_Q = 0.86;
   async function showOriginal(id) {
-    const b = await DB.getBlob(id); if (!b) return toast('Fotoğraf bulunamadı');
+    const b = await DB.getBlob(id); if (!b) return toast('Fotoğraf bulunamadı.');
     const u = URL.createObjectURL(b), d = document.createElement('div'); d.className = 'origv';
     let z = 1;
-    d.innerHTML = `<div class="ov-sc"><img src="${u}" alt="Orijinal fotoğraf"></div><div class="ov-bar"><span id="ovinfo">Orijinal fotoğraf</span><button class="btn sm" data-z="-">−</button><button class="btn sm" data-z="1">Sığdır</button><button class="btn sm" data-z="+">+</button><button class="btn sm" data-z="x">Kapat</button></div>`;
+    d.innerHTML = `<div class="ov-sc"><img src="${u}" alt="Orijinal Fotoğraf"></div><div class="ov-bar"><span id="ovinfo">Orijinal fotoğraf</span><button class="btn sm" data-z="-">−</button><button class="btn sm" data-z="1">Sığdır</button><button class="btn sm" data-z="+">+</button><button class="btn sm" data-z="x">Kapat</button></div>`;
     document.body.appendChild(d);
     const sc = d.querySelector('.ov-sc'), im = d.querySelector('img');
-    const base = () => { const r = sc.getBoundingClientRect(); return Math.min(r.width, r.height * (im.naturalWidth || 4) / (im.naturalHeight || 3)); };   // "Sığdır": whole photo on screen
-    im.onload = () => { im.style.width = base() + 'px'; d.querySelector('#ovinfo').textContent = `Orijinal · ${im.naturalWidth}×${im.naturalHeight} px · ${b.size >= 1048576 ? (b.size / 1048576).toFixed(1) + ' MB' : Math.round(b.size / 1024) + ' KB'}`; };
+    const base = () => { const r = sc.getBoundingClientRect(); return Math.min(r.width, r.height * (im.naturalWidth || 4) / (im.naturalHeight || 3)); };   // "Ekrana Sığdır": whole photo on screen
+    im.onload = () => { im.style.width = base() + 'px'; d.querySelector('#ovinfo').textContent = `Orijinal · ${im.naturalWidth}×${im.naturalHeight} piksel · ${b.size >= 1048576 ? (b.size / 1048576).toFixed(1) + ' MB' : Math.round(b.size / 1024) + ' KB'}`; };
     const setZ = (nz, cx, cy) => {   // keep the point under the finger / centre in place
       const r = sc.getBoundingClientRect(); cx = cx == null ? r.width / 2 : cx; cy = cy == null ? r.height / 2 : cy;
       const fx = (sc.scrollLeft + cx) / (im.offsetWidth || 1), fy = (sc.scrollTop + cy) / (im.offsetHeight || 1);
@@ -177,7 +177,7 @@
     if (r && r.latDec == null && f) {
       r.latDec = f.lat; r.lonDec = f.lon; r.acc = f.acc; r.lat = Geo.dms(f.lat, true); r.lon = Geo.dms(f.lon, false);
       await DB.putSurvey(sv);
-      if (LATE.onfix) LATE.onfix(r); else toast(`${r.no || ''} konumu alındı (±${Math.round(f.acc)} m)`);
+      if (LATE.onfix) LATE.onfix(r); else toast(`${r.no || ''} konumu belirlendi (±${Math.round(f.acc)} m).`);
     }
     if (!GPS.cb) GPS.off();
   }
@@ -188,7 +188,7 @@
   function waitLate(sv, rec) {
     if (GPS.watch == null) GPS.on(null);   // the camera already stopped it
     LATE.job = { svId: sv.id, recId: rec.id, since: Date.now() - 1000,
-      timer: setTimeout(() => { if (LATE.job && LATE.job.recId === rec.id) { LATE.job = null; if (!GPS.cb) GPS.off(); toast('Konum alınamadı; engel ekranında "Konumu güncelle" ile alabilirsin'); if (LATE.onfix) LATE.onfix(null); } }, 120000) };
+      timer: setTimeout(() => { if (LATE.job && LATE.job.recId === rec.id) { LATE.job = null; if (!GPS.cb) GPS.off(); toast('Konum belirlenemedi; engel ekranındaki "Konumu Yeniden Belirle" ile tekrar deneyebilirsiniz.'); if (LATE.onfix) LATE.onfix(null); } }, 120000) };
   }
 
   /* new record from a photo (or none). Camera photos take the current GPS position; INFO images take the parent's. */
@@ -196,7 +196,7 @@
     toast('Kaydediliyor…');
     const parent = o.parent || null, name = o.name || '';
     const rec = { id: DB.uid(), parentId: parent ? parent.id : null, flag: o.flag || '', obstacle: name, pendingImage: o.pending || null, t: Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [] };
-    const own = name && !Catalog.def(name) && !['Satellite View', 'Drone View'].includes(name);   // "Kendim yazacağım": H and W
+    const own = name && !Catalog.def(name) && !['Satellite View', 'Drone View'].includes(name);   // "Özel Engel Tanımı": H and W
     if (TD(name).heights || own) rec.heights = [{ label: LAY.heightLabels[0] || 'H', value: null }];
     if (TD(name).widths || own) rec.widths = [{ label: LAY.widthLabels[0] || 'W', value: null }];
     if (WIDTH_TYPES.includes(name)) rec.widths = [{ label: 'W', value: null }];
@@ -226,8 +226,8 @@
   }
   function askPlace(sv, title, run) {
     const mains = orderedRecords(sv).filter(r => !r.parentId);
-    sheet(title, [{ label: 'En başa', run: () => run(null) }, ...mains.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''} sonrasına`, run: () => run(t) })),
-      ...(mains.length ? [{ label: 'En sona', cls: 'pri', run: () => run(mains[mains.length - 1]) }] : [])]);
+    sheet(title, [{ label: 'Listenin Başına', run: () => run(null) }, ...mains.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''} sonrasına`, run: () => run(t) })),
+      ...(mains.length ? [{ label: 'Listenin Sonuna', cls: 'pri', run: () => run(mains[mains.length - 1]) }] : [])]);
   }
   let KEEPVIS = null;    // an obstacle that must stay on screen after the list is drawn again (moved up/down)
   function insertAt(sv) {
@@ -239,10 +239,10 @@
     return i + 1;
   }
   /* several photos at once (gallery / folder): each becomes an empty obstacle, in capture order, with the position
-     read from the photo; details are filled in later with "Detay göster" */
+     read from the photo; details are filled in later with "Ayrıntıları Göster" */
   async function addPhotos(sv, files) {
     files = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic)$/i.test(f.name));
-    if (!files.length) return toast('Fotoğraf seçilmedi');
+    if (!files.length) return toast('Fotoğraf seçilmedi.');
     const items = [];
     for (const f of files) { const x = await exifOf(f); items.push({ f, x, t: x.t || f.lastModified || 0 }); }
     items.sort((a, b) => a.t - b.t || a.f.name.localeCompare(b.f.name, 'tr', { numeric: true }));
@@ -256,7 +256,7 @@
     }
     tt.remove(); document.querySelectorAll('.toast').forEach(t => t.remove());
     if (items.length === 1) return go(`#/r/${sv.id}/${rec.id}`);
-    toast(`${items.length} engel eklendi${nopos ? ` (${nopos} tanesinde konum yok)` : ''}. Düzenlemek için "Detay göster".`);
+    toast(`${items.length} engel kaydı oluşturuldu${nopos ? ` (${nopos} tanesinde konum yok)` : ''}. Düzenlemek için "Detay göster".`);
     if (location.hash.startsWith(`#/s/${sv.id}`)) V.survey(sv.id); else go(`#/s/${sv.id}`);
   }
 
@@ -267,7 +267,7 @@
     d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" role="dialog" aria-label="${esc(title)}"><b>${esc(title)}</b>
       ${items.map((it, i) => it.file ? `<label class="btn" style="cursor:pointer">${it.icon || ''}${esc(it.label)}<input class="hid" type="file" accept="${it.accept || 'image/*'}" data-i="${i}" ${it.multi ? 'multiple' : ''} ${it.dir ? 'webkitdirectory' : ''}></label>`
         : `<button class="btn ${it.cls || ''}" data-i="${i}">${it.icon || ''}${esc(it.label)}</button>`).join('')}
-      <button class="btn dash" data-x="1">Vazgeç</button></div>`;
+      <button class="btn dash" data-x="1">İptal</button></div>`;
     document.body.appendChild(d);
     const close = () => d.remove();
     d.addEventListener('click', e => { if (e.target.closest('[data-x]')) return close(); const b = e.target.closest('button[data-i]'); if (b) { close(); items[b.dataset.i].run(); } });
@@ -339,12 +339,12 @@
     const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
     const P = IMPORT && IMPORT.prep;
     if (P && P.done < P.total) {   // the rest of the photos first; the bar shows the count
-      const iv = setInterval(() => { ov.textContent = `Fotoğraflar hazırlanıyor… ${P.done} / ${P.total}`; }, 250);
+      const iv = setInterval(() => { ov.textContent = `Fotoğraflar işleniyor… ${P.done} / ${P.total}`; }, 250);
       ov.textContent = `Fotoğraflar hazırlanıyor… ${P.done} / ${P.total}`; await P.promise; clearInterval(iv);
     }
 
     for (let i = 0; i < items.length; i++) {
-      const it = items[i]; ov.textContent = `Fotoğraflar ekleniyor… ${i + 1} / ${items.length}`;
+      const it = items[i]; ov.textContent = `Fotoğraflar etüde aktarılıyor… ${i + 1} / ${items.length}`;
       const rec = { id: DB.uid(), parentId: null, flag: '', obstacle: '', t: it.t || Date.now(), fields: {}, heights: [], remarks: '', actions: '', highlight: null, actionAuto: true, overlays: [], ann: [], source: it.file.name };
       try { rec.photoId = it.blobId || (it.bad ? null : await DB.putBlob(await to43(it.file))); if (!rec.photoId) throw 0; it.used = true; rec.aspect = 4 / 3; } catch (e) { rec.pendingImage = 'sat'; }
       if (it.lat != null) {
@@ -355,7 +355,7 @@
     }
     sv.status = 'done'; sv.imported = { at: Date.now(), count: items.length };
     await DB.putSurvey(sv); ov.remove(); const pb = document.getElementById('prepbar'); if (pb) pb.remove();
-    toast(`${items.length} fotoğraf eklendi. Engel tiplerini seç; sıra yanlışsa basılı tutup sürükle.`);
+    toast(`${items.length} fotoğraf aktarıldı. Engel tiplerini atayın; sıralamayı düzeltmek için kaydı basılı tutup sürükleyin.`);
   }
   const importerView = async () => {
     const android = /Android/i.test(navigator.userAgent);
@@ -363,21 +363,21 @@
     const draw = () => {
       const withPos = items.filter(x => x.lat != null).length, noT = items.filter(x => !x.exifT).length;
       const tf = t => new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      $app.innerHTML = `${bar('Fotoğraflardan etüt oluştur', '#/etutler')}
+      $app.innerHTML = `${bar('Fotoğraf Arşivinden Etüt Oluştur', '#/etutler')}
       <div class="split even">
         <div class="pane">
-          <div class="card"><b>Eski usulle çekilmiş fotoğraflar</b>
-            <span class="hint">Bir etüdün fotoğraflarını seç. Her fotoğraf bir engel olur; çekim saatine göre 1, 2, 3… diye sıralanır. Konum bilgisi olan fotoğraflardan koordinat ve KM, sahadaki gibi hesaplanır.</span>
-            <label class="btn red" style="min-height:80px;font-size:18px;cursor:pointer">${imgSvg} Fotoğrafları seç<input class="hid" type="file" accept="image/jpeg,image/*" multiple id="ifiles"></label>
-            ${android ? '<span class="hint">Galeride klasörü açıp "Tümünü seç" ile hepsini birden seçebilirsin.</span>' : `<label class="btn" style="cursor:pointer">Klasör seç<input class="hid" type="file" webkitdirectory multiple id="idir"></label>`}</div>
-          <div class="note w">Engel tipi, yükseklikler, açıklamalar ve INFO/BYPASS fotoğraflarda yazmaz; bunlar sonra engel ekranında doldurulur. WhatsApp ile gönderilmiş fotoğraflarda konum silinmiş olur, orijinallerini kullan.</div>
+          <div class="card"><b>Etüt Fotoğrafları</b>
+            <span class="hint">Etüde ait fotoğrafları seçin. Her fotoğraf bir engel kaydına dönüştürülür ve çekim zamanına göre numaralandırılır. Konum verisi içeren fotoğraflardan koordinat ve KM bilgisi, etüdde kayıt alınmış gibi hesaplanır.</span>
+            <label class="btn red" style="min-height:80px;font-size:18px;cursor:pointer">${imgSvg} Fotoğrafları Seç<input class="hid" type="file" accept="image/jpeg,image/*" multiple id="ifiles"></label>
+            ${android ? '<span class="hint">Galeride ilgili klasörü açıp "Tümünü seç" ile fotoğrafların tamamını seçebilirsiniz.</span>' : `<label class="btn" style="cursor:pointer">Klasör seç<input class="hid" type="file" webkitdirectory multiple id="idir"></label>`}</div>
+          <div class="note w">Engel tipi, ölçüler, açıklamalar ve INFO/BYPASS ilişkileri fotoğraflardan alınamaz; bu bilgiler engel kayıt ekranında tamamlanır. WhatsApp üzerinden iletilen fotoğraflarda konum verisi silinir; orijinal dosyaları kullanın.</div>
         </div>
         <div class="pane">
           ${items.length ? `<div class="card"><b>${items.length} fotoğraf</b>
               <div class="stat4" style="color:var(--ink);grid-template-columns:1fr 1fr"><div><b>${withPos}</b><span style="color:var(--mut)">Konum bilgisi olan fotoğraf</span></div><div><b>${items.length}</b><span style="color:var(--mut)">Toplam fotoğraf</span></div></div>
               ${items[0].t ? `<span class="hint">${tf(items[0].t)} → ${tf(items[items.length - 1].t)}</span>` : ''}
-              ${noT ? `<span class="note w">${noT} fotoğrafta çekim saati yok: dosya tarihine göre sıralandı.</span>` : ''}
-              <div style="max-height:260px;overflow:auto;font-size:13px;border:1px solid var(--line);border-radius:10px">${items.map((x, i) => `<div class="row" style="padding:6px 10px;border-bottom:1px solid var(--line);gap:8px"><b style="width:34px">${i + 1}</b><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.file.name)}</span><span class="hint">${x.t ? tf(x.t) : ''}</span>${x.lat != null ? '<span class="tag ok">konum</span>' : '<span class="tag warn">konum yok</span>'}</div>`).join('')}</div>
+              ${noT ? `<span class="note w">${noT} fotoğrafta çekim zamanı bulunmuyor; bu fotoğraflar dosya tarihine göre sıralandı.</span>` : ''}
+              <div style="max-height:260px;overflow:auto;font-size:13px;border:1px solid var(--line);border-radius:10px">${items.map((x, i) => `<div class="row" style="padding:6px 10px;border-bottom:1px solid var(--line);gap:8px"><b style="width:34px">${i + 1}</b><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.file.name)}</span><span class="hint">${x.t ? tf(x.t) : ''}</span>${x.lat != null ? '<span class="tag ok">konum</span>' : '<span class="tag warn">Konum Yok</span>'}</div>`).join('')}</div>
             </div>
             <button class="btn pri" id="inext" style="min-height:64px;font-size:17px">Devam: etüt bilgilerini gir</button><span class="hint">Fotoğraflar sen etüt bilgilerini girerken arka planda hazırlanır; ilerleme en altta görünür.</span>`
           : '<div class="empty">Henüz fotoğraf seçilmedi.</div>'}
@@ -385,12 +385,12 @@
       </div>`;
       const take = async fl => {
         const fs = [...fl].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic)$/i.test(f.name));
-        if (!fs.length) return toast('Fotoğraf bulunamadı');
+        if (!fs.length) return toast('Fotoğraf bulunamadı.');
         document.querySelectorAll('.toast').forEach(t => t.remove());
         const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
         const out = [];
         for (let i = 0; i < fs.length; i++) {
-          const f = fs[i]; if (i % 5 === 0 || i === fs.length - 1) { ov.textContent = `Fotoğraflar okunuyor… ${i + 1} / ${fs.length}`; await new Promise(r => setTimeout(r, 0)); }
+          const f = fs[i]; if (i % 5 === 0 || i === fs.length - 1) { ov.textContent = `Fotoğraf verileri okunuyor… ${i + 1} / ${fs.length}`; await new Promise(r => setTimeout(r, 0)); }
           const x = await exifOf(f); out.push({ file: f, lat: x.lat, lon: x.lon, exifT: x.t || null, t: x.t || f.lastModified || null });
         }
         ov.remove();
@@ -409,7 +409,7 @@
   const bkWhere = st => st.kind === 'saf' ? st.label.replace('Klasör · ', '') : st.kind === 'android' ? 'Belgeler/Etütler (tablet)' : st.label.replace('Klasör · ', '');
   async function backupDialog(pre) {
     document.querySelectorAll('.sheet').forEach(x => x.remove());
-    if (!Backup.supported()) return toast('Bu tarayıcı klasöre yedeklemeyi desteklemiyor (Edge ya da Chrome kullan)');
+    if (!Backup.supported()) return toast('Bu tarayıcı klasör tabanlı yedeklemeyi desteklemiyor (Microsoft Edge veya Google Chrome kullanın).');
     const all = (await DB.listSurveys()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const info = {};
     for (const sv of all) { const { recs, at } = await Backup.recordStatus(sv), v = Object.values(recs); info[sv.id] = { k: v.length && v.every(x => x === 'ok') ? 'ok' : 'pending', at }; }
@@ -419,13 +419,13 @@
     const draw = () => {
       const st = Backup.status();
       d.innerHTML = `<div class="sheet-bg" data-x="1"></div><div class="sheet-box" style="width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 40px)">
-        <b>Yedekle</b>
-        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><span class="hint" style="flex:1;min-width:0">Konum: <b style="font-size:14px">${esc(st.has ? bkWhere(st) : 'seçilmedi')}</b></span>
-          ${st.canPick ? `<button class="btn sm" data-b="pick" style="min-height:40px;font-size:14px">${st.has && st.kind !== 'android' ? 'Konumu değiştir' : 'Konum seç'}</button>` : ''}${st.kind === 'saf' ? '<button class="btn sm" data-b="def" style="min-height:40px;font-size:14px">Belgeler/Etütler</button>' : ''}</div>
-        <div class="row" style="justify-content:space-between"><span class="hint">${chosen.size} etüt seçili</span><button class="btn sm" data-b="all" style="min-height:36px;font-size:14px">${chosen.size === all.length ? 'Seçimi temizle' : 'Hepsini seç'}</button></div>
+        <b>Veri Yedekleme</b>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><span class="hint" style="flex:1;min-width:0">Yedekleme Konumu: <b style="font-size:14px">${esc(st.has ? bkWhere(st) : 'tanımlanmadı')}</b></span>
+          ${st.canPick ? `<button class="btn sm" data-b="pick" style="min-height:40px;font-size:14px">${st.has && st.kind !== 'android' ? 'Konumu Değiştir' : 'Konum Seç'}</button>` : ''}${st.kind === 'saf' ? '<button class="btn sm" data-b="def" style="min-height:40px;font-size:14px">Belgeler/Etütler</button>' : ''}</div>
+        <div class="row" style="justify-content:space-between"><span class="hint">${chosen.size} etüt seçildi</span><button class="btn sm" data-b="all" style="min-height:36px;font-size:14px">${chosen.size === all.length ? 'Seçimi Temizle' : 'Tümünü Seç'}</button></div>
         <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:46vh">${all.map(sv => `<label class="row" style="padding:10px 12px;border-bottom:1px solid var(--line);gap:10px;cursor:pointer"><input type="checkbox" data-sv="${sv.id}" ${chosen.has(sv.id) ? 'checked' : ''} style="width:22px;height:22px">
-          <span style="flex:1;min-width:0"><b style="font-size:15px;margin:0">${esc(sv.project.start.name)} – ${esc(sv.project.end.name)}</b><br><span class="hint">${sv.records.length} kayıt${info[sv.id].at ? ' · son yedek ' + tf(info[sv.id].at) : ' · hiç yedeklenmedi'}</span></span>
-          <span class="bkic" title="${info[sv.id].k === 'ok' ? 'Yedeklendi' : 'Yedeklenmemiş değişiklik var'}">${BKICON[info[sv.id].k]}</span></label>`).join('') || '<div class="empty">Etüt yok.</div>'}</div>
+          <span style="flex:1;min-width:0"><b style="font-size:15px;margin:0">${esc(sv.project.start.name)} – ${esc(sv.project.end.name)}</b><br><span class="hint">${sv.records.length} kayıt${info[sv.id].at ? ' · son yedekleme ' + tf(info[sv.id].at) : ' · hiç yedeklenmedi'}</span></span>
+          <span class="bkic" title="${info[sv.id].k === 'ok' ? 'Yedeklendi' : 'Yedeklenmemiş değişiklik var'}">${BKICON[info[sv.id].k]}</span></label>`).join('') || '<div class="empty">Kayıtlı etüt bulunmuyor.</div>'}</div>
         <div class="hint" id="bkprog" style="min-height:18px"></div>
         <button class="btn pri" data-b="go" ${chosen.size && st.has ? '' : 'disabled'}>Yedekle</button>
         <button class="btn dash" data-x="1">Kapat</button></div>`;
@@ -449,7 +449,7 @@
           busy = false; d.remove(); toast(`${n} etüt yedeklendi → ${bkWhere(Backup.status())}`);
           if (location.hash.startsWith('#/s/')) V.survey(location.hash.split('/')[2].split('?')[0]); else if (location.hash === '#/etutler') V.home(); else if (!location.hash || location.hash === '#/') V.start();
         }
-      } catch (er) { busy = false; if (er && er.name !== 'AbortError') toast(er.message || 'Yedek alınamadı'); draw(); }
+      } catch (er) { busy = false; if (er && er.name !== 'AbortError') toast(er.message || 'Yedekleme tamamlanamadı.'); draw(); }
     });
   }
 
@@ -463,15 +463,15 @@
     const cg = sv.project.general ? {} : cargoOf(sv.project);
     const line = (key, t, limit, word) => {
       const c = criticalDim(sv, key);
-      if (!c || c.value == null) return `<div class="mrow"><b>${t}</b><span class="hint">${c && c.skipped ? 'yalnız bypass edilen engellerde' : 'henüz girilmedi'}</span></div>`;
+      if (!c || c.value == null) return `<div class="mrow"><b>${t}</b><span class="hint">${c && c.skipped ? 'yalnızca bypass edilen engellerde' : 'henüz girilmedi'}</span></div>`;
       const r = c.rec, low = limit && c.value < limit;
       return `<button class="mrow ${low ? 'low' : ''}" data-go="#/r/${sv.id}/${r.id}" title="Engeli aç"><b>${t}</b><span class="v">${fmt(c.value)} m</span>${low ? `<span class="tag bad">${word}</span>` : ''}
         <span class="hint">Engel ${esc(r.no)}${r.flag === 'BYPASS' ? ' (bypass)' : r.flag === 'INFO' ? ' (info)' : ''} · ${esc(c.label)} · ${esc(OL(r.obstacle) || 'Tip seçilmedi')}${c.skipped ? ` · ${c.skipped} bypass edilen hariç` : ''}</span></button>`;
     };
-    return `<div class="cargo minh">${line('heights', 'Kritik min. H', Number(cg.height) || null, 'yükten alçak')}${line('widths', 'Kritik min. W', Number(cg.width) || null, 'yükten dar')}</div>`;
+    return `<div class="cargo minh">${line('heights', 'Kritik Min. Yükseklik', Number(cg.height) || null, 'Taşıma yüksekliğinin altında')}${line('widths', 'Kritik Min. Genişlik', Number(cg.width) || null, 'Taşıma genişliğinin altında')}</div>`;
   };
   const cargoBox = p => {
-    if (p.general) return `<div class="cargo"><b>Taşıma Bilgileri</b><span style="font-size:15px;font-weight:700;color:var(--navy)">Genel Etüt</span><span class="hint">Belirli bir yüke bağlı değil</span></div>`;
+    if (p.general) return `<div class="cargo"><b>Yük ve Taşıma Bilgileri</b><span style="font-size:15px;font-weight:700;color:var(--navy)">Genel Güzergah Etüdü</span><span class="hint">Belirli bir taşıma konfigürasyonuna bağlı değil</span></div>`;
     const c = cargoOf(p), m = v => v == null || v === '' ? '–' : fmt(v) + ' m';
     return `<div class="cargo"><b>Taşıma Bilgileri</b><div class="cg"><span>Uzunluk: <b>${m(c.length)}</b></span><span>Genişlik: <b>${m(c.width)}</b></span>
       <span>Yükseklik: <b>${m(c.height)}</b></span><span>Ağırlık: <b>${c.weight == null || c.weight === '' ? '–' : fmt(c.weight) + ' t'}</b></span></div></div>`;
@@ -492,7 +492,7 @@
   let FILT = (() => { try { return JSON.parse(localStorage.getItem('rs-filter')) || {}; } catch (e) { return {}; } })();
   const saveFilt = () => { try { localStorage.setItem('rs-filter', JSON.stringify(FILT)); } catch (e) {} };
 
-  const pdfBadge = (b, name) => `<span style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--ink)"><svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M3 1h14l6 6v22H3z" fill="#fff" stroke="#B4232A" stroke-width="2"/><text x="13" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#B4232A" font-family="Arial">PDF</text></svg>${esc(name || 'Çizim PDF')} · ${Math.max(1, Math.round((b.size || 0) / 1024))} KB</span>`;
+  const pdfBadge = (b, name) => `<span style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--ink)"><svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M3 1h14l6 6v22H3z" fill="#fff" stroke="#B4232A" stroke-width="2"/><text x="13" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#B4232A" font-family="Arial">PDF</text></svg>${esc(name || 'Taşıma Çizimi (PDF)')} · ${Math.max(1, Math.round((b.size || 0) / 1024))} KB</span>`;
   // standard conclusion texts (same as report.js), used to start a custom text
   const CONCL = {
     bridge: {
@@ -502,7 +502,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w64)';
+  const APP_VER = '2.0 (w65)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -524,14 +524,14 @@
   const applyZoom = () => { document.documentElement.style.zoom = PREF.zoom && PREF.zoom !== 1 ? PREF.zoom : ''; };
   applyZoom();
   const initials = n => (String(n || '').trim().split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map(x => x[0].toLocaleUpperCase('tr')).join('') || '?');
-  const newSurveySheet = () => sheet('Yeni etüt', [
-    { label: 'Yeni etüt raporu oluştur', cls: 'pri', run: () => go('#/new') },
-    { label: 'Fotoğraflardan etüt raporu oluştur', icon: imgSvg, run: () => go('#/import') },
+  const newSurveySheet = () => sheet('Etüt Oluştur', [
+    { label: 'Etüdü Başlat', cls: 'pri', run: () => go('#/new') },
+    { label: 'Mevcut Fotoğraf Arşivinden Etüt Oluştur', icon: imgSvg, run: () => go('#/import') },
   ]);
-  const openEtutSheet = () => sheet('Etüt dosyası aç', [
-    { label: 'ZIP dosyası seç', file: true, accept: FIELD ? '.zip,application/zip,application/x-zip-compressed,application/octet-stream' : '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
-    ...(FIELD ? [] : [{ label: 'Açılmış klasör seç', file: true, dir: true, multi: true, accept: '*/*', run: fs => openEtut(async () => Transfer.folderSource(fs)) }]),
-    ...(Backup.supported() ? [{ label: 'Yedekten geri yükle', run: async () => { try { const L = await Backup.restoreList(); if (!L.length) return toast('Yedek konumunda etüt bulunamadı'); sheet('Yedekten geri yükle', L.map(x => ({ label: x.name, run: () => openEtut(x.source) }))); } catch (e) { toast(e.message || 'Yedek okunamadı'); } } }] : []),
+  const openEtutSheet = () => sheet('Etüt Dosyası Aç', [
+    { label: 'Etüt Paketini İçe Aktar (.zip)', file: true, accept: FIELD ? '.zip,application/zip,application/x-zip-compressed,application/octet-stream' : '.zip,application/zip', run: f => openEtut(() => Transfer.readZip(f)) },
+    ...(FIELD ? [] : [{ label: 'Etüt Klasörünü İçe Aktar', file: true, dir: true, multi: true, accept: '*/*', run: fs => openEtut(async () => Transfer.folderSource(fs)) }]),
+    ...(Backup.supported() ? [{ label: 'Etüt Dosyasını Yedekten Geri Yükle', run: async () => { try { const L = await Backup.restoreList(); if (!L.length) return toast('Yedekleme konumunda kayıtlı etüt bulunamadı.'); sheet('Yedekten geri yükle', L.map(x => ({ label: x.name, run: () => openEtut(x.source) }))); } catch (e) { toast(e.message || 'Yedekleme verisi okunamadı.'); } } }] : []),
   ]);
 
   /* start screen: profile top-left, settings top-right, logo + GOSURVEY in the middle, three big actions */
@@ -542,45 +542,45 @@
     $app.innerHTML = `<div class="launch">
       <div class="ltop"><button class="lchip" data-go="#/profile" aria-label="Profil"><span class="lav">${esc(initials(u.name || u.email))}</span><span class="lname"><b>Profil</b><small>${esc(u.name || u.email || '')}</small></span></button>
         <button class="lchip" data-go="#/settings" aria-label="Ayarlar">${ico(IC.gear, 24)}<span class="lname"><b>Ayarlar</b></span></button></div>
-      <div class="lmid"><div class="llogo"><img src="assets/gosurvey-logo.png" alt="" onerror="this.remove()"><span class="lfall">${ico(IC.route, 64, 1.6)}</span></div><h1>GOSURVEY</h1><p>Ağır yük güzergah etüdü</p></div>
-      <div class="ltiles">${tile('lmine', 'folder', 'Etütlerim', `${all.length} etüt`)}${tile('lnew', 'plus', 'Yeni Etüt Aç', 'Sahada ya da fotoğraflardan')}${tile('lopen', 'open', 'Etüt Dosyası Aç', FIELD ? 'ZIP ya da yedekten' : 'ZIP, klasör ya da yedekten')}</div>
-      <div class="lfoot"><span id="lbk"></span><span>GoSurvey ${APP_VER}${Auth.isAdmin() ? ' · Admin' : ''}</span></div></div>`;
+      <div class="lmid"><div class="llogo"><img src="assets/gosurvey-logo.png" alt="" onerror="this.remove()"><span class="lfall">${ico(IC.route, 64, 1.6)}</span></div><h1>GOSURVEY</h1><p>Güzergah Etüdü ve Raporlama</p></div>
+      <div class="ltiles">${tile('lmine', 'folder', 'Etütlerim', `${all.length} etüt`)}${tile('lnew', 'plus', 'Etüt Oluştur', 'Sahada ya da fotoğraflardan')}${tile('lopen', 'open', 'Dosya Aç', FIELD ? 'ZIP ya da yedekten' : 'ZIP, klasör ya da yedekten')}</div>
+      <div class="lfoot"><span id="lbk"></span><span>GoSurvey ${APP_VER}${Auth.isAdmin() ? ' · Yönetici' : ''}</span></div></div>`;
     document.getElementById('lmine').onclick = () => go('#/etutler');
     document.getElementById('lnew').onclick = newSurveySheet;
     document.getElementById('lopen').onclick = openEtutSheet;
     const st = Backup.status(), lb = document.getElementById('lbk');
-    if (st.supported) { lb.innerHTML = `<button class="lbkb">${ico(IC.cloud, 16)} Yedekle${st.last ? ' · son yedek ' + new Date(st.last).toLocaleDateString('tr-TR') : ''}</button>`; lb.firstChild.onclick = () => backupDialog(); }
+    if (st.supported) { lb.innerHTML = `<button class="lbkb">${ico(IC.cloud, 16)} Veri Yedekleme${st.last ? ' · Son Yedekleme Tarihi ' + new Date(st.last).toLocaleDateString('tr-TR') : ''}</button>`; lb.firstChild.onclick = () => backupDialog(); }
   };
 
   /* profile: name, password, authenticator, this device and my devices, admin, sign out */
   V.profile = async () => {
     const u = Auth.user() || {}, dev = Auth.thisDevice();
     const row = (icon, t, sub, btn) => `<div class="prow"><span class="pic">${ico(IC[icon], 22)}</span><span class="ptx"><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</span>${btn || ''}</div>`;
-    $app.innerHTML = `${bar('Profil', '#/')}
+    $app.innerHTML = `${bar('Kullanıcı Profili', '#/')}
       <div class="full" style="max-width:820px;margin:0 auto;width:100%;gap:14px">
-        <div class="card phead"><span class="lav big">${esc(initials(u.name || u.email))}</span><span style="flex:1;min-width:0"><b style="font-size:20px">${esc(u.name || 'İsim girilmedi')}</b><br><span class="hint">${esc(u.email || '')}</span></span><span class="tag ${u.role === 'admin' ? 'ok' : ''}">${u.role === 'admin' ? 'Admin' : 'Kullanıcı'}</span></div>
-        <div class="card" style="gap:12px"><div class="sec" style="margin:0">Hesap</div>
-          <label class="f">Görünen ad (uygulamada ve yeni etütlerde "Hazırlayan" önerisi)<div class="row" style="gap:8px"><input id="pname" value="${esc(u.name || '')}" placeholder="Ad Soyad" style="flex:1"><button class="btn pri sm" id="pnsave">Kaydet</button></div></label>
-          ${row('key', 'Şifre', 'Hesabının şifresini değiştir', '<button class="btn sm" id="ppw">Şifremi değiştir</button>')}
-          ${row('shield', 'Giriş yöntemi', u.role === 'admin' ? 'E-posta + şifre · yönetici hesabı: yeni cihazlar onay beklemez' : 'E-posta + şifre · her yeni cihaz bir kez yönetici onayından geçer', '')}
+        <div class="card phead"><span class="lav big">${esc(initials(u.name || u.email))}</span><span style="flex:1;min-width:0"><b style="font-size:20px">${esc(u.name || 'İsim Girilmedi')}</b><br><span class="hint">${esc(u.email || '')}</span></span><span class="tag ${u.role === 'admin' ? 'ok' : ''}">${u.role === 'admin' ? 'Yönetici' : 'Kullanıcı'}</span></div>
+        <div class="card" style="gap:12px"><div class="sec" style="margin:0">Hesap Bilgileri</div>
+          <label class="f">İsim Soyisim<div class="row" style="gap:8px"><input id="pname" value="${esc(u.name || '')}" placeholder="Ad Soyad" style="flex:1"><button class="btn pri sm" id="pnsave">Kaydet</button></div></label>
+          ${row('key', 'Şifre', 'Hesabının şifresini değiştir', '<button class="btn sm" id="ppw">Şifreyi Güncelle</button>')}
+          ${row('shield', 'Oturum Açma Yöntemi', u.role === 'admin' ? 'E-posta ve şifre · yönetici hesabı: cihaz yetkilendirmesi gerekmez' : 'E-posta ve şifre · her yeni cihaz bir kez yönetici tarafından yetkilendirilir', '')}
         </div>
-        <div class="card" style="gap:12px"><div class="sec" style="margin:0">Bu cihaz</div>
-          <label class="f">Cihaz adı (admin panelinde böyle görünür)<div class="row" style="gap:8px"><input id="pdev" value="${esc(dev.label || '')}" placeholder="${esc(dev.platform)}" style="flex:1"><button class="btn sm" id="pdsave">Kaydet</button></div></label>
-          <span class="hint">${esc(dev.platform)} · onaylı${u.okAt ? ' · son kontrol ' + new Date(u.okAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</span>
-          <div class="sec" style="margin:6px 0 0">Cihazlarım</div><div id="pdevs" class="hint">Yükleniyor…</div></div>
-        ${u.role === 'admin' ? `<div class="card">${row('admin', 'Yönetim', 'Kullanıcılar, cihaz onayları, giriş kayıtları', '<button class="btn pri sm" data-go="#/admin">Aç</button>')}</div>` : ''}
-        <div class="card">${row('logout', 'Çıkış yap', 'Bu cihazdaki oturum kapanır; etütler cihazda kalır', '<button class="btn sm" id="pout" style="color:var(--badtx)">Çıkış yap</button>')}</div>
+        <div class="card" style="gap:12px"><div class="sec" style="margin:0">Bu Cihaz</div>
+          <label class="f">Cihaz İsmi<div class="row" style="gap:8px"><input id="pdev" value="${esc(dev.label || '')}" placeholder="${esc(dev.platform)}" style="flex:1"><button class="btn sm" id="pdsave">Kaydet</button></div></label>
+          <span class="hint">${esc(dev.platform)} · Onaylı${u.okAt ? ' · Son Doğrulama ' + new Date(u.okAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+          <div class="sec" style="margin:6px 0 0">Yetkili Cihazlarım</div><div id="pdevs" class="hint">Yükleniyor…</div></div>
+        ${u.role === 'admin' ? `<div class="card">${row('admin', 'Sistem Yönetimi', 'Kullanıcı hesapları, Cihaz Yetkilendirmeleri ve Erişim Kayıtları', '<button class="btn pri sm" data-go="#/admin">Yönetim Paneli</button>')}</div>` : ''}
+        <div class="card">${row('logout', 'Oturumu Kapat', 'Bu cihazdaki oturumunuz sonlandırılır; etüt verileriniz cihazda korunur.', '<button class="btn sm" id="pout" style="color:var(--badtx)">Çıkış yap</button>')}</div>
         <div class="hint" style="text-align:center">GoSurvey ${APP_VER}</div></div>`;
     document.getElementById('ppw').onclick = () => Auth.changePassword();
     document.getElementById('pout').onclick = e => { const b = e.target; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin?'; return; } Auth.signOut(); };
-    document.getElementById('pnsave').onclick = async e => { const b = e.target; b.disabled = true; try { await Auth.setName(document.getElementById('pname').value); toast('Görünen ad kaydedildi'); V.profile(); } catch (er) { b.disabled = false; toast(er.message || 'Kaydedilemedi (internet gerekli)'); } };
-    document.getElementById('pdsave').onclick = () => { Auth.setDeviceLabel(document.getElementById('pdev').value); toast('Cihaz adı kaydedildi; bir sonraki kontrolde admin paneline gider'); };
+    document.getElementById('pnsave').onclick = async e => { const b = e.target; b.disabled = true; try { await Auth.setName(document.getElementById('pname').value); toast('İsim Soyisim güncellendi.'); V.profile(); } catch (er) { b.disabled = false; toast(er.message || 'Kaydedilemedi (sunucu bağlantısı gerekli).'); } };
+    document.getElementById('pdsave').onclick = () => { Auth.setDeviceLabel(document.getElementById('pdev').value); toast('Cihaz tanımı güncellendi; bir sonraki doğrulamada yönetim paneline iletilecek.'); };
     try { const m = await Auth.me(); if (m.display && m.display !== u.name) { document.getElementById('pname').value = m.display; } } catch (e) { /* offline */ }
     try {
       const L = await Auth.myDevices(), el = document.getElementById('pdevs'); if (!el) return;
       const tf = t => t ? new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-      el.innerHTML = L.length ? L.map(d => `<div class="prow" style="padding:8px 0"><span class="pic">${ico(IC.device, 20)}</span><span class="ptx"><b>${esc(d.label || d.platform || 'Cihaz')}${d.id === dev.id ? ' · bu cihaz' : ''}</b><small>${esc(d.platform || '')} · son görülme ${tf(d.last_seen)}</small></span><span class="tag ${d.approved ? 'ok' : 'warn'}">${d.approved ? 'Onaylı' : 'Onay bekliyor'}</span></div>`).join('') : 'Kayıtlı cihaz yok.';
-    } catch (e) { const el = document.getElementById('pdevs'); if (el) el.textContent = 'Cihaz listesi için internet gerekli.'; }
+      el.innerHTML = L.length ? L.map(d => `<div class="prow" style="padding:8px 0"><span class="pic">${ico(IC.device, 20)}</span><span class="ptx"><b>${esc(d.label || d.platform || 'Cihaz')}${d.id === dev.id ? ' · bu cihaz' : ''}</b><small>${esc(d.platform || '')} · Son Görülme ${tf(d.last_seen)}</small></span><span class="tag ${d.approved ? 'ok' : 'warn'}">${d.approved ? 'Onaylanmış' : 'Onay bekliyor'}</span></div>`).join('') : 'Kayıtlı cihaz bulunmuyor.';
+    } catch (e) { const el = document.getElementById('pdevs'); if (el) el.textContent = 'Cihaz listesini görüntülemek için sunucu bağlantısı gereklidir.'; }
   };
 
   V.home = async () => {
@@ -595,22 +595,22 @@
     const fOpen = SHOWF || nf > 0;
     const filters = every.length && fOpen ? `<div class="card filt" style="gap:10px"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><b style="font-size:14px;color:var(--navy);margin-right:4px">Bölge</b>
         <button class="chip ${!FILT.region ? 'on' : ''}" data-freg="">Tümü</button>${REGIONS.map(g => `<button class="chip ${FILT.region === g ? 'on' : ''}" data-freg="${g}">${g}</button>`).join('')}
-        <span class="hint" style="margin-left:auto">${list.length} / ${every.length} etüt${nf ? ' · <button class="btn sm" data-fclear="1" style="min-height:30px">Filtreleri temizle</button>' : ''}</span></div>
-      <div class="row" style="flex-wrap:wrap;gap:10px">${sel('proj', 'Proje kodu / adı')}${sel('who', 'Etüdü yapan')}${sel('firm', 'Firma')}</div></div>` : '';
+        <span class="hint" style="margin-left:auto">${list.length} / ${every.length} Etüt${nf ? ' · <button class="btn sm" data-fclear="1" style="min-height:30px">Filtreleri Sıfırla</button>' : ''}</span></div>
+      <div class="row" style="flex-wrap:wrap;gap:10px">${sel('proj', 'Proje Kodu / Adı')}${sel('who', 'Etüt Sorumlusu')}${sel('firm', 'Firma')}</div></div>` : '';
     const card = sv => {
       const n = sv.records.length, act = sv.status === 'active', c = cargoOf(sv.project);
       return `<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start"><b style="font-size:17px">${esc(sv.project.start.name)} → ${esc(sv.project.end.name)}</b>
-        <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Devam ediyor' : 'Tamamlandı'}</span>${'<span class="bkic" data-bksv="' + sv.id + '" aria-hidden="true" style="margin-left:6px"></span>'}</div>
-        <div class="hint">${esc(sv.project.date || '')} · ${n} kayıt · ${sv.project.general ? 'genel etüt' : c.height ? 'yük H ' + fmt(c.height) + ' m' : 'yük ölçüsü yok'}</div>
+        <span class="tag ${act ? 'warn' : 'ok'}">${act ? 'Devam Ediyor' : 'Tamamlandı'}</span>${'<span class="bkic" data-bksv="' + sv.id + '" aria-hidden="true" style="margin-left:6px"></span>'}</div>
+        <div class="hint">${esc(sv.project.date || '')} · ${n} Engel  · ${sv.project.general ? 'Genel Güzergah Etüdü' : c.height ? 'Yük Yüksekliği ' + fmt(c.height) + ' m' : 'Yük Ölçüleri Tanımlanmadı'}</div>
         ${sv.project.region || pkey(sv.project) || sv.project.client || surveyorsOf(sv.project).length ? `<div class="hint" style="color:var(--ink)">${[sv.project.region, pkey(sv.project), sv.project.client, surveyorsOf(sv.project).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
         ${critSummary(sv)}
-        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde devam et' : 'Kayıtları aç'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor</button>
+        <div class="row"><button class="btn grow sm" data-go="#/s/${sv.id}">${act ? 'Etüde Devam Et' : 'Etüdü Görüntüle'}</button><button class="btn grow sm" data-go="#/rep/${sv.id}">Rapor Oluştur</button>
           <button class="btn sm" data-delsv="${sv.id}" style="color:var(--badtx);min-width:0">Sil</button></div></div>`;
     };
     $app.innerHTML = `${bar('Etütlerim', '#/', `<button class="btn" id="openEtut">Etüt dosyası aç</button>${every.length ? `<button class="btn ${fOpen ? 'pri' : ''}" id="ftog">Filtrele${nf ? ` (${nf})` : ''}</button>` : ''}<button class="btn pri" id="newsv" style="min-width:200px">+ Yeni etüt</button>`)}
-      <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Bu filtrelere uyan etüt yok.</div>' : '<div class="empty">Henüz etüt yok. Sağ üstteki "Yeni etüt raporu oluştur" ile başla.</div>'}
+      <div class="full">${filters}${list.length ? `<div class="tiles">${list.map(card).join('')}</div>` : every.length ? '<div class="empty">Seçilen kriterlere uygun etüt bulunamadı.</div>' : '<div class="empty">Henüz kayıtlı etüt bulunmuyor. Başlamak için "Yeni Etüt" seçeneğini kullanın.</div>'}
       <div class="card bk" id="bkline" style="margin-top:auto"></div>
-      <div class="hint" style="text-align:center">Veriler bu cihazda saklanır, internetsiz de çalışır.${FIELD ? '' : ' Tabletten "Dışa Aktar" ile gönderilen etüdü "Etüt dosyası aç" ile aç.'}</div></div>`;
+      <div class="hint" style="text-align:center">Tüm veriler bu cihazda güvenli şekilde saklanır; uygulama çevrimdışı da çalışır.${FIELD ? '' : ' Saha tabletinden "Etüt Paketini Dışa Aktar" ile gönderilen etütler "Etüt Dosyası Aç" ile içe aktarılabilir.'}</div></div>`;
     document.getElementById('newsv').onclick = newSurveySheet;
     const ft = document.getElementById('ftog'); if (ft) ft.onclick = () => { if (SHOWF && nf) { FILT = {}; saveFilt(); } SHOWF = !SHOWF; V.home(); };
     /* backup mark on every survey card: green = every obstacle in the backup, orange = something waiting, grey = backup off */
@@ -620,7 +620,7 @@
           const sv2 = await DB.getSurvey(el.dataset.bksv); if (!sv2) continue;
           const { state, recs } = await Backup.recordStatus(sv2), v = Object.values(recs);
           const k = state === 'off' ? 'off' : v.every(x => x === 'ok') ? 'ok' : 'pending';
-          if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = BKICON[k]; el.title = k === 'ok' ? 'Etüt yedeklendi (dokun: yedekle)' : k === 'pending' ? 'Yedeklenmemiş değişiklik var (dokun: yedekle)' : 'Klasöre yedek bu tarayıcıda yok'; }
+          if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = BKICON[k]; el.title = k === 'ok' ? 'Etüt verileri yedeklendi (yedeklemek için dokunun)' : k === 'pending' ? 'Yedeklenmemiş değişiklikler mevcut (yedeklemek için dokunun)' : 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor'; }
         }
       };
       const offSv = Backup.onChange(st => { if (!st.busy) paintSv(); }); paintSv(); }
@@ -631,15 +631,15 @@
     $app.onclick = async e => {
       const b = e.target.closest('[data-delsv]'); if (!b) return;
       if (b.dataset.sure !== '1') {
-        b.dataset.sure = '1'; b.textContent = 'Emin misin? Sil'; b.style.background = 'var(--red)'; b.style.color = '#fff'; b.style.borderColor = 'var(--red)';
-        const card = b.closest('.card'); if (card && !card.querySelector('.delnote')) card.insertAdjacentHTML('beforeend', '<span class="hint delnote" style="color:var(--badtx)">Etüt, bütün fotoğrafları ve logolarıyla bu cihazdan silinir; geri alınamaz. Gerekirse önce etüdü açıp "Dışa Aktar" ile yedek al.</span>');
+        b.dataset.sure = '1'; b.textContent = 'Kalıcı Olarak Sil'; b.style.background = 'var(--red)'; b.style.color = '#fff'; b.style.borderColor = 'var(--red)';
+        const card = b.closest('.card'); if (card && !card.querySelector('.delnote')) card.insertAdjacentHTML('beforeend', '<span class="hint delnote" style="color:var(--badtx)">Etüt; tüm fotoğrafları, logoları ve engel kayıtlarıyla birlikte bu cihazdan kalıcı olarak silinecektir. Bu işlem geri alınamaz. Gerekli ise önce etüdü açarak "Etüt Paketini Dışa Aktar" ile yedek alın.</span>');
         return;
       }
       const sv = await DB.getSurvey(b.dataset.delsv); if (!sv) return V.home();
       for (const r of sv.records) for (const x of [r.photoId, ...(r.extras || [])]) await DB.delBlob(x);
       for (const x of Object.values(sv.logos || {})) await DB.delBlob(x);
       await DB.delSurvey(sv.id); delete SELST[sv.id]; if (CUR && CUR.id === sv.id) CUR = null;
-      toast(`${sv.project.start.name} → ${sv.project.end.name} silindi`); V.home();
+      toast(`${sv.project.start.name} → ${sv.project.end.name} silindi.`); V.home();
     };
     // folder backup: on demand — "Yedekle" asks which surveys and where (backupDialog)
     const bkl = document.getElementById('bkline');
@@ -647,10 +647,10 @@
       if (!bkl.isConnected) return off();
       const t = st.last ? new Date(st.last).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
       let txt, btns = '';
-      if (!st.supported) txt = 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor. Edge ya da Chrome kullan; "Dışa Aktar" ile ZIP alınabilir.';
+      if (!st.supported) txt = 'Bu tarayıcı klasör tabanlı yedeklemeyi desteklemiyor. Microsoft Edge veya Google Chrome kullanın ya da etüdü "Etüt Paketini Dışa Aktar" ile alın.';
       else {
-        txt = `Yedek konumu: <b>${esc(bkWhere(st))}</b>${t ? ' · Son yedek: ' + t : ''}${st.busy ? ' · <span class="tag warn">Yedekleniyor…</span>' : ''}`;
-        btns = `<button class="btn sm pri" data-bk="open">Yedekle</button>${FIELD ? '<button class="btn sm" data-bk="restore">Yedekten geri yükle</button>' : ''}`;
+        txt = `Yedekleme Dosya Konumu: <b>${esc(bkWhere(st))}</b>${t ? ' · Son Yedekleme: ' + t : ''}${st.busy ? ' · <span class="tag warn">Yedekleniyor…</span>' : ''}`;
+        btns = `<button class="btn sm pri" data-bk="open">Yedekleme</button>${FIELD ? '<button class="btn sm" data-bk="restore">Yedek Dosyasını Geri Yükle</button>' : ''}`;
       }
       bkl.innerHTML = `<div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="row" style="gap:8px;min-width:0;flex:1"><span class="hint" style="font-size:13px">${txt}</span></div><div class="row" style="gap:8px">${btns}</div></div>`;
     };
@@ -661,10 +661,10 @@
         if (b.dataset.bk === 'open') return backupDialog();
         if (b.dataset.bk === 'restore') {
           const L = await Backup.restoreList();
-          if (!L.length) return toast('Yedek konumunda etüt bulunamadı');
+          if (!L.length) return toast('Yedekleme konumunda etüt bulunamadı.');
           sheet('Yedekten geri yükle', L.map(x => ({ label: x.name, run: () => openEtut(x.source) })));
         }
-      } catch (er) { if (er && er.name !== 'AbortError') toast(er.message || 'Yedek işlemi yapılamadı'); }
+      } catch (er) { if (er && er.name !== 'AbortError') toast(er.message || 'Yedekleme işlemi tamamlanamadı.'); }
     };
     $app.addEventListener('click', e => { const ic = e.target.closest('[data-bksv]'); if (ic) { e.stopPropagation(); backupDialog([ic.dataset.bksv]); } }, true);
     const ob = document.getElementById('openEtut');
@@ -675,40 +675,40 @@
   async function exportNow(sv, btn) {
     let handle = null;   // computer (Edge/Chrome): ask where to save first, e.g. the OneDrive folder
     if (!window.Capacitor && window.showSaveFilePicker) {
-      try { handle = await window.showSaveFilePicker({ suggestedName: Transfer.fileNameOf(sv), types: [{ description: 'Etüt dosyası', accept: { 'application/zip': ['.zip'] } }] }); }
+      try { handle = await window.showSaveFilePicker({ suggestedName: Transfer.fileNameOf(sv), types: [{ description: 'Etüt Paketi', accept: { 'application/zip': ['.zip'] } }] }); }
       catch (e) { if (e && e.name === 'AbortError') return; handle = null; }
     }
     if (btn) btn.disabled = true;
     const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; document.body.appendChild(tt);
     try {
-      const r = await Transfer.exportSurvey(sv, (i, n) => { tt.textContent = `Dosya hazırlanıyor… ${i} / ${n}`; });
+      const r = await Transfer.exportSurvey(sv, (i, n) => { tt.textContent = `Etüt paketi hazırlanıyor… ${i} / ${n}`; });
       tt.remove();
       if (r.blob && handle) { const w = await handle.createWritable(); await w.write(r.blob); await w.close(); toast(`Kaydedildi: ${handle.name}`); }
       else if (r.blob) {   // browser without a save dialog: download
         const a = document.createElement('a'); a.href = URL.createObjectURL(r.blob); a.download = r.fileName; document.body.appendChild(a); a.click();
         setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-        toast(`${r.fileName} indirildi`);
-      } else toast(r.where ? `Kaydedildi: ${r.where}` : 'Dosya hazırlandı');
-    } catch (e) { tt.remove(); toast('Dışa aktarılamadı: ' + (e && e.message || e)); }
+        toast(`${r.fileName} indirildi.`);
+      } else toast(r.where ? `Kaydedildi: ${r.where}` : 'Etüt paketi hazırlandı.');
+    } catch (e) { tt.remove(); toast('Dışa aktarma tamamlanamadı: ' + (e && e.message || e)); }
     if (btn) btn.disabled = false;
   }
   async function openEtut(getSource) {
-    const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; tt.textContent = 'Dosya okunuyor…'; document.body.appendChild(tt);
+    const tt = document.createElement('div'); tt.className = 'toast'; tt.style.bottom = '50%'; tt.textContent = 'Etüt paketi okunuyor…'; document.body.appendChild(tt);
     try {
       const pkg = await Transfer.readSurvey(await getSource());
       tt.remove();
       const sv = pkg.doc.survey, old = await DB.getSurvey(sv.id), name = `${sv.project.start.name} → ${sv.project.end.name}`;
       const run = async mode => {
         const t2 = document.createElement('div'); t2.className = 'toast'; t2.style.bottom = '50%'; document.body.appendChild(t2);
-        const s2 = await Transfer.saveImported(pkg, mode, (i, n) => { t2.textContent = `Etüt açılıyor… ${i} / ${n}`; });
-        t2.remove(); toast(`${name}: ${s2.records.length} kayıt açıldı`); go(`#/s/${s2.id}`);
+        const s2 = await Transfer.saveImported(pkg, mode, (i, n) => { t2.textContent = `Etüt içe aktarılıyor… ${i} / ${n}`; });
+        t2.remove(); toast(`${name}: ${s2.records.length} kayıt içe aktarıldı.`); go(`#/s/${s2.id}`);
       };
       if (!old) return run('replace');
-      sheet(`${name} bu bilgisayarda zaten var`, [
-        { label: 'Üzerine yaz (dosyadaki hali geçerli)', cls: 'pri', run: () => run('replace') },
-        { label: 'Ayrı kopya olarak aç', run: () => run('copy') },
+      sheet(`${name} Bu Cihazda Zaten Kayıtlı`, [
+        { label: 'Mevcut Kaydın Üzerine Yaz (paketteki sürüm geçerli olur)', cls: 'pri', run: () => run('replace') },
+        { label: 'Ayrı Bir Kopya Olarak İçe Aktar', run: () => run('copy') },
       ]);
-    } catch (e) { tt.remove(); toast(e && e.message || 'Dosya açılamadı'); }
+    } catch (e) { tt.remove(); toast(e && e.message || 'Etüt paketi açılamadı.'); }
   }
 
   // ----- project form (new / edit) -----
@@ -731,7 +731,7 @@
     const slot = async (key, title, note, bid, fallback) => `<label class="logo"><b>${title}</b><span class="pv" id="pv-${key}">${await pv(bid, fallback)}</span><span>${note}</span><input class="hid" type="file" accept="${key === 'drawing' ? 'application/pdf,.pdf' : 'image/*'}" data-logo="${key}"></label>${key === 'drawing' && bid ? `<button type="button" class="btn sm" data-lrm="drawing" style="min-height:32px;font-size:12px;color:var(--badtx)">Çizimi kaldır</button>` : ''}`;
     const LG = sv ? logosOf(sv) : { ids: {}, pos: { company: 'tl', client1: 'tr', client2: 'br', owner: 'bl' }, cover: { tl: ['company'], tr: ['client1'], mid: ['company'], row: ['client1', 'client2'] } };
     const cover = JSON.parse(JSON.stringify(LG.cover));
-    const LNAME = { company: 'İşi yapan', client1: 'Müşteri-1', client2: 'Müşteri-2', owner: 'İşin sahibi' };
+    const LNAME = { company: 'Yüklenici', client1: 'Müşteri 1', client2: 'Müşteri 2', owner: 'İşveren' };
     const AREAS = [['tl', 'Sol üst kutu', 'alt alta'], ['tr', 'Sağ üst kutu', 'alt alta'], ['mid', 'Ortadaki büyük logo', 'alt alta'], ['row', 'Müşteri satırı', 'yan yana']];
     const coverRow = ([a, t, how]) => `<div class="row" style="flex-wrap:wrap;gap:6px"><span style="width:150px;font-size:13px;font-weight:600">${t} <span class="hint">(en çok 2, ${how})</span></span>
       ${Object.keys(LNAME).map(k => { const i = cover[a].indexOf(k); return `<button type="button" class="chip ${i >= 0 ? 'on' : ''}" data-ca="${a}" data-ck="${k}" style="min-height:36px;padding:5px 10px;font-size:13px;border-radius:8px">${i >= 0 && cover[a].length > 1 ? (i + 1) + '. ' : ''}${LNAME[k]}</button>`; }).join('')}</div>`;
@@ -744,55 +744,55 @@
         ${key !== 'company' && bid ? `<button type="button" class="btn sm" data-lrm="${key}" style="min-height:32px;font-size:12px;color:var(--badtx)">Kaldır</button>` : ''}</div>`;
     const refsOpen = p.refLV != null && p.refLV !== '' || p.refMV != null && p.refMV !== '' || p.refHV != null && p.refHV !== '';
     const imp = !sv && IMPORT ? IMPORT : null;
-    $app.innerHTML = `${bar(sv ? 'Etüt bilgileri' : imp ? 'Fotoğraflardan etüt · bilgiler' : 'Yeni etüt raporu', sv ? `#/s/${sv.id}` : imp ? '#/import' : '#/etutler')}
+    $app.innerHTML = `${bar(sv ? 'Etüt Bilgileri' : imp ? 'Etüt Bilgileri' : 'Yeni Etüt', sv ? `#/s/${sv.id}` : imp ? '#/import' : '#/etutler')}
     <form class="split even" id="pf" autocomplete="off">
       <div class="pane">
         ${imp ? `<div class="note g">${imp.items.length} fotoğraf, çekim saatine göre sıralanıp engel olarak eklenecek${` (konum bilgisi olan: ${imp.items.filter(x => x.lat != null).length})`}. Etüt bilgilerini girip kaydet.</div>` : ''}
-        <div class="sec">Güzergah</div>
-        <div class="g2"><label class="f">Başlangıç noktası<input name="start" required value="${esc(p.start.name)}" placeholder="Fabrika / saha adı"></label>
-          <label class="f">Varış noktası<input name="end" required value="${esc(p.end.name)}" placeholder="Liman / saha adı"></label></div>
-        <div class="sec">Etüt künyesi</div>
+        <div class="sec">Güzergah Tanımı</div>
+        <div class="g2"><label class="f">Başlangıç Noktası<input name="start" required value="${esc(p.start.name)}" placeholder=""></label>
+          <label class="f">Varış Noktası<input name="end" required value="${esc(p.end.name)}" placeholder=""></label></div>
+        <div class="sec">Etüt Bilgileri</div>
         <div class="row" role="radiogroup" aria-label="Bölge" style="flex-wrap:wrap;gap:8px">${REGIONS.map(g => `<button type="button" class="chip ${p.region === g ? 'on' : ''}" data-region="${g}" style="border-radius:12px">${g}</button>`).join('')}</div>
-        <div class="g2"><label class="f">Proje kodu<input name="projectCode" list="dlPcode" value="${esc(p.projectCode || '')}" placeholder="ör. P-2026-014"></label>
-          <label class="f">Proje adı<input name="projectName" list="dlPname" value="${esc(p.projectName || '')}"></label></div>
-        <div class="g2"><label class="f">Etüdü yapan(lar)<input name="surveyors" value="${esc((p.surveyors || (sv ? [] : [(Auth.user() || {}).name].filter(Boolean))).join(', '))}" placeholder="Ad Soyad, virgülle ayır"></label>
-          <label class="f">Firma (etüdün yapıldığı)<input name="client" list="dlClient" value="${esc(p.client)}" placeholder="Müşteri firma"></label></div>
+        <div class="g2"><label class="f">Proje Kodu<input name="projectCode" list="dlPcode" value="${esc(p.projectCode || '')}" placeholder="Örn. P-2026-014"></label>
+          <label class="f">Proje Adı<input name="projectName" list="dlPname" value="${esc(p.projectName || '')}"></label></div>
+        <div class="g2"><label class="f">Etüt Sorumlusu<input name="surveyors" value="${esc((p.surveyors || (sv ? [] : [(Auth.user() || {}).name].filter(Boolean))).join(', '))}" placeholder="İsim Soyisim (birden fazlaysa virgülle ayırın)"></label>
+          <label class="f">Müşteri Firma<input name="client" list="dlClient" value="${esc(p.client)}" placeholder="Firma"></label></div>
         ${await dataLists()}
-        <div class="sec">Taşıma bilgileri</div>
-        <div class="g2" role="radiogroup" aria-label="Etüt türü">
-          <button type="button" class="chip ${p.general ? '' : 'on'}" data-kind="cargo" style="border-radius:12px">Belirli bir yük için</button>
-          <button type="button" class="chip ${p.general ? 'on' : ''}" data-kind="general" style="border-radius:12px">Genel etüt</button></div>
-        <span class="hint" id="kindHint">${p.general ? 'Yük ölçüsü girilmez. Engeller ölçülüp kaydedilir; otomatik yükseklik kontrolü ve renklendirme yapılmaz, renkler elle seçilir.' : ''}</span>
+        <div class="sec">Yük ve Taşıma Bilgileri</div>
+        <div class="g2" role="radiogroup" aria-label="Etüt Kapsamı">
+          <button type="button" class="chip ${p.general ? '' : 'on'}" data-kind="cargo" style="border-radius:12px">Yüke Özel Etüt</button>
+          <button type="button" class="chip ${p.general ? 'on' : ''}" data-kind="general" style="border-radius:12px">Genel Güzergah Etüdü</button></div>
+        <span class="hint" id="kindHint">${p.general ? 'Yük boyutları tanımlanmaz. Engeller ölçülerek kayıt altına alınır; otomatik açıklık kontrolü ve renklendirme uygulanmaz, renkler etüdü yapan tarafından atanır.' : ''}</span>
         <div id="cargoBox" style="display:${p.general ? 'none' : 'flex'};flex-direction:column;gap:12px">
         <div class="g4"><label class="f">Uzunluk (m)<input name="length" inputmode="decimal" value="${esc(fmt(c.length))}"></label>
           <label class="f">Genişlik (m)<input name="width" inputmode="decimal" value="${esc(fmt(c.width))}"></label>
           <label class="f">Yükseklik (m)<input name="height" inputmode="decimal" ${p.general ? '' : 'required'} value="${esc(fmt(c.height))}" style="font-weight:600;border:2px solid var(--navy)"></label>
-          <label class="f">Ağırlık (ton)<input name="weight" inputmode="decimal" value="${esc(fmt(c.weight))}"></label></div>
-        <span class="hint">Yükseklik, üst yapı ve enerji hattı kontrollerinde sınır olarak kullanılır.</span>
-        <details ${refsOpen ? 'open' : ''} class="card" style="gap:8px"><summary style="font-size:14px;font-weight:600;color:var(--navy);cursor:pointer">Enerji hattı referans yükseklikleri (otomatik)</summary>
-          <span class="hint">Boş bırakırsan taşıma yüksekliğinin 1 / 3 / 4 m fazlası kullanılır. Hat bu yüksekliğin altındaysa kayıt renklenir (AG sarı, OG magenta, YG mor) ve enerji kesme cümlesi eklenir.</span>
+          <label class="f">Brüt Ağırlık (ton)<input name="weight" inputmode="decimal" value="${esc(fmt(c.weight))}"></label></div>
+        <span class="hint">Taşıma yüksekliği; üst geçit yapıları ve enerji hatları için düşey açıklık kontrolünde referans değer olarak kullanılır.</span>
+        <details ${refsOpen ? 'open' : ''} class="card" style="gap:8px"><summary style="font-size:14px;font-weight:600;color:var(--navy);cursor:pointer">Enerji Hattı Emniyet Mesafeleri (otomatik)</summary>
+          <span class="hint">Boş bırakılırsa taşıma yüksekliğine sırasıyla 1 / 3 / 4 m emniyet payı eklenir. Hat bu değerin altındaysa kayıt risk seviyesine göre renklendirilir (AG sarı, OG magenta, YG mor) ve enerji kesintisi aksiyonu otomatik eklenir.</span>
           <div class="g3"><label class="f">AG (m)<input name="refLV" inputmode="decimal" value="${esc(fmt(p.refLV))}" id="rLV"></label>
             <label class="f">OG (m)<input name="refMV" inputmode="decimal" value="${esc(fmt(p.refMV))}" id="rMV"></label>
             <label class="f">YG (m)<input name="refHV" inputmode="decimal" value="${esc(fmt(p.refHV))}" id="rHV"></label></div></details>
         </div>
         <div class="office-only" style="display:flex;flex-direction:column;gap:14px">
-        <div class="sec">Kapak bilgileri</div>
-        <div class="g2"><label class="f">Kimin için hazırlandığı<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boşsa firma adı yazılır"></label><span></span></div>
-        <div class="g2"><label class="f">Proje referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. no<input name="rev" value="${esc(p.rev)}"></label></div>
+        <div class="sec">Kapak Sayfası Bilgileri</div>
+        <div class="g2"><label class="f">Müşteri<input name="preparedFor" value="${esc(p.preparedFor)}" placeholder="Boş bırakılırsa Müşteri adı yazılır"></label><span></span></div>
+        <div class="g2"><label class="f">Proje Referansı<input name="reference" value="${esc(p.reference)}"></label><label class="f">Rev. No<input name="rev" value="${esc(p.rev)}"></label></div>
         </div>
       </div>
       <div class="pane office-only">
         <label class="f">Hazırlayanlar (her satıra bir isim)<textarea name="preparedBy" rows="3">${esc((p.preparedBy || []).join('\n'))}</textarea></label>
-        <div class="sec">Logolar · PDF'te duracağı köşe</div>
-        <div class="g4">${await lslot('company', '1 · İşi yapan', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">', 'Her etütte hazır')}
+        <div class="sec">Logolar · Sayfa Konumu</div>
+        <div class="g4">${await lslot('company', '1 · İşi yapan', null, compLogo ? `<img src="${compLogo}" alt="">` : '<img src="assets/logo_company.jpg" alt="">', 'Varsayılan')}
           ${await lslot('client1', '2 · Müşteri-1', LG.ids.client1, null, 'İsteğe bağlı')}${await lslot('client2', '3 · Müşteri-2', LG.ids.client2, null, 'İsteğe bağlı')}${await lslot('owner', '4 · İşin sahibi', LG.ids.owner, null, 'İsteğe bağlı')}</div>
-        <span class="hint">Köşe seçimi iç sayfalar içindir. Logolar oranı bozulmadan küçültülür ve sayfa kenar boşluklarının içinde kalır.</span>
-        <div class="sec">Kapak sayfası düzeni</div>
+        <span class="hint">Konum seçimi iç sayfalar için geçerlidir. Logolar oranı korunarak ölçeklenir ve sayfa kenar boşlukları içinde konumlandırılır.</span>
+        <div class="sec">Kapak Sayfası Düzeni</div>
         <div class="card" id="coverPick" style="gap:8px">${AREAS.map(coverRow).join('')}</div>
-        <div class="g2">${await slot('cover', 'Kapak fotoğrafı', 'Boşsa standart', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma çizimi', 'PDF dosyası', logos.drawing)}</div>
+        <div class="g2">${await slot('cover', 'Kapak Fotoğrafı', 'Boş bırakılırsa kurumsal standart Fotoğraf', logos.cover, '<img src="assets/cover_photo.jpg" alt="">')}${await slot('drawing', 'Taşıma Çizimi', 'PDF dosyası', logos.drawing)}</div>
       </div>
     </form>
-    <div class="foot"><button class="btn pri" id="save">${sv ? 'Kaydet' : 'Etüdü başlat'}</button></div>`;
+    <div class="foot"><button class="btn pri" id="save">${sv ? 'Kaydet' : 'Etüdü Başlat'}</button></div>`;
     const f = document.getElementById('pf'), pending = {};
     const showRefs = () => { const h = pn(f.height.value); [['rLV', 1], ['rMV', 3], ['rHV', 4]].forEach(([k, d]) => { document.getElementById(k).placeholder = h == null ? '' : fmt(h + d, 2); }); };
     f.height.addEventListener('input', showRefs); showRefs();
@@ -820,7 +820,7 @@
     f.querySelectorAll('[data-logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return;
       const key = inp.dataset.logo, file = inp.files[0];
-      if (key === 'drawing' && !/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { inp.value = ''; return toast('Taşıma çizimi PDF olmalı'); }
+      if (key === 'drawing' && !/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { inp.value = ''; return toast('Taşıma çizimi PDF formatında olmalıdır.'); }
       const blob = key === 'drawing' ? new Blob([file], { type: 'application/pdf' }) : await shrink(file, key === 'cover' ? 1800 : 1200);
       pending[key] = blob; delete removed[key];
       const pvEl = document.getElementById('pv-' + key); [...pvEl.childNodes].forEach(n => { if (n !== inp) n.remove(); }); pvEl.insertAdjacentHTML('afterbegin', key === 'drawing' ? pdfBadge(blob, file.name) : `<img src="${URL.createObjectURL(blob)}" alt="">`);
@@ -862,7 +862,7 @@
     pending: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#C26A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M12 16v-5m-2.3 2.2L12 11l2.3 2.2"/></svg>',
     off: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#8A93A0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10.5a4.5 4.5 0 0 0 .6-8.96A6 6 0 0 0 6.3 10.1 4 4 0 0 0 7 18z"/><path d="M4 4l16 16"/></svg>',
   };
-  const BKTITLE = { ok: 'Yedeklendi', pending: 'Yedeklenmedi ya da yedekten sonra değişti (dokun: yedekle)', off: 'Klasöre yedek bu tarayıcıda yok' };
+  const BKTITLE = { ok: 'Yedeklendi', pending: 'Yedeklenmedi veya yedeklemeden sonra değiştirildi (yedeklemek için dokunun)', off: 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor' };
   const SELST = {};
   const LSCROLL = {};   // list scroll position per survey and tab, kept while the app is open   // per survey: selection mode survives the redraw after a move
   V.survey = async (id) => {
@@ -880,10 +880,10 @@
     const line = async (r, sub) => {
       const u = await thumbUrl(r.photoId, true), hs = (r.heights || []).filter(h => h.value != null).map(h => `${h.label} ${fmt(h.value)} m`).join(' · ');
       const txt = (r.actions || r.remarks || '').slice(0, 90);
-      return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="" decoding="async">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Ofiste eklenecek' : ''}</span>`}
+      return `<div role="button" tabindex="0" class="rec ${sub ? 'sub' : ''} ${pick === r.id ? 'on' : ''}" data-rec="${r.id}">${u ? `<img src="${u}" alt="" decoding="async">` : `<span class="ph" style="display:flex;align-items:center;justify-content:center;color:#5B6B80;flex-direction:column;font-size:11px;gap:2px">${r.pendingImage ? imgSvg + 'Düzenlenebilir Engel' : ''}</span>`}
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="t">${r.flag ? `<span class="tag sub">${r.no} ${r.flag}</span> ` : r.no + ' · '}${r.obstacle ? esc(OL(r.obstacle)) : '<span style="color:var(--badtx)">Tip seçilmedi</span>'}</span>
         <span class="s">${r.latDec == null ? '<b style="color:var(--warntx)">konum yok</b>' : r.kmManual != null ? 'KM ' + fmt(r.kmManual, 1) : ''}${r.fields && r.fields.type ? ' · ' + esc(r.fields.type) : ''}${hs ? ' · ' + hs : ''}${(r.extras || []).length ? ` · <b style="color:var(--navy)">+${r.extras.length} ek foto</b>` : ''}</span>
-        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<span class="bkic" data-bkr="${r.id}" aria-hidden="true"></span><button class="btn sm det" data-open="${r.id}">Detay göster</button></div>`;
+        ${txt ? `<span class="s" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(txt)}</span>` : ''}</span>${status(r)}<span class="bkic" data-bkr="${r.id}" aria-hidden="true"></span><button class="btn sm det" data-open="${r.id}">Ayrıntıları Göster</button></div>`;
     };
     const keep = SELST[id] || { on: false, ids: [], tab: 's' }, tab = keep.tab || 's';
     const arch = archivedRecords(sv);
@@ -895,10 +895,10 @@
       }
       return h;
     };
-    const html = `<div class="ltabs" role="tablist"><button role="tab" data-tab="s" class="${tab === 's' ? 'on' : ''}">Etüt raporu · ${recs.filter(r => !r.parentId).length}</button>
-        <button role="tab" data-tab="a" class="${tab === 'a' ? 'on' : ''}">${esc(sv.project.start.name)}-${esc(sv.project.end.name)} arşivi · ${arch.length}</button><button class="selgo" data-sel="start" title="Engel seç: taşı, arşive gönder, sil ya da sadece seçilenleri dışa aktar">☑ Seç</button></div>`
-      + (tab === 's' ? (await group(recs) || '<div class="empty">Henüz engel yok.<br>Sağdaki "Yeni engel ekle" ile ilk fotoğrafı çek.</div>')
-        : (await group(arch) || '<div class="empty">Arşiv boş.<br>Yalnızca arşiv için çekilen engelleri engel ekranındaki "Arşive gönder" ile ya da listede basılı tutup seçerek buraya gönderebilirsin. Arşivdekiler rapora girmez.</div>'));
+    const html = `<div class="ltabs" role="tablist"><button role="tab" data-tab="s" class="${tab === 's' ? 'on' : ''}">Güzergah Etüdü · ${recs.filter(r => !r.parentId).length}</button>
+        <button role="tab" data-tab="a" class="${tab === 'a' ? 'on' : ''}">${esc(sv.project.start.name)} - ${esc(sv.project.end.name)} Arşivi · ${arch.length}</button><button class="selgo" data-sel="start" title="Engel seçimi: taşıma, arşivleme, silme veya seçili engellerle raporlama">☑ Seç</button></div>`
+      + (tab === 's' ? (await group(recs) || '<div class="empty">Henüz engel kaydı yok.<br>İlk engel kaydını oluşturmak için "Yeni Engel Ekle" seçeneğini kullanın.</div>')
+        : (await group(arch) || '<div class="empty">Arşivde kayıt bulunmuyor.<br>Yalnızca arşiv amaçlı alınan kayıtları engel ekranındaki "Arşive Gönder" ile veya listede basılı tutarak seçip buraya taşıyabilirsiniz. Arşivdeki kayıtlar rapora dahil edilmez.</div>'));
     const bp = sv.bypassParent && recs.find(r => r.id === sv.bypassParent);
     // computer: "Yeni Engel Ekle" opens the file picker (several photos at once), the tablet opens the camera
     const addBtn = FIELD ? `<button class="rb red" data-go="#/cam/${sv.id}">${camSvg}<span>Yeni Engel Ekle</span></button>`
@@ -910,17 +910,17 @@
         <div class="pane box" id="list">${html}</div>
         <div class="side">
           <div class="row" style="justify-content:space-between"><span class="count">Engel Sayısı: ${recs.length}</span>
-            ${act ? '<span class="hint">Konum fotoğraf çekerken alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
-          <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM'ler rapor oluşturulurken son sıraya göre hesaplanır</span>
+            ${act ? '<span class="hint">Konum verisi fotoğraf çekimi sırasında alınır</span>' : '<span class="tag ok">Tamamlandı</span>'}</div>
+          <div class="row" style="gap:18px;color:var(--mut);font-size:14px"><span>KM değerleri rapor oluşturulurken nihai sıralamaya göre hesaplanır</span>
             <span>${recs.filter(r => r.flag === 'BYPASS').length} bypass · ${recs.filter(r => r.flag === 'INFO').length} info</span></div>
-          <div class="hint">Engele dokununca seçilir: yeni engeller seçili engelin arkasına, "Uydu Fotoğrafı Ekle" ise doğrudan seçili engelin altına INFO olarak eklenir. Düzenlemek, Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tut ve sürükle</b>; basılı tutunca çoklu seçim de açılır.</div>
+          <div class="hint">Seçmek için engele dokunun: yeni kayıtlar seçili engelin ardına, "Uydu Görüntüsü Ekle" ise doğrudan seçili engelin altına INFO olarak eklenir. Düzenlemek ve Info / Bypass eklemek için <b>Detay göster</b>. Sırayı değiştirmek için <b>basılı tutup sürükleyin</b>; basılı tuttuğunuzda çoklu seçim etkinleşir.</div>
           ${pick ? (() => { const pr = recs.find(r => r.id === pick) || archivedRecords(sv).find(r => r.id === pick); return pr ? `<div class="note w row" style="justify-content:space-between;gap:10px"><span>Yeni engeller <b>${pr.no} · ${esc(OL(pr.obstacle) || 'Tip seçilmedi')}</b> engelinin arkasına eklenecek.</span><button class="btn sm" data-act="toend" style="min-width:0">Sona ekle</button></div>` : ''; })() : ''}
           ${bp ? `<div class="note g row" style="justify-content:space-between"><span>Bypass açık: <b>${bp.no} · ${esc(OL(bp.obstacle))}</b>. Yeni engeller ${bp.no}-… olarak eklenir.</span></div>` : ''}
           <div class="acts">
             ${act ? rb('data-act="nophoto"', '', '', 'Fotoğrafsız Engel Ekle')
               + rb('data-act="sat"', '', imgSvg, 'Uydu Fotoğrafı Ekle')
-              + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engeller') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb(`data-go="#/rep/${sv.id}"`, '', '', 'Rapor')
-              + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass'ı Bitir") : rb('', 'ghost', '', ''))
+              + rb(`data-go="#/crit/${sv.id}"`, 'navy', '', 'Kritik Engel Analizi') + rb('data-act="export"', '', '', 'Dışarı Aktar') + rb(`data-go="#/rep/${sv.id}"`, '', '', 'Rapor Oluştur')
+              + (bp ? rb('data-act="endbypass"', 'grn', '', "Bypass Güzergahını Tamamla") : rb('', 'ghost', '', ''))
               + rb('data-act="finish"', '', '', 'Etüdü Bitir') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + addBtn
             : rb('data-act="resume"', '', '', 'Etüde Devam Et') + rb(`data-go="#/edit/${sv.id}"`, '', '', 'Etüt Bilgileri') + rb(`data-go="#/crit/${sv.id}"`, '', '', 'Kritik Engeller')
               + rb(`data-go="#/rep/${sv.id}"`, 'navy', '', 'Rapor') + rb('data-act="export"', '', '', 'Dışa Aktar') + rb('data-act="sat"', '', imgSvg, 'Uydu Fotoğrafı Ekle') + rb('', 'ghost', '', '') + rb('', 'ghost', '', '') + (FIELD ? rb('', 'ghost', '', '') : addBtn)}
@@ -969,9 +969,9 @@
       if (!sb) { sb = document.createElement('div'); sb.className = 'selbar'; list.appendChild(sb); }   // fixed over the top bar: the list does not shift
       const n = sel.size;
       const pool = list.querySelectorAll('.rec').length, all = n && n >= pool;
-      sb.innerHTML = `<b>${n} engel seçili</b><button class="btn" data-sel="all">${all ? 'Seçimi temizle' : 'Hepsini seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Sadece seçilen engellerle rapor çıkar">Seçilenleri dışa aktar</button><button class="btn" data-sel="bypass" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin bypass'ı olarak tanımla">Bypass olarak tanımla</button><button class="btn" data-sel="info" ${n ? '' : 'disabled'} title="Seçilen engelleri başka bir engelin INFO'su olarak tanımla">Info olarak tanımla</button><button class="btn" data-sel="copy" ${n ? '' : 'disabled'} title="Seçilen engelin kopyasını hemen altına yeni engel olarak oluştur">Kopyasını oluştur</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
+      sb.innerHTML = `<b>${n} engel seçildi</b><button class="btn" data-sel="all">${all ? 'Seçimi Temizle' : 'Tümünü Seç'}</button>${tab === 's' ? `<button class="btn" data-sel="exp" ${n ? '' : 'disabled'} title="Yalnızca seçili engellerle rapor oluştur">Seçilenleri dışa aktar</button><button class="btn" data-sel="bypass" ${n ? '' : 'disabled'} title="Seçili engelleri başka bir engelin bypass güzergahı olarak tanımla">Bypass olarak tanımla</button><button class="btn" data-sel="info" ${n ? '' : 'disabled'} title="Seçili engelleri başka bir engelin INFO kaydı olarak tanımla">Info olarak tanımla</button><button class="btn" data-sel="copy" ${n ? '' : 'disabled'} title="Seçili engeli hemen altına yeni engel olarak çoğalt">Kopyasını oluştur</button><button class="btn" data-sel="up" ${n ? '' : 'disabled'}>▲ Yukarı</button><button class="btn" data-sel="down" ${n ? '' : 'disabled'}>▼ Aşağı</button>
         <button class="btn" data-sel="arc" ${n ? '' : 'disabled'}>Arşive gönder</button>` : `<button class="btn" data-sel="unarc" ${n ? '' : 'disabled'}>Etüde geri al</button>`}
-        <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Emin misin? Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi bırak, sırayı seçimden önceki haline getir">İptal</button><button class="btn" data-sel="done">Bitti</button>`;
+        <button class="btn del" data-sel="del" ${n ? '' : 'disabled'}>${delSure ? 'Kalıcı Olarak Sil' : 'Sil'}</button><button class="btn" data-sel="cancel" title="Seçimi iptal et ve sıralamayı geri al">İptal</button><button class="btn" data-sel="done">Tamamla</button>`;
       remember();
     };
     const applyDom = async () => {   // list order on screen -> sv.records (each main followed by its INFO/BYPASS)
@@ -1051,7 +1051,7 @@
           const pos = Object.fromEntries(was.map((x, i) => [x, i])), before = sv.records.map(r => r.id).join();
           sv.records = sv.records.map((r, i) => [r, pos[r.id] != null ? pos[r.id] : was.length + i]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
           SELST[id] = { on: false, ids: [], tab };
-          if (sv.records.map(r => r.id).join() !== before) { await DB.putSurvey(sv); toast('Sıra eski haline döndü'); }
+          if (sv.records.map(r => r.id).join() !== before) { await DB.putSurvey(sv); toast('Sıralama geri alındı.'); }
           return V.survey(id);
         }
         if (k === 'all') {   // every obstacle in this tab, or none when all are already selected
@@ -1062,9 +1062,9 @@
         if (k === 'exp') {   // report with only the selected obstacles (their INFO/BYPASS come along); numbers and KM stay as in the full route
           const ids = [...sel]; if (!ids.length) return;
           const open = o => { try { localStorage.setItem('rs-only', JSON.stringify({ id, ids, t: Date.now() })); } catch (e) {} remember(); location.href = `report2.html?o=${o}&sel=1#${id}`; };
-          return sheet(`${ids.length} seçili engel dışa aktarılacak`, [
-            { label: 'Dikey pafta (A4 dikey)', cls: 'pri', run: () => open('p') },
-            { label: 'Yatay pafta (A4 yatay)', cls: 'pri', run: () => open('l') },
+          return sheet(`${ids.length} seçili engel raporlanacak`, [
+            { label: 'Dikey Pafta (A4 Dikey)', cls: 'pri', run: () => open('p') },
+            { label: 'Yatay Pafta (A4 Yatay)', cls: 'pri', run: () => open('l') },
           ]);
         }
         if (k === 'copy') {   // a new obstacle with the same data (photos copied too) right under each selected one
@@ -1077,7 +1077,7 @@
             let i = sv.records.indexOf(r); if (!r.parentId) sv.records.forEach((x, j) => { if (x.parentId === r.id && j > i) i = j; });   // after the obstacle and its INFO/BYPASS
             sv.records.splice(i + 1, 0, c);
           }
-          SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv); toast(picked.length > 1 ? `${picked.length} engelin kopyası oluşturuldu` : 'Kopya engel hemen altına oluşturuldu'); return V.survey(id);
+          SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv); toast(picked.length > 1 ? `${picked.length} engelin kopyası oluşturuldu` : 'Engel kaydı hemen altına çoğaltıldı.'); return V.survey(id);
         }
         if (k === 'bypass' || k === 'info') {   // the selected obstacles become BYPASS / INFO records of the obstacle chosen next
           const FL = k === 'info' ? 'INFO' : 'BYPASS', fl = k === 'info' ? "info'su" : "bypass'ı";
@@ -1088,7 +1088,7 @@
             for (const r of moving) { if (sel.has(r.id)) r.flag = FL; r.parentId = t.id; delete r.solo; }
             if (moving.some(r => r.id === sv.bypassParent)) sv.bypassParent = null;
             sv.records = sv.records.filter(r => !moving.includes(r)); sv.records.splice(after(t), 0, ...moving);
-            return done(`${sel.size} engel ${t.no} numaralı engelin ${fl} oldu`);
+            return done(`${sel.size} engel, ${t.no} numaralı engelin ${fl} olarak tanımlandı.`);
           };
           const unBypass = async () => {
             const subs = sv.records.filter(r => sel.has(r.id) && r.parentId);
@@ -1096,12 +1096,12 @@
               const par = sv.records.find(x => x.id === r.parentId); r.parentId = null; r.flag = ''; delete r.solo;
               sv.records = sv.records.filter(x => x !== r); sv.records.splice(par ? after(par) : sv.records.length, 0, r);
             }
-            return done(`${subs.length} kayıt ana engel yapıldı`);
+            return done(`${subs.length} kayıt ana engel olarak tanımlandı.`);
           };
           const targets = recs.filter(r => !r.parentId && !sel.has(r.id));
           const items = targets.map(t => ({ label: `${t.no} · ${OL(t.obstacle) || 'Tip seçilmedi'}${t.fields && t.fields.type ? ' · ' + t.fields.type : ''}`, run: () => makeBypass(t) }));
-          if (sv.records.some(r => sel.has(r.id) && r.parentId)) items.unshift({ label: 'Bypass / Info tanımını kaldır (ana engel yap)', run: unBypass });
-          if (!items.length) return toast('Bağlanacak başka engel yok');
+          if (sv.records.some(r => sel.has(r.id) && r.parentId)) items.unshift({ label: 'Bypass / Info İlişkisini Kaldır (Ana Engel Olarak Tanımla)', run: unBypass });
+          if (!items.length) return toast('İlişkilendirilebilecek başka engel kaydı bulunmuyor.');
           return sheet(`Seçilen ${sel.size} engel hangi engelin ${fl} olsun?`, items);
         }
         if (k === 'up' || k === 'down') return step(k === 'up' ? -1 : 1);
@@ -1110,7 +1110,7 @@
           return askPlace(sv, `${hit.length} engel etüde geri alınacak: hangi engelden sonra?`, async t => {
             for (const x of hit) x.archived = false;
             moveAfter(sv, hit.filter(x => !x.parentId), t);   // a lone INFO/BYPASS goes back to its own obstacle
-            SELST[id] = { on: false, ids: [], tab: 's' }; await DB.putSurvey(sv); toast(`${hit.length} engel etüde geri alındı`); return V.survey(id);
+            SELST[id] = { on: false, ids: [], tab: 's' }; await DB.putSurvey(sv); toast(`${hit.length} engel etüde geri alındı.`); return V.survey(id);
           });
         }
         if (k === 'arc' || k === 'unarc') {   // archive: kept with the survey, left out of the report, numbering and KM
@@ -1118,7 +1118,7 @@
           for (const x of hit) x.archived = on;
           if (on && hit.some(x => x.id === sv.bypassParent)) sv.bypassParent = null;
           SELST[id] = { on: false, ids: [], tab }; await DB.putSurvey(sv);
-          toast(on ? `${hit.length} engel arşive gönderildi` : `${hit.length} engel etüde geri alındı`); return V.survey(id);
+          toast(on ? `${hit.length} engel arşive taşındı.` : `${hit.length} engel etüde geri alındı`); return V.survey(id);
         }
         if (k === 'del') {
           if (!delSure) { delSure = true; return paintSel(); }
@@ -1127,7 +1127,7 @@
           sv.records = sv.records.filter(x => !gone.includes(x));
           if (gone.some(x => x.id === sv.bypassParent)) sv.bypassParent = null;
           if (gone.some(x => x.id === sv.selected)) sv.selected = null;
-          delete SELST[id]; await DB.putSurvey(sv); toast(`${gone.length} kayıt silindi`); return V.survey(id);
+          delete SELST[id]; await DB.putSurvey(sv); toast(`${gone.length} kayıt silindi.`); return V.survey(id);
         }
       }
       if (e.target.closest('[data-bkr]') && !selMode) return backupDialog([sv.id]);   // backup mark: back this survey up
@@ -1150,12 +1150,12 @@
         await createRecord(sv, { parent: p, flag: 'INFO', name: 'Satellite View', pending: 'sat', go: false });
         if (pr !== p) { const nr0 = sv.records.find(r => r.id === sv.selected); sv.records = sv.records.filter(r => r !== nr0); sv.records.splice(sv.records.indexOf(pr) + 1, 0, nr0); sv.insertAfter = nr0.id; await DB.putSurvey(sv); }   // right after the chosen INFO/BYPASS
         orderedRecords(sv); const nr = sv.records.find(r => r.id === sv.selected);
-        toast(`Uydu görüntüsü ${p.no} numaralı engelin altına ${nr && nr.no ? nr.no + ' ' : ''}INFO olarak eklendi`); return V.survey(id);
+        toast(`Uydu görüntüsü ${p.no} numaralı engelin altına ${nr && nr.no ? nr.no + ' ' : ''}INFO kaydı olarak eklendi.`); return V.survey(id);
       }
       if (a.dataset.act === 'toend') { sv.insertAfter = null; await DB.putSurvey(sv); return V.survey(id); }
       if (a.dataset.act === 'nophoto') return createRecord(sv, { useGps: true, parent: bp || null, flag: bp ? 'BYPASS' : '' });
       if (a.dataset.act === 'endbypass') sv.bypassParent = null;
-      if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Emin misin? Dokun'; a.style.borderColor = 'var(--red)'; return; } sv.status = 'done'; sv.bypassParent = null; }
+      if (a.dataset.act === 'finish') { if (a.dataset.sure !== '1') { a.dataset.sure = '1'; a.querySelector('span').textContent = 'Onaylamak için tekrar dokunun'; a.style.borderColor = 'var(--red)'; return; } sv.status = 'done'; sv.bypassParent = null; }
       if (a.dataset.act === 'resume') sv.status = 'active';
       await DB.putSurvey(sv); V.survey(id);
     };
@@ -1177,11 +1177,11 @@
   }
   function insetSheet(sv, r, read) {
     const ins = r.insets || {};
-    sheet(`${r.no} · Engel için ek fotoğraf (en fazla 4, fotoğrafın köşelerine)`, CORNERS.map(([k, l]) => ({
-      label: `${l}${ins[k] ? ' · dolu (değiştir / kaldır)' : ''}`, cls: ins[k] ? '' : 'pri',
-      run: () => sheet(`${r.no} · ${l} köşe fotoğrafı`, [
-        { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { if (read) read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?inset=${r.id}:${k}`); } },
-        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { if (read) read(); r.insets = r.insets || {}; await DB.delBlob(r.insets[k]); r.insets[k] = await DB.putBlob(await to43(f)); await DB.putSurvey(sv); V.record(sv.id, r.id); } },
+    sheet(`${r.no} · Detay Fotoğrafları (en fazla 4, ana Fotoğrafın köşelerine yerleşir)`, CORNERS.map(([k, l]) => ({
+      label: `${l}${ins[k] ? ' · tanımlı (değiştir / kaldır)' : ''}`, cls: ins[k] ? '' : 'pri',
+      run: () => sheet(`${r.no} · ${l} Köşe Detay Fotoğrafı`, [
+        { label: 'Fotoğraf Çek', icon: camSvg, cls: 'red', run: async () => { if (read) read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?inset=${r.id}:${k}`); } },
+        { label: 'Galeriden Seç', icon: imgSvg, file: true, run: async f => { if (read) read(); r.insets = r.insets || {}; await DB.delBlob(r.insets[k]); r.insets[k] = await DB.putBlob(await to43(f)); await DB.putSurvey(sv); V.record(sv.id, r.id); } },
         ...(ins[k] ? [{ label: 'Kaldır', run: async () => { if (read) read(); await DB.delBlob(r.insets[k]); delete r.insets[k]; await DB.putSurvey(sv); V.record(sv.id, r.id); } }] : []),
       ]),
     })));
@@ -1211,10 +1211,10 @@
       </div>
       <div style="width:180px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 12px">
         <div id="sat" style="${extraFor ? 'visibility:hidden;' : ''}display:flex;flex-direction:column;align-items:center;gap:4px;color:#9CA3AF;font-size:12px;text-align:center;min-height:70px">${satSvg}<span id="sact">Konum aranıyor…</span></div>
-        <button id="shut" aria-label="Fotoğraf çek" style="width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:transparent;padding:0;display:flex;align-items:center;justify-content:center"><span style="width:76px;height:76px;border-radius:50%;background:#fff;display:block"></span></button>
+        <button id="shut" aria-label="Fotoğraf Çek" style="width:96px;height:96px;border-radius:50%;border:5px solid #fff;background:transparent;padding:0;display:flex;align-items:center;justify-content:center"><span style="width:76px;height:76px;border-radius:50%;background:#fff;display:block"></span></button>
         <div style="display:flex;flex-direction:column;gap:10px;width:100%">
-          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeri<input class="hid" type="file" accept="image/*" id="cgal" multiple></label>
-          <button class="btn sm" id="cclose" style="${extraFor ? 'background:#22C55E;border-color:#22C55E;color:#06260F' : 'background:#1F2937;color:#fff;border-color:#374151'}">${extraFor ? 'Bitti · seç' : 'Kapat'}</button>
+          <label class="btn sm" style="background:#1F2937;color:#fff;border-color:#374151;cursor:pointer">${imgSvg} Galeriden Seç<input class="hid" type="file" accept="image/*" id="cgal" multiple></label>
+          <button class="btn sm" id="cclose" style="${extraFor ? 'background:#22C55E;border-color:#22C55E;color:#06260F' : 'background:#1F2937;color:#fff;border-color:#374151'}">${extraFor ? 'Tamamla · Seç' : 'Kapat'}</button>
         </div>
       </div></div>`;
     const vid = document.getElementById('vid'), msg = document.getElementById('cmsg'), sat = document.getElementById('sat'), sact = document.getElementById('sact');
@@ -1223,13 +1223,13 @@
       const f = GPS.fresh(8000);
       const col = GPS.err ? '#F87171' : !f ? '#9CA3AF' : f.acc <= PRECISE ? '#22C55E' : f.acc <= OK ? '#FACC15' : '#F97316';
       sat.style.color = col;
-      sact.textContent = GPS.err === 'izin' ? 'Konum izni yok' : GPS.err === 'yok' ? 'Konum yok' : !f ? 'Konum aranıyor…' : f.acc <= PRECISE ? `Hassas konum ±${Math.round(f.acc)} m` : `±${Math.round(f.acc)} m`;
+      sact.textContent = GPS.err === 'izin' ? 'Konum izni verilmedi' : GPS.err === 'yok' ? 'Konum belirlenemedi' : !f ? 'Konum belirleniyor…' : f.acc <= PRECISE ? `Konum hassasiyeti ±${Math.round(f.acc)} m` : `±${Math.round(f.acc)} m`;
     };
     if (!extraFor && !insetFor) { GPS.last = null; GPS.on(paint); paint(); }
     const tick = setInterval(paint, 2000);
     const stop = () => { clearInterval(tick); GPS.off(); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; document.body.style.background = ''; window.removeEventListener('hashchange', stop); };
     window.addEventListener('hashchange', stop);
-    const fallback = text => { msg.style.display = 'flex'; msg.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px;align-items:center"><span>${text}</span><label class="btn red" style="cursor:pointer">${camSvg} Telefonun kamerasıyla çek<input class="hid" type="file" accept="image/*" capture="environment" id="cnat"></label></div>`;
+    const fallback = text => { msg.style.display = 'flex'; msg.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px;align-items:center"><span>${text}</span><label class="btn red" style="cursor:pointer">${camSvg} Cihazın Kamera Uygulamasıyla Çek<input class="hid" type="file" accept="image/*" capture="environment" id="cnat"></label></div>`;
       document.getElementById('cnat').onchange = e => e.target.files[0] && save(e.target.files[0]); };
     async function save(blob, fromGallery, fromCam) {
       if (extraFor) {   // keep shooting; each photo is kept as a candidate for this obstacle
@@ -1276,7 +1276,7 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false });
       vid.srcObject = stream; await vid.play().catch(() => {});
-    } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : 'Kamera açılamadı.'); }
+    } catch (e) { fallback(e && e.name === 'NotAllowedError' ? 'Kamera erişim izni verilmedi.' : 'Kamera başlatılamadı.'); }
   };
 
   // ----- add record: pick type, take photo -----
@@ -1289,26 +1289,26 @@
     const flag = q.parent || (mode === 'sat' && parent) ? (q.flag || 'INFO') : (parent ? 'BYPASS' : '');
     const custom = [...new Set(sv.records.map(r => r.obstacle).filter(t => !TYPES.includes(t)))];
     let type = mode === 'sat' ? 'Satellite View' : flag === 'INFO' ? 'Satellite View' : null, all = false, customName = '';
-    const title = mode === 'sat' ? 'Uydu fotoğrafı ekle' : mode === 'nophoto' ? 'Fotoğrafsız engel ekle' : parent ? `Yeni kayıt · ${parent.no}-… ${flag}` : 'Yeni engel ekle';
+    const title = mode === 'sat' ? 'Uydu Görüntüsü Ekle' : mode === 'nophoto' ? 'Fotoğrafsız Engel Kaydı' : parent ? `Yeni Engel · ${parent.no}-… ${flag}` : 'Yeni Engel Ekle';
     const draw = () => {
       const list = all ? TYPES : QUICK.concat(['Satellite View', 'Drone View']);
       $app.innerHTML = `${bar(title, `#/s/${sv.id}`, parent && mode !== 'sat' ? `<span class="tag sub">${parent.no} · ${esc(OL(parent.obstacle))} → ${flag}</span>` : '')}
       <div class="split">
         <div class="pane">
-          <div class="sec">Engel tipi</div>
+          <div class="sec">Engel Tipi</div>
           <div class="chips">${[...new Set(list.concat(custom))].map(t => `<button class="chip ${t === type ? 'on' : ''}" data-type="${esc(t)}">${esc(OL(t))}</button>`).join('')}
-            ${all ? '' : '<button class="chip" data-all="1">Tümü…</button>'}<button class="chip dash" data-custom="1">+ Kendim yazacağım</button></div>
-          <label class="f" id="cw" style="${customName ? '' : 'display:none'}">Engel adı (raporda OBSTACLE hücresine yazılır)<input id="ct" value="${esc(customName)}" placeholder="ör. Industrial Area Gate"></label>
-          ${mode === 'photo' ? '<div class="hint">Tipi seçmeden de çekebilirsin; sonraki ekranda değiştirilebilir.</div>' : ''}
+            ${all ? '' : '<button class="chip" data-all="1">Tüm Tipler…</button>'}<button class="chip dash" data-custom="1">+ Özel Engel Tanımı</button></div>
+          <label class="f" id="cw" style="${customName ? '' : 'display:none'}">Engel Tanımı (raporda OBSTACLE hücresinde yer alır)<input id="ct" value="${esc(customName)}" placeholder="Örn. Industrial Area Gate"></label>
+          ${mode === 'photo' ? '<div class="hint">Engel tipi seçilmeden de kayıt alınabilir; tip, kayıt ekranında atanabilir.</div>' : ''}
         </div>
         <div class="pane">
           ${mode === 'nophoto' ? `<div class="sec">Fotoğrafsız kayıt</div><span class="hint">Konum ve KM şu anki GPS'ten alınır. Fotoğrafı sonradan da ekleyebilirsin.</span>
               <button class="btn red" id="nop" style="min-height:90px;font-size:18px">Kaydı oluştur</button>`
             : mode === 'sat' ? `<div class="sec">Uydu / drone görüntüsü</div>
               ${mains.length ? `<label class="f">Hangi engele ait?<select id="par">${mains.slice().reverse().map(m => `<option value="${m.id}" ${parent && parent.id === m.id ? 'selected' : ''}>${m.no} · ${esc(OL(m.obstacle))}</option>`).join('')}</select></label>
-                <span class="hint">Seçilen engelin altına INFO olarak eklenir; konum ve KM o engelden alınır.</span>` : '<span class="hint">Henüz engel yok; yeni kayıt olarak eklenir.</span>'}
+                <span class="hint">Seçili engelin altına INFO kaydı olarak eklenir; konum ve KM bilgisi ana engelden alınır.</span>` : '<span class="hint">Henüz engel yok; ilk kayıt olarak eklenecek.</span>'}
               <button class="btn red" id="satp" style="min-height:90px;font-size:18px">${imgSvg} Boş uydu kaydı oluştur</button>
-              <span class="hint">Fotoğraf çekilmez. Kayıt boş bir görselle oluşur; simülasyon görüntüsünü ofiste engel ekranındaki "Fotoğraf ekle" ile eklersiniz.</span>`
+              <span class="hint">Fotoğraf çekilmez. Kayıt boş bir görselle oluşur; simülasyon görüntüsünü ofiste engel ekranındaki "Fotoğraf Ekle" ile eklersiniz.</span>`
             : `<div class="sec">Fotoğraf</div>
               <label class="btn red" style="min-height:110px;font-size:20px">${camSvg} Fotoğraf çek<input class="hid" type="file" accept="image/*" capture="environment" id="cam"></label>
               <label class="btn" style="min-height:64px">${imgSvg} Galeriden seç<input class="hid" type="file" accept="image/*" id="gal"></label>`}
@@ -1348,7 +1348,7 @@
       const satp = document.getElementById('satp');
       if (satp) satp.onclick = () => createRecord(sv, { parent, flag: parent ? 'INFO' : '', name: 'Satellite View', pending: 'sat' });
       const f = GPS.fresh(), pe = document.getElementById('pos');
-      if (mode !== 'sat') pe.textContent = f ? `Konum hazır: ${Geo.dms(f.lat, true)} · ${Geo.dms(f.lon, false)} (±${Math.round(f.acc)} m)` : 'Konum aranıyor… Kayıt anında tekrar denenecek.';
+      if (mode !== 'sat') pe.textContent = f ? `Konum belirlendi: ${Geo.dms(f.lat, true)} · ${Geo.dms(f.lon, false)} (±${Math.round(f.acc)} m)` : 'Konum belirleniyor… Kayıt sırasında yeniden denenecek.';
     };
     draw();
   };
@@ -1376,69 +1376,69 @@
       const hrow = (h, i) => {
         const v = pn(h.value), cls = st.general || v == null ? '' : v < lim ? 'bad' : 'ok';
         const opts = LAY.heightLabels;
-        return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
+        return `<div class="hrow ${cls}"><select class="lab" data-hl="${i}" aria-label="Yükseklik Etiketi" style="width:84px;padding:8px;border:1px solid ${h.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
             <option value="" ${h.label ? '' : 'selected'}>Seç</option>${opts.map(o => `<option ${o === h.label ? 'selected' : ''}>${o}</option>`).join('')}</select><input data-hv="${i}" inputmode="decimal" value="${esc(fmt(h.value))}" placeholder="m" aria-label="Yükseklik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${st.general || v == null ? '' : v < lim ? fmt(lim - v, 2) + ' m eksik' : 'Uygun'}</span>
           ${r.heights.length > 1 ? `<button class="btn sm" data-hdel="${i}" aria-label="Sil">×</button>` : ''}</div>
           ${r.heights.length > 1 ? `<div class="hrem"><input data-hr="${i}" value="${esc(h.remark || '')}" placeholder="${esc(h.label || 'H' + (i + 1))} remark: yaz ya da listeden seç" aria-label="${esc(h.label || 'H')} remark">
-            <select data-hrs="${i}" aria-label="Hazır remark"><option value="">Seç…</option>${(PHRASES[r.obstacle] || []).map((t, j) => `<option value="${j}">${esc(t.length > 70 ? t.slice(0, 68) + '…' : t)}</option>`).join('')}</select></div>` : ''}`;   // H1, H2…: each its own remark (report: one line each)
+            <select data-hrs="${i}" aria-label="Hazır Remark"><option value="">Seç…</option>${(PHRASES[r.obstacle] || []).map((t, j) => `<option value="${j}">${esc(t.length > 70 ? t.slice(0, 68) + '…' : t)}</option>`).join('')}</select></div>` : ''}`;   // H1, H2…: each its own remark (report: one line each)
       };
       const sub = SUB[r.obstacle];
       const cw = st.general ? null : pn((sv.project.cargo || {}).width);
       const wrow = (w, i) => {
         const v = pn(w.value), cls = cw == null || v == null ? '' : v < cw ? 'bad' : 'ok';
-        return `<div class="hrow ${cls}"><select class="lab" data-wl="${i}" aria-label="Genişlik etiketi" style="width:84px;padding:8px;border:1px solid ${w.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
+        return `<div class="hrow ${cls}"><select class="lab" data-wl="${i}" aria-label="Genişlik Etiketi" style="width:84px;padding:8px;border:1px solid ${w.label ? 'var(--line2)' : 'var(--red)'};border-radius:8px;font-size:16px;font-weight:600;background:var(--card2)">
             <option value="" ${w.label ? '' : 'selected'}>Seç</option>${LAY.widthLabels.map(o => `<option ${o === w.label ? 'selected' : ''}>${o}</option>`).join('')}</select>
           <input data-wv="${i}" inputmode="decimal" value="${esc(fmt(w.value))}" placeholder="m" aria-label="Genişlik (m)">
           <span style="flex:1;font-size:13px;font-weight:600;color:${cls === 'bad' ? 'var(--badtx)' : 'var(--oktx)'}">${cls === 'bad' ? fmt(cw - v, 2) + ' m dar' : cls === 'ok' ? 'Uygun' : ''}</span>
           <button class="btn sm" data-wdel="${i}" aria-label="Sil">×</button></div>`;
       };
       const sw = (key, name, col, on) => `<button class="sw ${on ? 'on' : ''}" data-col="${key}"><i style="background:${col}"></i>${name}</button>`;
-      $app.innerHTML = `${bar(OL(r.obstacle) || 'Yeni engel', `#/s/${sv.id}`, `${inArc ? '<span class="tag warn" style="font-size:13px">Arşivde · rapora girmez</span>' : ''}<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:var(--sel);color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
+      $app.innerHTML = `${bar(OL(r.obstacle) || 'Yeni Engel', `#/s/${sv.id}`, `${inArc ? '<span class="tag warn" style="font-size:13px">Arşivde · rapora dahil edilmez</span>' : ''}<span class="tag ${r.flag ? 'sub' : ''}" style="font-size:13px;${r.flag ? '' : 'background:var(--sel);color:var(--navy)'}">${r.no}${r.flag ? ' ' + r.flag : ''}</span>`)}
       <div class="split rec3">
         <div class="pane">
           <div class="photo">${u ? `<img src="${u}" alt="">${INS}` : r.pendingImage ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;font-size:15px">${imgSvg}Uydu / simülasyon görüntüsü ofiste eklenecek</div>` : ''}${annHtml(r.ann || [], -1)}
             <button class="btn sm" data-go="#/a/${sv.id}/${r.id}" style="position:absolute;right:10px;bottom:10px">İşaretle</button>
             <button class="btn sm" id="rep" style="position:absolute;left:10px;bottom:10px">${u ? 'Değiştir' : 'Fotoğraf ekle'}</button>
-            ${u ? `<button class="btn sm" id="orig" style="position:absolute;right:10px;top:10px" title="Fotoğrafı tam kalitede büyütüp incele">🔍 Orijinal</button>` : ''}</div>
-          ${u ? `<div class="thumbs" aria-label="Bu engelin fotoğrafları">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
+            ${u ? `<button class="btn sm" id="orig" style="position:absolute;right:10px;top:10px" title="Fotoğrafı tam çözünürlükte inceleyin">🔍 Orijinal</button>` : ''}</div>
+          ${u ? `<div class="thumbs" aria-label="Engele ait Fotoğraflar">${thumbs.map(([b, x]) => `<button class="th ${b === r.photoId ? 'on' : ''}" data-pick="${b}"><img src="${x}" alt="">${b === r.photoId ? '<span class="use">RAPORDA</span>' : ''}</button>`).join('')}
             <button class="th add" id="xadd">${camSvg}<span>Ek fotoğraf</span></button></div>` : ''}
           <div class="loc"><div class="g3">
-            <label class="f">KM (elle)<input id="km" inputmode="decimal" value="${r.kmManual != null ? esc(fmt(r.kmManual, 3)) : ''}" placeholder="raporda otomatik"></label>
+            <label class="f">KM<input id="km" inputmode="decimal" value="${r.kmManual != null ? esc(fmt(r.kmManual, 3)) : ''}" placeholder="Otomatik"></label>
             <label class="f">Enlem<input id="la" inputmode="decimal" value="${r.latDec == null ? '' : r.latDec.toFixed(6)}"></label>
             <label class="f">Boylam<input id="lo" inputmode="decimal" value="${r.lonDec == null ? '' : r.lonDec.toFixed(6)}"></label></div>
-            <div class="row" style="justify-content:space-between;gap:8px"><span class="hint" id="lochint">${LATE.job && LATE.job.recId === r.id ? '<b style="color:var(--warntx)">Konum bekleniyor… gelince kendiliğinden yazılır</b>' : r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum yok, elle girilebilir'}</span><a id="maplink" class="btn sm maplink" target="_blank" rel="noopener" href="${r.latDec != null ? mapsUrl(r.latDec, r.lonDec) : '#'}" style="${r.latDec != null ? '' : 'display:none'}" aria-label="Konumu Google Maps'te aç" title="Google Maps'te aç">${pinSvg}</a><button class="btn sm" id="here">Konumu güncelle</button></div></div>
+            <div class="row" style="justify-content:space-between;gap:8px"><span class="hint" id="lochint">${LATE.job && LATE.job.recId === r.id ? '<b style="color:var(--warntx)">Konum belirleniyor… Belirlendiğinde otomatik olarak işlenecek</b>' : r.lat ? esc(r.lat) + ' · ' + esc(r.lon) : 'Konum belirlenemedi; manuel olarak girilebilir'}</span><a id="maplink" class="btn sm maplink" target="_blank" rel="noopener" href="${r.latDec != null ? mapsUrl(r.latDec, r.lonDec) : '#'}" style="${r.latDec != null ? '' : 'display:none'}" aria-label="Konumu Google Haritalar'da görüntüle" title="Google Haritalar'da görüntüle">${pinSvg}</a><button class="btn sm" id="here">Konumu Yeniden Belirle</button></div></div>
           <div class="g3"><button class="btn grn sm" id="infq">+ Info</button>
             <button class="btn grn sm" id="simq">+ Simülasyon</button>
             ${r.parentId ? '' : `<button class="btn grn sm" id="bypq">+ Bypass</button>`}</div>
           ${u ? `<button class="btn sm" id="insq">${imgSvg} Engel için ek fotoğraf (köşeye) · ${Object.values(r.insets || {}).filter(Boolean).length}/4</button>` : ''}
         </div>
         <div class="pane">
-          <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel tipi' : 'Engel tipini seç'}</div>
+          <div class="sec" style="${r.obstacle ? '' : 'color:var(--badtx)'}">${r.obstacle ? 'Engel Tipi' : 'Engel tipini seçin'}</div>
           <div class="chips" id="tys">${[...new Set(TYPES.concat(sv.records.map(x => x.obstacle)).filter(Boolean))].map(t => `<button class="chip ${t === r.obstacle ? 'on' : ''}" data-type="${esc(t)}" style="min-height:40px;padding:8px 13px;font-size:14px">${esc(OL(t))}</button>`).join('')}
-            <button class="chip dash" data-tcustom="1" style="min-height:40px;padding:8px 13px;font-size:14px">+ Kendim yazacağım</button></div>
-          <label class="f" id="cnw" style="display:none">Engel adı (raporda OBSTACLE hücresine yazılır)<input id="cnv" placeholder="ör. Industrial Area Gate"></label>
+            <button class="chip dash" data-tcustom="1" style="min-height:40px;padding:8px 13px;font-size:14px">+ Özel Engel Tanımı</button></div>
+          <label class="f" id="cnw" style="display:none">Engel Tanımı (raporda OBSTACLE hücresinde yer alır)<input id="cnv" placeholder="Örn. Industrial Area Gate"></label>
           ${sub ? `<div class="sec">${esc(TD(r.obstacle).subLabel || 'Type')}</div>
             <div class="chips">${sub.map(t => `<button class="chip ${r.fields.type === t ? 'on' : ''}" data-sub="${esc(t)}">${esc(t.replace(' Powerline', ''))}</button>`).join('')}</div>
-            <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="ör. 2x Low Voltage Powerline"></label>` : ''}
-          ${TD(r.obstacle).nameField || TD(r.obstacle).spansField ? `<div class="g2">${TD(r.obstacle).nameField ? `<label class="f">${esc(TD(r.obstacle).nameField)}<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label>` : ''}${TD(r.obstacle).spansField ? `<label class="f">${esc(TD(r.obstacle).spansField)}<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="ör. 7x16m"></label>` : ''}</div>` : ''}
+            <label class="f">Tip metni (raporda yazılacak)<input id="tt" value="${esc(r.fields.type || '')}" placeholder="Örn. 2x Low Voltage Powerline"></label>` : ''}
+          ${TD(r.obstacle).nameField || TD(r.obstacle).spansField ? `<div class="g2">${TD(r.obstacle).nameField ? `<label class="f">${esc(TD(r.obstacle).nameField)}<input id="bn" value="${esc(r.fields.name || '')}" placeholder="Unidentified"></label>` : ''}${TD(r.obstacle).spansField ? `<label class="f">${esc(TD(r.obstacle).spansField)}<input id="sp" value="${esc(r.fields.spans || '')}" placeholder="Örn. 7x16m"></label>` : ''}</div>` : ''}
         </div>
         <div class="pane">
-          ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt bilgileri"nden yüksekliği gir.</div>` : ''}
-          ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · sınır ' + fmt(lim, 2) + ' m'}</div>${(r.heights || []).map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : r.obstacle ? '<button class="btn dash sm" id="hadd">+ Yükseklik (H) ekle</button>' : ''}
+          ${isOH && !st.general && !st.minHeight ? `<div class="note w">Taşıma yüksekliği girilmemiş; kontrol için "Etüt Bilgileri"nden yüksekliği gir.</div>` : ''}
+          ${isOH || TD(r.obstacle).heights || (r.heights || []).length ? `<div class="sec">Yükseklikler${st.general ? '' : ' · Sınır Değer ' + fmt(lim, 2) + ' m'}</div>${(r.heights || []).map(hrow).join('')}<button class="btn dash sm" id="hadd">+ Yükseklik ekle</button>` : r.obstacle ? '<button class="btn dash sm" id="hadd">+ Yükseklik Ölçüsü (H) Ekle</button>' : ''}
           ${r.obstacle === 'Curve' ? `<div class="sec">Viraj yönü</div><div class="g2">${CURVES.map((c, i) => `<button class="chip ${r.remarks === c ? 'on' : ''}" data-curve="${i}" style="border-radius:12px">${i ? 'Left curve' : 'Right curve'}</button>`).join('')}</div>` : ''}
-          ${r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
+          ${r.obstacle ? `${(r.widths || []).length ? `<div class="sec">Genişlik Ölçüleri${cw ? ' · yük ' + fmt(cw, 2) + ' m' : ''}</div>${r.widths.map(wrow).join('')}` : ''}<button class="btn dash sm" id="wadd">+ Genişlik (W) ekle</button>` : ''}
           <label class="f">${isOH ? 'Actions' : 'Remarks'}${isOH && r.actionAuto && !st.general ? ' (otomatik önerildi, düzenlenebilir)' : ''}<textarea id="tx" rows="3">${esc(r[textKey] || '')}</textarea></label>
           ${(() => { const own = ownPhrases(sv, r.obstacle, textKey); OWN = own; return own.length ? `<div class="sec" style="margin-top:2px">Bu etütte yazdıkların</div><div class="chips">${own.slice(0, 3).map((t, i) => `<button class="chip own ${r[textKey] === t ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px" data-own="${i}">${esc(t)}</button>`).join('')}${own.length > 3 ? `<button class="chip dash" id="ownall" style="font-size:13px;border-radius:10px;min-height:40px">Tümü (${own.length})</button>` : ''}</div>` : ''; })()}
-          ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].slice(0, isSlope ? 99 : 4).map((p, i) => `<button class="chip ${isSlope && r[textKey] === p ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px${isSlope ? ';min-width:58px;justify-content:center;font-weight:600' : ''}" data-ph="${i}">${esc(isSlope ? phLabel(p) : p)}</button>`).join('')}${!isSlope && PHRASES[r.obstacle].length > 4 ? `<button class="chip dash" id="phall" style="font-size:13px;border-radius:10px;min-height:40px">Tüm hazır cümleler (${PHRASES[r.obstacle].length})</button>` : ''}</div>` : ''}
-          <div class="row" style="justify-content:space-between"><span class="sec">REMARKS rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
+          ${(PHRASES[r.obstacle] || []).length ? `<div class="chips">${PHRASES[r.obstacle].slice(0, isSlope ? 99 : 4).map((p, i) => `<button class="chip ${isSlope && r[textKey] === p ? 'on' : ''}" style="font-size:13px;border-radius:10px;text-align:left;min-height:40px;padding:8px 12px${isSlope ? ';min-width:58px;justify-content:center;font-weight:600' : ''}" data-ph="${i}">${esc(isSlope ? phLabel(p) : p)}</button>`).join('')}${!isSlope && PHRASES[r.obstacle].length > 4 ? `<button class="chip dash" id="phall" style="font-size:13px;border-radius:10px;min-height:40px">Tüm Hazır Cümleler (${PHRASES[r.obstacle].length})</button>` : ''}</div>` : ''}
+          <div class="row" style="justify-content:space-between"><span class="sec">REMARKS Risk Rengi</span>${auto ? `<span class="tag warn">Otomatik: ${COLNAME[auto]}</span>` : ''}</div>
           <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px">
             ${sw('auto', 'Otomatik', auto ? COLORS.find(c => c[0] === auto)[2] : '#fff', cur == null)}${sw('none', 'Yok', '#fff', cur === 'none')}
             ${COLORS.map(c => sw(c[0], c[1], `linear-gradient(180deg,#fff,${c[2]},#fff)`, cur === c[0])).join('')}</div>
         </div>
       </div>
-      <div class="foot"><button class="btn dash" id="del" style="min-width:0;color:var(--badtx)">Kaydı sil</button>
-        ${par && par.archived ? '' : `<button class="btn" id="arc" style="min-width:0">${r.archived ? 'Etüde geri al' : `${esc(sv.project.start.name)}-${esc(sv.project.end.name)} arşivine gönder`}</button>`}<span style="flex:1"></span><button class="btn" id="cancel">${r.obstacle ? 'Vazgeç' : 'Kaydı iptal et'}</button><button class="btn pri" id="ok">Kaydet</button></div>`;
+      <div class="foot"><button class="btn dash" id="del" style="min-width:0;color:var(--badtx)">Kaydı Sil</button>
+        ${par && par.archived ? '' : `<button class="btn" id="arc" style="min-width:0">${r.archived ? 'Etüde Geri Al' : `${esc(sv.project.start.name)} - ${esc(sv.project.end.name)} Arşivine Taşı`}</button>`}<span style="flex:1"></span><button class="btn" id="cancel">${r.obstacle ? 'İptal' : 'Kaydı İptal Et'}</button><button class="btn pri" id="ok">Kaydet</button></div>`;
       bind();
     };
     const read = () => {
@@ -1473,15 +1473,15 @@
           const cp = v => JSON.parse(JSON.stringify(v == null ? null : v));
           r.fields = cp(pa.fields) || {}; r.heights = cp(pa.heights) || []; r.widths = cp(pa.widths) || [];
           r.remarks = pa.remarks || ''; r.actions = pa.actions || ''; r.highlight = pa.highlight || null; r.actionAuto = pa.actionAuto !== false;
-          toast(`${pa.no || 'Ana engel'} bilgileri ve remark'ı alındı; değiştirebilirsin`);
+          toast(`${pa.no || 'Ana engel'} kaydının teknik bilgileri ve remark'ı aktarıldı; gerekirse düzenleyebilirsiniz.`);
         }
         DB.putSurvey(sv).then(() => V.record(id, rid)); };
       g('cnv').onchange = () => { if (g('cnv').value.trim()) setType(g('cnv').value.trim()); };
       const infq = g('infq'), bypq = g('bypq'), mainRec = r.parentId ? recs.find(x => x.id === r.parentId) : r;
       const keep = async () => { read(); autoAct(); await DB.putSurvey(sv); };
-      infq.onclick = () => sheet(`${mainRec.no} · Info ekle`, [
-        { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { await keep(); go(`#/cam/${sv.id}?info=${mainRec.id}`); } },
-        { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { await keep(); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: '' }); } },
+      infq.onclick = () => sheet(`${mainRec.no} · Info Kaydı Ekle`, [
+        { label: 'Fotoğraf Çek', icon: camSvg, cls: 'red', run: async () => { await keep(); go(`#/cam/${sv.id}?info=${mainRec.id}`); } },
+        { label: 'Galeriden Seç', icon: imgSvg, file: true, run: async f => { await keep(); createRecord(sv, { file: f, parent: mainRec, flag: 'INFO', name: '' }); } },
       ]);
       if (g('insq')) g('insq').onclick = () => insetSheet(sv, r, read);
       g('simq').onclick = async () => { await keep(); createRecord(sv, { parent: mainRec, flag: 'INFO', name: 'Satellite View', pending: 'sat' }); };
@@ -1492,28 +1492,28 @@
       document.querySelectorAll('[data-hl]').forEach(i => i.addEventListener('change', () => { read(); draw(); }));
       document.querySelectorAll('[data-hrs]').forEach(sel => sel.addEventListener('change', () => { const t = (PHRASES[r.obstacle] || [])[sel.value]; if (t == null) return; const inp = document.querySelector(`[data-hr="${sel.dataset.hrs}"]`); inp.value = t; sel.value = ''; read(); }));
       if (g('orig')) g('orig').onclick = () => showOriginal(r.photoId);
-      g('rep').onclick = () => sheet(u ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle', [
+      g('rep').onclick = () => sheet(u ? 'Fotoğrafı Değiştir' : 'Fotoğraf ekle', [
         { label: 'Fotoğraf çek', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?replace=${r.id}`); } },
         { label: 'Galeriden seç', icon: imgSvg, file: true, run: async f => { read(); await DB.delBlob(r.photoId); forget(r.photoId); r.photoId = await DB.putBlob(await to43(f)); r.pendingImage = null; await DB.putSurvey(sv); V.record(id, rid); } },
       ]);
-      if (g('xadd')) g('xadd').onclick = () => sheet(`${r.no} · Ek fotoğraf`, [
-        { label: 'Fotoğraf çek (art arda)', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?extra=${r.id}`); } },
-        { label: 'Galeriden seç (birden çok)', icon: imgSvg, file: true, multi: true, run: async fs => { read(); toast('Ekleniyor…'); for (const f of fs) r.extras.push(await DB.putBlob(await to43(f))); await DB.putSurvey(sv); picker(); } },
+      if (g('xadd')) g('xadd').onclick = () => sheet(`${r.no} · Ek Fotoğraf`, [
+        { label: 'Seri Çekim', icon: camSvg, cls: 'red', run: async () => { read(); await DB.putSurvey(sv); go(`#/cam/${sv.id}?extra=${r.id}`); } },
+        { label: 'Galeriden Çoklu Seçim', icon: imgSvg, file: true, multi: true, run: async fs => { read(); toast('Ekleniyor…'); for (const f of fs) r.extras.push(await DB.putBlob(await to43(f))); await DB.putSurvey(sv); picker(); } },
       ]);
       if (g('arc')) g('arc').onclick = async () => {
         read();
         if (r.archived && !r.parentId) return askPlace(sv, 'Etüde geri alınacak: hangi engelden sonra?', async t => {
-          r.archived = false; moveAfter(sv, [r], t); await DB.putSurvey(sv); SELST[sv.id] = { on: false, ids: [], tab: 's' }; toast('Etüde geri alındı'); go(`#/s/${sv.id}`);
+          r.archived = false; moveAfter(sv, [r], t); await DB.putSurvey(sv); SELST[sv.id] = { on: false, ids: [], tab: 's' }; toast('Kayıt etüde geri alındı.'); go(`#/s/${sv.id}`);
         });
         r.archived = !r.archived;
         if (r.archived && sv.bypassParent === r.id) sv.bypassParent = null;
         await DB.putSurvey(sv); SELST[sv.id] = { on: false, ids: [], tab: r.archived ? 'a' : 's' };
-        toast(r.archived ? 'Arşive gönderildi; rapora girmez' : 'Etüde geri alındı'); go(`#/s/${sv.id}`);
+        toast(r.archived ? 'Kayıt arşive taşındı; rapora dahil edilmez.' : 'Etüde geri alındı'); go(`#/s/${sv.id}`);
       };
-      g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum alınamadı'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
+      g('here').onclick = async () => { read(); const p = await GPS.current(); if (!p) return toast('Konum belirlenemedi.'); r.latDec = p.lat; r.lonDec = p.lon; r.lat = Geo.dms(p.lat, true); r.lon = Geo.dms(p.lon, false); draw(); };
       g('del').onclick = async e => {
         const b = e.target.closest('button');
-        if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Kaydı ve alt kayıtlarını sil'; return; }
+        if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Kaydı ve bağlı alt kayıtları kalıcı olarak silmeyi onaylayın'; return; }
         const gone = sv.records.filter(x => x.id === r.id || x.parentId === r.id);
         for (const x of gone) for (const b of [x.photoId, ...(x.extras || []), ...Object.values(x.insets || {})]) await DB.delBlob(b);
         sv.records = sv.records.filter(x => !gone.includes(x)); if (sv.bypassParent === r.id) sv.bypassParent = null; sv.selected = null;
@@ -1523,10 +1523,10 @@
         if (!r.obstacle) { for (const b of [r.photoId, ...(r.extras || [])]) await DB.delBlob(b); sv.records = sv.records.filter(x => x.id !== r.id); if (sv.bypassParent === r.id) sv.bypassParent = null; await DB.putSurvey(sv);  }
         go(`#/s/${sv.id}`);
       };
-      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Önce engel tipini seç'); return; }
-        if (isOH && r.heights.some(h => !h.label && h.value != null)) { toast('Her yükseklik için etiket seç (H, H1, H2, HL, HM, HR)'); return; }
+      g('ok').onclick = async () => { read(); if (!r.obstacle) { toast('Lütfen önce engel tipini seçin.'); return; }
+        if (isOH && r.heights.some(h => !h.label && h.value != null)) { toast('Her yükseklik ölçüsü için bir etiket seçin (H, H1, H2, HL, HM, HR).'); return; }
         if (isOH) r.heights = r.heights.filter(h => h.label || h.value != null);
-        if ((r.widths || []).some(w => !w.label && w.value != null)) { toast('Her genişlik için etiket seç (W, W1, W2)'); return; }
+        if ((r.widths || []).some(w => !w.label && w.value != null)) { toast('Her genişlik ölçüsü için bir etiket seçin (W, W1, W2).'); return; }
         if (r.widths) r.widths = r.widths.filter(w => w.label || w.value != null); autoAct(); await DB.putSurvey(sv);  go(`#/s/${sv.id}`); };
       $app.onclick = async e => {
         const ty = e.target.closest('[data-type]'), tc = e.target.closest('[data-tcustom]');
@@ -1537,9 +1537,9 @@
         if (nav) { read(); await DB.putSurvey(sv); return; }
         if (s) { read(); r.fields.type = s.dataset.sub; autoAct(); draw(); }
         if (p) applyPh(+p.dataset.ph);
-        if (e.target.closest('#phall')) { read(); sheet(`${OL(r.obstacle)} · hazır cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) })).concat(OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) })))); }
+        if (e.target.closest('#phall')) { read(); sheet(`${OL(r.obstacle)} · Hazır Cümleler`, PHRASES[r.obstacle].map((t, i) => ({ label: t, cls: 'phl', run: () => applyPh(i) })).concat(OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) })))); }
         const ow = e.target.closest('[data-own]'); if (ow) applyOwn(OWN[+ow.dataset.own]);
-        if (e.target.closest('#ownall')) { read(); sheet(`${OL(r.obstacle)} · bu etütte yazdıkların`, OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) }))); }
+        if (e.target.closest('#ownall')) { read(); sheet(`${OL(r.obstacle)} · Bu Etütte Kullanılanlar`, OWN.map(t => ({ label: t, cls: 'phl', run: () => applyOwn(t) }))); }
         if (c) { read(); r.highlight = c.dataset.col === 'auto' ? null : c.dataset.col; draw(); }
         if (hd) { read(); r.heights.splice(hd.dataset.hdel, 1); autoAct(); draw(); }
         const wd = e.target.closest('[data-wdel]'); if (wd) { read(); r.widths.splice(wd.dataset.wdel, 1); draw(); }
@@ -1556,13 +1556,13 @@
         const list = [r.photoId, ...r.extras].filter(Boolean); let h = '';
         for (let i = 0; i < list.length; i++) {
           const b = list[i], x = await viewUrl(b);
-          h += `<button class="pc ${b === chosen ? 'on' : ''}" data-c="${b}"><img src="${x}" alt="Fotoğraf ${i + 1}"><span class="lb">${b === chosen ? 'Raporda kullanılacak' : i + 1}</span>${b !== r.photoId ? `<span class="dl" data-del="${b}" role="button" aria-label="Bu fotoğrafı sil">×</span>` : ''}</button>`;
+          h += `<button class="pc ${b === chosen ? 'on' : ''}" data-c="${b}"><img src="${x}" alt="Fotoğraf ${i + 1}"><span class="lb">${b === chosen ? 'Raporda kullanılacak' : i + 1}</span>${b !== r.photoId ? `<span class="dl" data-del="${b}" role="button" aria-label="Bu Fotoğrafı sil">×</span>` : ''}</button>`;
         }
-        d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(OL(r.obstacle) || 'Engel')} — raporda kullanılacak fotoğrafı seç</b><span style="font-size:13px;color:#D1D5DB">${list.length} fotoğraf</span></div>
+        d.innerHTML = `<div class="ph-top"><b>${r.no} · ${esc(OL(r.obstacle) || 'Engel')} — Raporda Kullanılacak Fotoğrafı Seçin</b><span style="font-size:13px;color:#D1D5DB">${list.length} Fotoğraf</span></div>
           <div class="ph-grid">${h}</div>
           <div class="ph-foot"><button class="btn" data-x="1" style="background:#1F2937;color:#fff;border-color:#374151">Vazgeç</button>
-            <button class="btn" id="pmore" style="background:#1F2937;color:#fff;border-color:#374151">${camSvg} Daha çek</button><span style="flex:1"></span>
-            <button class="btn pri" id="puse" style="min-width:220px;background:#22C55E;border-color:#22C55E;color:#06260F">Bunu kullan</button></div>`;
+            <button class="btn" id="pmore" style="background:#1F2937;color:#fff;border-color:#374151">${camSvg} Ek Görüntü Al</button><span style="flex:1"></span>
+            <button class="btn pri" id="puse" style="min-width:220px;background:#22C55E;border-color:#22C55E;color:#06260F">Rapor Fotoğrafı Olarak Kullan</button></div>`;
       };
       await paint();
       d.onclick = async e => {
@@ -1578,7 +1578,7 @@
         if (e.target.closest('#puse')) {
           if (chosen !== r.photoId) {   // swap: the old report photo stays as an extra
             r.extras = r.extras.filter(x => x !== chosen); r.extras.unshift(r.photoId); r.photoId = chosen;
-            if ((r.ann || []).length) toast('Fotoğraf değişti; işaretleri kontrol et');
+            if ((r.ann || []).length) toast('Fotoğraf değiştirildi; işaretlemeleri kontrol edin.');
           }
           await DB.putSurvey(sv); d.remove(); V.record(id, rid);
         }
@@ -1589,7 +1589,7 @@
       const lw = settingsOf(sv).general ? null : pn((sv.project.cargo || {}).width), vals = (r.widths || []).map(w => Number(w.value)).filter(v => v > 0);
       if (!lw || !vals.length || isOH) return;
       const cur = (r.remarks || '').trim();
-      if (cur && ![W_OK, W_NO, 'The clearance is sufficient for transport.', 'No action required.'].includes(cur)) return;
+      if (cur && ![W_OK, W_NO, 'Clearance is sufficient for the passage of the convoy.', 'No mitigation required.', 'The clearance is sufficient for planned transportation operation. No action required.', 'The clearance is not sufficient for planned transportation operation.', 'The clearance is sufficient for transport.', 'No action required.'].includes(cur)) return;   // old wording too
       r.remarks = Math.min(...vals) >= lw ? W_OK : W_NO;
     }
     function applyOwn(t) { read(); r[textKey] = t; if (isOH) r.actionAuto = false; draw(); if (document.activeElement) document.activeElement.blur(); }
@@ -1601,19 +1601,19 @@
     autoAct(); draw();
     LATE.onfix = rr => {   // position arrived (or gave up) for a photo taken before the GPS had a fix
       const g = i => document.getElementById(i);
-      if (!g('la') || !location.hash.includes(rid)) { LATE.onfix = null; if (rr) toast(`${rr.no || ''} konumu alındı`); return; }
-      if (!rr) { g('lochint').textContent = 'Konum alınamadı, "Konumu güncelle" ya da elle gir'; return; }
+      if (!g('la') || !location.hash.includes(rid)) { LATE.onfix = null; if (rr) toast(`${rr.no || ''} konumu belirlendi.`); return; }
+      if (!rr) { g('lochint').textContent = 'Konum belirlenemedi. "Konumu Yeniden Belirle" ile tekrar deneyin veya koordinatları manuel girin.'; return; }
       if (rr.id !== r.id) return toast(`${rr.no || ''} konumu alındı`);
       if (g('maplink')) { g('maplink').href = mapsUrl(r.latDec, r.lonDec); g('maplink').style.display = ''; }
       g('la').value = r.latDec.toFixed(6); g('lo').value = r.lonDec.toFixed(6);
-      g('lochint').textContent = `${r.lat} · ${r.lon}`; toast(`Konum alındı (±${Math.round(r.acc)} m)`);
+      g('lochint').textContent = `${r.lat} · ${r.lon}`; toast(`Konum belirlendi (±${Math.round(r.acc)} m).`);
     };
     if (q.pick) { history.replaceState(null, '', `#/r/${id}/${rid}`); picker(); }
   };
 
   // ----- most critical obstacles: lowest heights (no cables), lowest widths, cables against their clearance -----
   let CRITF = 'all';
-  const KN = { all: 'Tümü', AG: 'AG', OG: 'OG', YG: 'YG', TEL: 'Telefon', RAIL: 'Demiryolu haberleşme', NA: 'Tipi seçilmemiş' };
+  const KN = { all: 'Tümü', AG: 'AG', OG: 'OG', YG: 'YG', TEL: 'Telefon Hattı', RAIL: 'Demiryolu Haberleşme Hattı', NA: 'Tip seçilmedi' };
   /* cables, most critical first: how much each clears its required jump height (AG/OG/YG reference; telephone and
      railroad communication cables use the AG one); general survey: plain height order */
   function cableRank(sv) {
@@ -1630,16 +1630,16 @@
     const P = sv.project, cg = P.general ? {} : cargoOf(P);
     const h = dimList(sv, 'heights', r => r.obstacle !== 'Overhead Cable').find(x => x.counted), w = dimList(sv, 'widths').find(x => x.counted), c = cableRank(sv).find(x => x.counted);
     const row = (t, x, low, extra) => `<button class="csum ${low ? 'low' : ''}" ${x ? `data-go="#/r/${sv.id}/${x.rec.id}"` : 'disabled'}><span>${t}</span>${x ? `<b>${fmt(x.value)} m</b><span class="hint">Engel ${esc(x.rec.no)}${x.status === 'bypass' ? ' (bypass)' : x.status === 'info' ? ' (info)' : ''}${extra || ''}</span>` : '<span class="hint">—</span>'}</button>`;
-    return `<div class="csums">${row('Kritik H', h, h && cg.height && h.value < Number(cg.height))}${row('Kritik W', w, w && cg.width && w.value < Number(cg.width))}${row('Kablo', c, c && c.margin != null && c.margin < 0, c ? ` · ${KN[c.k]}${c.margin != null ? ` · ${c.margin >= 0 ? '+' : ''}${fmt(Math.round(c.margin * 100) / 100)} m` : ''}` : '')}</div>`;
+    return `<div class="csums">${row('Kritik Yükseklik', h, h && cg.height && h.value < Number(cg.height))}${row('Kritik Genişlik', w, w && cg.width && w.value < Number(cg.width))}${row('Kablo', c, c && c.margin != null && c.margin < 0, c ? ` · ${KN[c.k]}${c.margin != null ? ` · ${c.margin >= 0 ? '+' : ''}${fmt(Math.round(c.margin * 100) / 100)} m` : ''}` : '')}</div>`;
   }
   V.crit = async id => {
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const P = sv.project, gen = !!P.general, cg = gen ? {} : cargoOf(P), st = settingsOf(sv), ref = R.refs(st);
-    const ST = { route: '', bypass: '<span class="tag sub">BYPASS</span>', info: '<span class="tag ok">INFO</span>', bypassed: '<span class="tag warn">bypass edildi · sayılmaz</span>' };
-    const where = x => x.status === 'bypass' ? 'bypass güzergahında' : x.status === 'bypassed' ? 'yük bu engelin bypass\'ından geçer' : x.status === 'info' ? 'info kaydı' : 'ana güzergahta';
+    const ST = { route: '', bypass: '<span class="tag sub">BYPASS</span>', info: '<span class="tag ok">INFO</span>', bypassed: '<span class="tag warn">bypass edildi · değerlendirme dışı</span>' };
+    const where = x => x.status === 'bypass' ? 'bypass güzergahında' : x.status === 'bypassed' ? 'yük, bu engelin bypass güzergahından geçer' : x.status === 'info' ? 'info kaydı' : 'ana güzergahta';
     const item = (x, top, extra, low) => `<button class="citem ${x.counted ? '' : 'off'} ${top ? 'top' : ''}" data-go="#/r/${sv.id}/${x.rec.id}">
         <span class="cv ${low ? 'low' : ''}">${fmt(x.value)} m</span>
-        <span class="ct"><b>${esc(x.rec.no)} · ${esc(OL(x.rec.obstacle) || 'Tip seçilmedi')}</b>
+        <span class="ct"><b>${esc(x.rec.no)} · ${esc(OL(x.rec.obstacle) || 'Tip Seçilmedi')}</b>
           <span class="hint">${esc(x.all.map(h => `${h.label || ''} ${fmt(Number(h.value))}`).join(' · '))}${x.rec.fields && x.rec.fields.type ? ' · ' + esc(x.rec.fields.type) : ''} · ${where(x)}</span>${extra || ''}</span>
         <span class="cb">${top ? '<span class="tag bad">KRİTİK</span>' : ''}${ST[x.status]}</span></button>`;
     const col = (list, limit) => { let first = true; return list.map(x => { const top = first && x.counted; if (top) first = false; return item(x, top, '', limit && x.counted && x.value < limit); }).join('') || '<div class="empty">Kayıt yok</div>'; };
@@ -1651,15 +1651,15 @@
     let firstC = true;
     const cabHtml = shown.map(x => {
       const top = firstC && x.counted; if (top) firstC = false;
-      const extra = x.need != null ? `<span class="hint">${KN[x.k]} referansı ${fmt(x.need)} m · fark <b style="color:${x.margin < 0 ? 'var(--badtx)' : 'var(--oktx)'}">${x.margin >= 0 ? '+' : ''}${fmt(Math.round(x.margin * 100) / 100)} m</b></span>`
-        : `<span class="hint">${x.k === 'NA' ? 'Hat tipi seçilmemiş' : KN[x.k]}${gen ? ' · genel etüt: yalnız yüksekliğe göre' : ''}</span>`;
+      const extra = x.need != null ? `<span class="hint">${KN[x.k]} emniyet mesafesi ${fmt(x.need)} m · fark <b style="color:${x.margin < 0 ? 'var(--badtx)' : 'var(--oktx)'}">${x.margin >= 0 ? '+' : ''}${fmt(Math.round(x.margin * 100) / 100)} m</b></span>`
+        : `<span class="hint">${x.k === 'NA' ? 'Hat tipi tanımlanmadı' : KN[x.k]}${gen ? ' · genel etüt: yalnızca yükseklik esas alınır' : ''}</span>`;
       return item(x, top, extra, x.margin != null && x.margin < 0 && x.counted);
-    }).join('') || '<div class="empty">Yüksekliği girilmiş kablo yok</div>';
-    $app.innerHTML = `${bar('Kritik Engeller', `#/s/${sv.id}`, minHBox(sv) + cargoBox(P))}
+    }).join('') || '<div class="empty">Yükseklik ölçüsü girilmiş enerji hattı bulunmuyor</div>';
+    $app.innerHTML = `${bar('Kritik Engel Analizi', `#/s/${sv.id}`, minHBox(sv) + cargoBox(P))}
       <div class="crit3">
-        <div class="pane box"><div class="ch"><b>1 · Kritik H</b><span class="hint">Kablolar hariç · en alçaktan yükseğe · bypass edilen engeller gri</span></div>${col(hs, Number(cg.height) || null)}</div>
-        <div class="pane box"><div class="ch"><b>2 · Kritik W</b><span class="hint">Tüm engeller · en darından genişe</span></div>${col(ws, Number(cg.width) || null)}</div>
-        <div class="pane box"><div class="ch"><b>3 · Kablolar</b><span class="hint">${gen ? 'Genel etüt: en alçaktan yükseğe' : `Atlama referansına göre en kritikten rahata (AG ${fmt(ref.LV)} · OG ${fmt(ref.MV)} · YG ${fmt(ref.HV)} m)`}</span>
+        <div class="pane box"><div class="ch"><b>1 · Kritik H</b><span class="hint">Enerji hatları hariç · en düşük açıklıktan en yükseğe · bypass edilen engeller gri</span></div>${col(hs, Number(cg.height) || null)}</div>
+        <div class="pane box"><div class="ch"><b>2 · Kritik W</b><span class="hint">Tüm engeller · en dar geçişten en genişe</span></div>${col(ws, Number(cg.width) || null)}</div>
+        <div class="pane box"><div class="ch"><b>3 · Kablolar</b><span class="hint">${gen ? 'Genel etüt: en alçaktan en yükseğe' : `Atlama referansına göre en kritikten rahata (AG ${fmt(ref.LV)} · OG ${fmt(ref.MV)} · YG ${fmt(ref.HV)} m)`}</span>
           <div class="chips">${kinds.map(k => `<button class="chip ${CRITF === k ? 'on' : ''}" data-cf="${k}">${KN[k]} · ${k === 'all' ? cab.length : cab.filter(x => x.k === k).length}</button>`).join('')}</div></div>${cabHtml}</div>
       </div>`;
     $app.onclick = e => { const c = e.target.closest('[data-cf]'); if (c) { CRITF = c.dataset.cf; V.crit(id); } };
@@ -1682,32 +1682,32 @@
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     const r = sv.records.find(x => x.id === rid); if (!r) return go(`#/s/${id}`);
     const u = await viewUrl(r.photoId), items = JSON.parse(JSON.stringify(r.ann || [])); let sel = -1;
-    $app.innerHTML = `${bar('Fotoğrafı işaretle', `#/r/${id}/${rid}`)}
+    $app.innerHTML = `${bar('Fotoğraf İşaretleme', `#/r/${id}/${rid}`)}
       <div class="split wide">
         <div class="pane photo-stage" style="overflow:hidden"><div class="photo" id="stage">${u ? `<img src="${u}" alt="">` : ''}<div id="lay" style="position:absolute;inset:0"></div></div></div>
         <div class="pane">
-          <div class="sec">Yön oku</div>
-          <div class="tools"><button class="btn sm" data-add="yarrow"><svg viewBox="0 0 40 20" width="36" height="18"><polygon points="2,7 26,7 26,2 38,10 26,18 26,13 2,13" fill="#FFE500" stroke="#9A8600" stroke-width="1"/></svg> Sarı yön oku</button></div>
-          <div class="sec">Ölçü</div>
+          <div class="sec">Taşıma Yönü</div>
+          <div class="tools"><button class="btn sm" data-add="yarrow"><svg viewBox="0 0 40 20" width="36" height="18"><polygon points="2,7 26,7 26,2 38,10 26,18 26,13 2,13" fill="#FFE500" stroke="#9A8600" stroke-width="1"/></svg> Taşıma yönü oku (zemin)</button></div>
+          <div class="sec">Ölçü Çizgileri</div>
           <div class="tools"><button class="btn sm" data-add="h">↕ Yükseklik (H:)</button><button class="btn sm" data-add="w">↔ Genişlik (W:)</button></div>
-          <div class="sec">Tabela</div>
-          <div class="tools signs">${[['turnL', 'Sola dönüş'], ['turnR', 'Sağa dönüş'], ['uturn', 'U dönüşü'], ['up', 'Yokuş %'], ['down', 'İniş %']].map(([t, l]) => `<button class="btn sm" data-add="s:${t}" title="${l}"><span style="width:26px;height:23px;display:inline-block">${annSign({ t, text: '' })}</span> ${l}</button>`).join('')}</div>
+          <div class="sec">Trafik İşaretleri</div>
+          <div class="tools signs">${[['turnL', 'Sola dönüş'], ['turnR', 'Sağa dönüş'], ['uturn', 'U dönüşü'], ['up', 'Rampa eğimi %'], ['down', 'İniş eğimi %']].map(([t, l]) => `<button class="btn sm" data-add="s:${t}" title="${l}"><span style="width:26px;height:23px;display:inline-block">${annSign({ t, text: '' })}</span> ${l}</button>`).join('')}</div>
           <div class="sec">Diğer</div>
-          <div class="tools"><button class="btn sm" data-add="text">+ Not kutusu</button><button class="btn sm" data-add="line">+ Kırmızı ok</button><button class="btn sm" data-add="pline">+ Çizgi</button></div>
-          <div class="hint">Öğeye dokunup sürükle. Okların iki ucunu ayrı ayrı taşıyabilirsin.</div>
+          <div class="tools"><button class="btn sm" data-add="text">+ Metin Kutusu</button><button class="btn sm" data-add="line">+ Kırmızı Ok</button><button class="btn sm" data-add="pline">+ Çizgi</button></div>
+          <div class="hint">Öğeye dokunarak taşıyın. Okların her iki ucu ayrı ayrı konumlandırılabilir.</div>
           <div id="ctl"></div>
         </div>
       </div>
-      <div class="foot"><button class="btn pri" id="ok">Bitti</button></div>`;
+      <div class="foot"><button class="btn pri" id="ok">Tamamla</button></div>`;
     const stage = document.getElementById('stage'), lay = document.getElementById('lay'), ctl = document.getElementById('ctl');
     const paint = () => {
       lay.innerHTML = annHtml(items, sel);
       const o = items[sel];
       const slope = o && o.k === 'sign' && (o.t === 'up' || o.t === 'down');
-      ctl.innerHTML = !o ? '' : `<div class="card"><div class="sec">Seçili öğe</div>${o.k === 'text' ? `<label class="f">Not metni<textarea id="tv" rows="2">${esc(o.text)}</textarea></label>` : ''}
+      ctl.innerHTML = !o ? '' : `<div class="card"><div class="sec">Seçili Öğe</div>${o.k === 'text' ? `<label class="f">Not metni<textarea id="tv" rows="2">${esc(o.text)}</textarea></label>` : ''}
         ${slope ? `<label class="f">Tabeladaki eğim<input id="tv" value="${esc(o.text)}" placeholder="%8"></label>` : ''}
-        <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Döndür</button><button class="btn sm" data-c="rr">↻ Döndür</button>' : ''}
-        ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Yassılaştır</button><button class="btn sm" data-c="tall">Diklet</button>' : ''}
+        <div class="tools">${['arrow', 'garrow', 'sign'].includes(o.k) ? '<button class="btn sm" data-c="rl">↺ Sola Döndür</button><button class="btn sm" data-c="rr">↻ Sağa Döndür</button>' : ''}
+        ${o.k === 'garrow' ? '<button class="btn sm" data-c="flat">Zemine Yatır</button><button class="btn sm" data-c="tall">Dikleştir</button>' : ''}
         ${o.k === 'garrow' ? ['straight', 'left', 'right'].map(d => `<button class="btn sm ${o.dir === d ? 'pri' : ''}" data-c="dir:${d}">${annGArrow(d)}</button>`).join('') : ''}
         ${o.k === 'line' ? `<button class="btn sm ${o.plain ? 'pri' : ''}" data-c="plain">Düz çizgi</button><button class="btn sm ${!o.plain && !o.both ? 'pri' : ''}" data-c="one">Tek uçlu ok</button><button class="btn sm ${o.both && !o.plain ? 'pri' : ''}" data-c="both">Çift uçlu</button><button class="btn sm" data-c="lthick">Kalınlaştır</button><button class="btn sm" data-c="lthin">İncelt</button>` : ''}
         ${o.k === 'yarrow' ? '<button class="btn sm" data-c="thick">Kalınlaştır</button><button class="btn sm" data-c="thin">İncelt</button>' : ''}</div>
@@ -1786,54 +1786,54 @@
     const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
     const P = sv.project, last = (await DB.getSetting('headerDefaults')) || {};
     const H = P.header = Object.assign({ client: P.client || '', project: '', route: `${P.start.name} - ${P.end.name}`, country: '', date: longDate(new Date()), docNo: last.docNo || '', rev: P.rev || '00', revDate: last.revDate || '' }, P.header || {});
-    if (H.route === `${P.start.name} - ${P.end.name} Arası Yol Etüdü`) H.route = `${P.start.name} - ${P.end.name}`;   // older default
+    if (H.route === `${P.start.name} - ${P.end.name} Güzergah Etüdü`) H.route = `${P.start.name} - ${P.end.name}`;   // older default
     const R2 = sv.r2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
     const NEED = ['client', 'project', 'country', 'date', 'docNo', 'rev', 'revDate'], missing = NEED.filter(k => !String(H[k] || '').trim());
     const lg = { company: await blobUrl(await DB.getSetting('companyLogo')) || 'assets/logo_company.jpg', partner: await blobUrl(await DB.getSetting('partnerLogo')) || 'assets/logo_cjicm.jpg', client1: await blobUrl(sv.logos.client1), client2: await blobUrl(sv.logos.client2) };
     const hf = (k, t, ph) => `<label class="f">${t}<input data-h="${k}" value="${esc(H[k] || '')}" ${ph ? `placeholder="${ph}"` : ''} style="${NEED.includes(k) && !String(H[k] || '').trim() ? 'border:2px solid var(--red)' : ''}"></label>`;
-    const lslot = (k, t) => `<label class="logo" style="cursor:pointer"><b>${t}</b><span class="pv">${lg[k] ? `<img src="${lg[k]}" alt="">` : imgSvg + ' Yükle'}</span><span class="hint">Değiştirmek için dokun</span><input class="hid" type="file" accept="image/*" data-r2logo="${k}"></label>`;
+    const lslot = (k, t) => `<label class="logo" style="cursor:pointer"><b>${t}</b><span class="pv">${lg[k] ? `<img src="${lg[k]}" alt="">` : imgSvg + ' Yükle'}</span><span class="hint">Değiştirmek için dokunun</span><input class="hid" type="file" accept="image/*" data-r2logo="${k}"></label>`;
     const ropt = (name, v, t, cur) => `<label class="row" style="border:${cur === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:8px 10px;font-size:14px;background:var(--card2)"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
     const nf = recs.filter(r => r.flag === 'BYPASS').length, ni = recs.filter(r => r.flag === 'INFO').length;
     const miss = recs.filter(r => !r.photoId).length, nopos = recs.filter(r => r.latDec == null).length;
     c.bridge = c.bridge || 'required'; c.road = c.road || 'paved_ok';
     const opt = (k, v, t) => `<label class="row" style="border:${c[k] === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="${k}" value="${v}" ${c[k] === v ? 'checked' : ''} style="width:18px;height:18px">${t}</label>`;
-    $app.innerHTML = `${bar('Rapor oluştur', `#/s/${id}`, cargoBox(sv.project))}
+    $app.innerHTML = `${bar('Rapor Oluşturma', `#/s/${id}`, cargoBox(sv.project))}
     <div class="split even">
       <div class="pane">
-        <div class="card"><b>Antet bilgileri <span class="hint">(engel sayfalarının üst tablosu)</span></b>
-          ${missing.length ? '<div class="note w">Raporu açmadan önce kırmızı alanları doldur.</div>' : ''}
+        <div class="card"><b>Antet Bilgileri <span class="hint">(engel sayfalarının üst tablosu)</span></b>
+          ${missing.length ? '<div class="note w">Raporu oluşturmadan önce kırmızı ile işaretlenen zorunlu alanları doldurun.</div>' : ''}
           <div class="g2">${hf('client', 'Müşteri / Client')}${hf('date', 'Tarih / Date')}</div>
-          <div class="g2">${hf('project', 'Proje / Project', 'ör. Mozambique Inhassoro Project')}${hf('docNo', 'Doküman No / Doc. No', 'ör. RS-102026-MOZ-001-SB')}</div>
+          <div class="g2">${hf('project', 'Proje / Project', 'Örn. Mozambique Inhassoro Project')}${hf('docNo', 'Doküman No / Doc. No', 'Örn. RS-102026-MOZ-001-SB')}</div>
           <div class="g2">${hf('route', 'Güzergah / Route')}${hf('rev', 'Revizyon No / Rev. No')}</div>
-          <div class="g2">${hf('country', 'Ülke / Country')}${hf('revDate', 'Revizyon Tarihi / Date', 'ör. 13 November 2026')}</div></div>
-        <div class="card"><b>Engel sayfası logoları</b>
-          <span class="sec">Sol üst</span>
-          ${ropt('r2head', 'caba', 'Yalnız Çaba Misnak', R2.head)}${ropt('r2head', 'caba_cj', 'Çaba Misnak + CJ ICM', R2.head)}${ropt('r2head', 'cj_caba', 'CJ ICM + Çaba Misnak', R2.head)}
-          <span class="sec">Sol alt (müşteri)</span>
-          ${ropt('r2foot', '0', 'Logo yok', String(R2.foot))}${ropt('r2foot', '1', 'Tek müşteri logosu', String(R2.foot))}${ropt('r2foot', '2', 'İki müşteri logosu', String(R2.foot))}
-          <div class="g4">${lslot('company', 'Çaba Misnak')}${lslot('partner', 'CJ ICM')}${lslot('client1', 'Müşteri-1')}${lslot('client2', 'Müşteri-2')}</div>
-          <span class="hint">Kapak ve dikey sayfaların logoları "Etüt bilgileri"ndeki köşe ve kapak düzeni ayarlarıyla gelir.</span></div>
+          <div class="g2">${hf('country', 'Ülke / Country')}${hf('revDate', 'Revizyon Tarihi / Rev. Date', 'Örn. 13 November 2026')}</div></div>
+        <div class="card"><b>Engel Paftası Logoları</b>
+          <span class="sec">Sol Üst</span>
+          ${ropt('r2head', 'caba', 'Yalnızca Çaba Misnak', R2.head)}${ropt('r2head', 'caba_cj', 'Çaba Misnak + CJ ICM', R2.head)}${ropt('r2head', 'cj_caba', 'CJ ICM + Çaba Misnak', R2.head)}
+          <span class="sec">Sol Alt (Müşteri)</span>
+          ${ropt('r2foot', '0', 'Logo kullanılmasın', String(R2.foot))}${ropt('r2foot', '1', 'Tek müşteri logosu', String(R2.foot))}${ropt('r2foot', '2', 'İki müşteri logosu', String(R2.foot))}
+          <div class="g4">${lslot('company', 'Çaba Misnak')}${lslot('partner', 'CJ ICM')}${lslot('client1', 'Müşteri 1')}${lslot('client2', 'Müşteri 2')}</div>
+          <span class="hint">Kapak ve dikey sayfa logoları, "Etüt Bilgileri" bölümündeki logo ve kapak düzeni ayarlarından alınır.</span></div>
         <div class="card"><b>1.5 Brief Information <span class="tag ok">Otomatik</span></b>
           <div class="stat4"><div><b>${Math.round(Math.max(0, ...recs.filter(r => !r.flag).map(r => r.km || 0)))}</b><span>km</span></div><div><b>${cnt(['Bridge'])}</b><span>köprü</span></div>
-            <div><b>${cnt(['Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn'])}</b><span>dönüş/viraj</span></div><div><b>${cnt(['Overhead Structure'])}</b><span>üst yapı</span></div></div></div>
-        <div class="card"><b>Engel sayfaları</b><span class="hint">${recs.length} kayıt · yeni taslakta her kayıt (INFO/BYPASS dahil) ayrı yatay sayfa · ${recs.length - nf - ni} ana, ${nf} BYPASS, ${ni} INFO · arşivdekiler hariç</span>
+            <div><b>${cnt(['Left Turn', 'Right Turn', 'Curve', 'U Turn', 'Roundabout Turn'])}</b><span>dönüş/viraj</span></div><div><b>${cnt(['Overhead Structure'])}</b><span>üst geçit yapısı</span></div></div></div>
+        <div class="card"><b>Engel Paftaları</b><span class="hint">${recs.length} kayıt · her kayıt (INFO/BYPASS dahil) ayrı paftada · ${recs.length - nf - ni} ana, ${nf} BYPASS, ${ni} INFO · arşivdekiler hariç</span>
           ${miss ? `<span class="note w">${miss} kayıtta fotoğraf yok.</span>` : ''}${nopos ? `<span class="note w">${nopos} kayıtta konum yok.</span>` : ''}</div>
-        <div class="card"><b>2 Transportation Drawing</b><span class="hint">${sv.logos.drawing ? 'Taşıma çizimi (PDF) yüklü; tüm sayfaları rapora eklenir.' : 'Çizim yüklenmedi. PDF olarak istediğin zaman ekleyebilirsin.'}</span>
-          <div class="row" style="flex-wrap:wrap"><label class="btn sm" style="cursor:pointer">${sv.logos.drawing ? 'Çizimi değiştir (PDF)' : 'Çizim ekle (PDF)'}<input class="hid" type="file" accept="application/pdf,.pdf" id="drw"></label>${sv.logos.drawing ? '<button class="btn sm" id="drwrm" style="color:var(--badtx)">Çizimi kaldır</button>' : ''}</div></div>
-        <div class="hint">Giriş metinleri, kısaltmalar, 4.2–4.8 standart metinleri ve referans fotoğrafları otomatik eklenir. Güzergah haritası internet varsa OpenStreetMap'ten çizilir.</div>
+        <div class="card"><b>2 Transportation Drawing</b><span class="hint">${sv.logos.drawing ? 'Taşıma çizimi (PDF) yüklendi; tüm sayfaları rapora eklenecek.' : 'Taşıma çizimi henüz yüklenmedi. Dilediğiniz aşamada PDF olarak ekleyebilirsiniz.'}</span>
+          <div class="row" style="flex-wrap:wrap"><label class="btn sm" style="cursor:pointer">${sv.logos.drawing ? 'Taşıma Çizimini Güncelle (PDF)' : 'Taşıma Çizimi Ekle (PDF)'}<input class="hid" type="file" accept="application/pdf,.pdf" id="drw"></label>${sv.logos.drawing ? '<button class="btn sm" id="drwrm" style="color:var(--badtx)">Taşıma Çizimini Kaldır</button>' : ''}</div></div>
+        <div class="hint">Giriş bölümü, kısaltmalar, 4.2–4.8 standart metinleri ve referans Fotoğraflar otomatik eklenir. İnternet bağlantısı mevcutsa güzergah haritası OpenStreetMap verisiyle oluşturulur.</div>
       </div>
       <div class="pane">
-        <div class="card"><b>Haritalar (yeni taslak)</b>
-          <span class="hint">Her engel sayfasında: güzergahın tamamı üzerinde engelin yeri ve engelin yakın uydu görüntüsü. Rapor açılırken internetten alınır.</span>
-          ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (anahtarsız; taslaktaki uydu görüntüsü gibi)' : 'Google Maps (API anahtarı gerekir)'}</label>`).join('')}
+        <div class="card"><b>Harita Kaynakları</b>
+          <span class="hint">Her engel paftasında güzergahın tamamı üzerinde engelin konumu ve engelin yakın uydu görüntüsü yer alır. Haritalar rapor oluşturulurken çevrimiçi kaynaklardan alınır.</span>
+          ${['esri', 'google'].map(v => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:10px;font-size:14px;background:var(--card2)"><input type="radio" name="mapProvider" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:18px;height:18px">${v === 'esri' ? 'Esri uydu + OpenStreetMap (API anahtarı gerekmez)' : 'Google Haritalar (API anahtarı gerekir)'}</label>`).join('')}
           <label class="f" style="${mp.provider === 'google' ? '' : 'display:none'}">Google Maps API anahtarı<input id="gkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label></div>
-        <div class="card"><b>4.1 Bridge</b>${opt('bridge', 'done_ok', 'Statik analiz yapıldı, tüm köprüler uygun')}${opt('bridge', 'required', 'Statik analiz gerekli')}${opt('bridge', 'custom', 'Kendi metnimi yazacağım')}
+        <div class="card"><b>4.1 Bridge</b>${opt('bridge', 'done_ok', 'Statik analiz yapıldı, tüm köprüler uygun')}${opt('bridge', 'required', 'Statik analiz gerekli')}${opt('bridge', 'custom', 'Özel Sonuç Metni Yazılacak')}
           <label class="f" style="${c.bridge === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="bt" rows="5">${esc(c.bridgeText || '')}</textarea></label></div>
-        <div class="card"><b>4.6 Road condition</b>${opt('road', 'paved_ok', 'Yol uygun, tamamı asfalt, kritik dar nokta yok')}${opt('road', 'custom', 'Kendi metnimi yazacağım')}
+        <div class="card"><b>4.6 Road condition</b>${opt('road', 'paved_ok', 'Yol uygun, tamamı asfalt kaplama, kritik dar geçiş yok')}${opt('road', 'custom', 'Kendi metnimi yazacağım')}
           <label class="f" style="${c.road === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="rt" rows="4">${esc(c.roadText || '')}</textarea></label></div>
       </div>
     </div>
-    <div class="foot"><button class="btn" id="mkold" style="min-width:0">Eski format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu aç ve PDF al</button></div>`;
+    <div class="foot"><button class="btn" id="mkold" style="min-width:0">Önceki Format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu Oluştur ve PDF Olarak Al</button></div>`;
     const save = async () => {
       const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim();
       mp.key = document.getElementById('gkey').value.trim(); await DB.setSetting('maps', mp);
@@ -1845,11 +1845,11 @@
     const drw = document.getElementById('drw');
     if (drw) drw.onchange = async () => {
       const f = drw.files[0]; if (!f) return;
-      if (!/pdf$/i.test(f.type) && !/\.pdf$/i.test(f.name)) return toast('Taşıma çizimi PDF olmalı');
-      await save(); await DB.delBlob(sv.logos.drawing); sv.logos.drawing = await DB.putBlob(new Blob([f], { type: 'application/pdf' })); await DB.putSurvey(sv); toast('Taşıma çizimi eklendi'); V.report(id);
+      if (!/pdf$/i.test(f.type) && !/\.pdf$/i.test(f.name)) return toast('Taşıma çizimi PDF formatında olmalıdır.');
+      await save(); await DB.delBlob(sv.logos.drawing); sv.logos.drawing = await DB.putBlob(new Blob([f], { type: 'application/pdf' })); await DB.putSurvey(sv); toast('Taşıma çizimi eklendi.'); V.report(id);
     };
     const drwrm = document.getElementById('drwrm');
-    if (drwrm) drwrm.onclick = async () => { if (drwrm.dataset.sure !== '1') { drwrm.dataset.sure = '1'; drwrm.textContent = 'Emin misin? Kaldır'; return; } await save(); await DB.delBlob(sv.logos.drawing); delete sv.logos.drawing; await DB.putSurvey(sv); V.report(id); };
+    if (drwrm) drwrm.onclick = async () => { if (drwrm.dataset.sure !== '1') { drwrm.dataset.sure = '1'; drwrm.textContent = 'Kaldırmayı Onayla'; return; } await save(); await DB.delBlob(sv.logos.drawing); delete sv.logos.drawing; await DB.putSurvey(sv); V.report(id); };
     document.querySelectorAll('[data-r2logo]').forEach(inp => inp.addEventListener('change', async () => {
       if (!inp.files[0]) return; await save();
       const k = inp.dataset.r2logo, blob = await shrink(inp.files[0], 1200);
@@ -1869,12 +1869,12 @@
     };
     document.getElementById('mk').onclick = async () => {
       await save();
-      if (NEED.some(k => !String(H[k] || '').trim())) { toast('Önce antet bilgilerini doldur'); return V.report(id); }
-      if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını gir ya da Esri seç');
+      if (NEED.some(k => !String(H[k] || '').trim())) { toast('Lütfen önce antet bilgilerini tamamlayın.'); return V.report(id); }
+      if (mp.provider === 'google' && !mp.key) return toast('Google için API anahtarını girin veya Esri\'yi seçin.');
       if (PREF.orient === 'p' || PREF.orient === 'l') { location.href = `report2.html?o=${PREF.orient}#${id}`; return; }   // Ayarlar → Genel: always this orientation
       sheet('Etüt raporu hangi paftayla çıksın?', [
-        { label: 'Dikey pafta (A4 dikey, her engel bir sayfa)', cls: 'pri', run: () => { location.href = `report2.html?o=p#${id}`; } },
-        { label: 'Yatay pafta (A4 yatay, her engel bir sayfa)', cls: 'pri', run: () => { location.href = `report2.html?o=l#${id}`; } },
+        { label: 'Dikey Pafta (A4 dikey, her engel ayrı paftada)', cls: 'pri', run: () => { location.href = `report2.html?o=p#${id}`; } },
+        { label: 'Yatay Pafta (A4 yatay, her engel ayrı paftada)', cls: 'pri', run: () => { location.href = `report2.html?o=l#${id}`; } },
       ]);
     };
     document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
@@ -1887,13 +1887,13 @@
       try {
         await Capacitor.nativePromise('Filesystem', 'writeFile', { path: 'Etütler/' + name, directory: 'DOCUMENTS', data: text, encoding: 'utf8', recursive: true });
         const u = await Capacitor.nativePromise('Filesystem', 'getUri', { path: 'Etütler/' + name, directory: 'DOCUMENTS' });
-        try { await Capacitor.nativePromise('Share', 'share', { title: name, files: [u.uri], dialogTitle: 'Etüt düzenini gönder' }); } catch (e) {}
+        try { await Capacitor.nativePromise('Share', 'share', { title: name, files: [u.uri], dialogTitle: 'Etüt Şablonunu Paylaş' }); } catch (e) {}
         return toast('Kaydedildi: Belgeler/Etütler/' + name);
       } catch (e) { /* fall through to download */ }
     }
     const blob = new Blob(['﻿' + text], { type: 'text/plain;charset=utf-8' });
     if (window.showSaveFilePicker) {
-      try { const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Etüt düzeni', accept: { 'text/plain': ['.txt'] } }] }); const w = await h.createWritable(); await w.write(blob); await w.close(); return toast('Kaydedildi: ' + h.name); }
+      try { const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Etüt şablonu', accept: { 'text/plain': ['.txt'] } }] }); const w = await h.createWritable(); await w.write(blob); await w.close(); return toast('Kaydedildi: ' + h.name); }
       catch (e) { if (e && e.name === 'AbortError') return; }
     }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
@@ -1911,7 +1911,7 @@
     const D = SET.draft;
     if (!SET.key || !D.types.some(t => t.key === SET.key)) SET.key = D.types[0].key;
     const T = D.types.find(t => t.key === SET.key), ti = D.types.indexOf(T);
-    const tabs = [['general', 'Genel'], ['layout', 'Etüt düzeni (engel tipleri)'], ['look', 'Görünüm'], ['maps', 'Haritalar']];
+    const tabs = [['general', 'Genel'], ['layout', 'Etüt Şablonu (Engel Tipleri)'], ['look', 'Görünüm'], ['maps', 'Harita Kaynakları']];
     const DEF = (await DB.getSetting('defaults')) || {};
     let gen = '';
     if (SET.tab === 'general') {
@@ -1920,19 +1920,19 @@
       const mb = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : Math.round(b / 1048576) + ' MB';
       const pick = (k, cur, list) => `<div class="g3">${list.map(([v, l]) => `<button class="chip ${cur === v ? 'on' : ''}" data-pf="${k}" data-v="${v}" style="border-radius:12px;min-height:52px">${l}</button>`).join('')}</div>`;
       gen = `<div class="pane" style="max-width:820px;gap:14px">
-        <div class="sec">Yeni etütlerde hazır gelen bilgiler</div>
+        <div class="sec">Yeni Etütler İçin Varsayılan Bilgiler</div>
         <div class="g2"><label class="f">Hazırlayanlar (her satıra bir isim)<textarea id="dprep" rows="3">${esc((DEF.preparedBy || []).join('\n'))}</textarea></label>
-          <span style="display:flex;flex-direction:column;gap:10px"><label class="f">Firma adı<input id="dcomp" value="${esc(DEF.company || '')}"></label><label class="f">Firma kısa adı<input id="dcs" value="${esc(DEF.companyShort || '')}"></label></span></div>
-        <div class="row"><button class="btn pri sm" id="dsave">Kaydet</button><span class="hint">Son kaydedilen etütten de otomatik güncellenir.</span></div>
-        <div class="sec">Rapor paftası</div>${pick('orient', PREF.orient, [['ask', 'Her seferinde sor'], ['p', 'Hep dikey (A4 dikey)'], ['l', 'Hep yatay (A4 yatay)']])}
-        <div class="sec">Yazı ve düğme boyutu (bu cihaz)</div>${pick('zoom', String(PREF.zoom || 1), [['1', 'Normal'], ['1.12', 'Büyük'], ['1.25', 'Çok büyük']])}
-        <div class="sec">Yedekleme</div>
-        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">${bst.supported ? `Konum: <b>${esc(bst.has ? bkWhere(bst) : 'seçilmedi')}</b>${bst.last ? ' · son yedek ' + new Date(bst.last).toLocaleString('tr-TR') : ' · henüz yedek alınmadı'}` : 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor; "Dışa Aktar" ile ZIP alınabilir.'}</span>${bst.supported ? '<button class="btn sm" id="gbk">Yedekle / konum seç</button>' : ''}</div>
+          <span style="display:flex;flex-direction:column;gap:10px"><label class="f">Firma Unvanı<input id="dcomp" value="${esc(DEF.company || '')}"></label><label class="f">Firma Kısa Adı<input id="dcs" value="${esc(DEF.companyShort || '')}"></label></span></div>
+        <div class="row"><button class="btn pri sm" id="dsave">Kaydet</button><span class="hint">Son kaydedilen etüt bilgileriyle otomatik olarak güncellenir.</span></div>
+        <div class="sec">Varsayılan Rapor Paftası</div>${pick('orient', PREF.orient, [['ask', 'Her raporda sor'], ['p', 'Her zaman dikey (A4 dikey)'], ['l', 'Her zaman yatay (A4 yatay)']])}
+        <div class="sec">Yazı ve Düğme Boyutu (bu cihaz)</div>${pick('zoom', String(PREF.zoom || 1), [['1', 'Normal'], ['1.12', 'Büyük'], ['1.25', 'Çok büyük']])}
+        <div class="sec">Veri Yedekleme</div>
+        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">${bst.supported ? `Konum: <b>${esc(bst.has ? bkWhere(bst) : 'seçilmedi')}</b>${bst.last ? ' · son yedekleme ' + new Date(bst.last).toLocaleString('tr-TR') : ' · henüz yedekleme yapılmadı'}` : 'Bu tarayıcı klasöre yedeklemeyi desteklemiyor; "Dışa Aktar" ile ZIP dosyası alabilirsiniz.'}</span>${bst.supported ? '<button class="btn sm" id="gbk">Yedekle / Konum Tanımla</button>' : ''}</div>
         <div class="sec">Depolama</div>
-        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">${nsv} etüt bu cihazda${est && est.usage ? ` · kullanılan ${mb(est.usage)}${est.quota ? ' / ' + mb(est.quota) : ''}` : ''} · önizleme önbelleği ${ci.cache} dosya</span><button class="btn sm" id="gcc">Önizleme önbelleğini temizle</button></div>
+        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">Bu cihazda ${nsv} etüt kayıtlı${est && est.usage ? ` · kullanılan ${mb(est.usage)}${est.quota ? ' / ' + mb(est.quota) : ''}` : ''} · önizleme önbelleği ${ci.cache} dosya</span><button class="btn sm" id="gcc">Önizleme Önbelleğini Temizle</button></div>
         <span class="hint">Önbellek: liste küçük resimleri ve ekran kopyaları. Silinirse gerektiğinde yeniden oluşur; fotoğraflar ve etütler silinmez.</span>
-        <div class="sec">Hakkında</div>
-        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">GoSurvey ${APP_VER} · ${esc(Auth.platform ? Auth.platform() : '')}${window.GoSurveyApp ? ' · Windows uygulaması' : ''}</span><button class="btn sm" id="gupd">Güncellemeleri denetle</button></div>
+        <div class="sec">Uygulama Hakkında</div>
+        <div class="row" style="flex-wrap:wrap;gap:10px"><span class="hint" style="flex:1;min-width:220px">GoSurvey ${APP_VER} · ${esc(Auth.platform ? Auth.platform() : '')}${window.GoSurveyApp ? ' · Windows uygulaması' : ''}</span><button class="btn sm" id="gupd">Güncellemeleri Denetle</button></div>
       </div>`;
     }
     const chipT = (k, on, l) => `<button class="chip ${on ? 'on' : ''}" data-tg="${k}" style="border-radius:12px">${on ? '✓ ' : ''}${l}</button>`;
@@ -1941,30 +1941,30 @@
         <span class="row" style="gap:4px">${t.quick ? '<span class="tag ok">Hızlı</span>' : ''}${t.heights ? '<span class="tag">H</span>' : ''}${t.widths ? '<span class="tag">W</span>' : ''}${t.hidden ? '<span class="tag warn">Gizli</span>' : ''}${t.builtin ? '' : '<span class="tag sub">Yeni</span>'}</span></button>`;
     const layoutPane = `<div class="split even" style="flex:1;min-height:0">
         <div class="pane" style="gap:10px">
-          <div class="g3"><label class="f">Düzen adı<input id="lname" value="${esc(D.name)}"></label><label class="f">Yükseklik etiketleri<input id="lhl" value="${esc(D.heightLabels.join(', '))}"></label><label class="f">Genişlik etiketleri<input id="lwl" value="${esc(D.widthLabels.join(', '))}"></label></div>
-          <div class="row" style="justify-content:space-between"><b style="color:var(--navy)">Engel tipleri · ${D.types.length}</b><button class="btn sm" id="tnew">+ Yeni engel tipi</button></div>
+          <div class="g3"><label class="f">Şablon Adı<input id="lname" value="${esc(D.name)}"></label><label class="f">Yükseklik Etiketleri<input id="lhl" value="${esc(D.heightLabels.join(', '))}"></label><label class="f">Genişlik Etiketleri<input id="lwl" value="${esc(D.widthLabels.join(', '))}"></label></div>
+          <div class="row" style="justify-content:space-between"><b style="color:var(--navy)">Engel Tipleri · ${D.types.length}</b><button class="btn sm" id="tnew">+ Yeni Engel Tipi</button></div>
           <div style="display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;flex:1">${D.types.map(item).join('')}</div>
         </div>
         <div class="pane" style="gap:12px">
-          <div class="row" style="justify-content:space-between"><b style="font-size:18px">${esc(T.label)}</b><span class="row" style="gap:6px"><button class="btn sm" data-mv="-1" ${ti ? '' : 'disabled'} aria-label="Yukarı">▲</button><button class="btn sm" data-mv="1" ${ti < D.types.length - 1 ? '' : 'disabled'} aria-label="Aşağı">▼</button>${T.builtin ? '' : '<button class="btn sm" id="tdel" style="color:var(--badtx)">Sil</button>'}</span></div>
-          ${T.builtin ? `<span class="hint">Standart tip (<b>${esc(T.key)}</b>). Adını ve içeriğini değiştirebilirsin; uygulamanın kuralları (enerji hattı kontrolü, raporun sonuç bölümü) bu tipe bağlı kalır. Silmek yerine gizleyebilirsin.</span>` : '<span class="hint">Senin eklediğin tip.</span>'}
-          <label class="f">Görünen ad (uygulamada ve raporda OBSTACLE)<input data-f="label" value="${esc(T.label)}"></label>
-          <div class="row" style="flex-wrap:wrap;gap:8px">${chipT('quick', T.quick, 'Hızlı listede')}${chipT('heights', T.heights, 'Yükseklik (H) girişi')}${chipT('widths', T.widths, 'Genişlik (W) girişi')}${chipT('hidden', T.hidden, 'Gizli')}</div>
-          <div class="g2"><label class="f">Tip başlığı (raporda, ör. Line Type / Hat Tipi)<input data-f="subLabel" value="${esc(T.subLabel)}"></label><span></span></div>
-          <label class="f">Tip seçenekleri (her satıra bir tane)<textarea data-f="sub" rows="4">${esc(T.sub.join('\n'))}</textarea></label>
+          <div class="row" style="justify-content:space-between"><b style="font-size:18px">${esc(T.label)}</b><span class="row" style="gap:6px"><button class="btn sm" data-mv="-1" ${ti ? '' : 'disabled'} aria-label="Yukarı taşı">▲</button><button class="btn sm" data-mv="1" ${ti < D.types.length - 1 ? '' : 'disabled'} aria-label="Aşağı taşı">▼</button>${T.builtin ? '' : '<button class="btn sm" id="tdel" style="color:var(--badtx)">Sil</button>'}</span></div>
+          ${T.builtin ? `<span class="hint">Standart tip (<b>${esc(T.key)}</b>). Adını ve içeriğini değiştirebilirsin; uygulamanın kuralları (enerji hattı kontrolü, raporun sonuç bölümü) bu tipe bağlı kalır. Silmek yerine gizleyebilirsin.</span>` : '<span class="hint">Kullanıcı tanımlı tip.</span>'}
+          <label class="f">Görünen Ad (uygulamada ve raporun OBSTACLE hücresinde)<input data-f="label" value="${esc(T.label)}"></label>
+          <div class="row" style="flex-wrap:wrap;gap:8px">${chipT('quick', T.quick, 'Hızlı erişim listesinde göster')}${chipT('heights', T.heights, 'Yükseklik (H) ölçüsü')}${chipT('widths', T.widths, 'Genişlik (W) ölçüsü')}${chipT('hidden', T.hidden, 'Gizli')}</div>
+          <div class="g2"><label class="f">Alt Tip Başlığı (raporda, örn. Line Type / Hat Tipi)<input data-f="subLabel" value="${esc(T.subLabel)}"></label><span></span></div>
+          <label class="f">Alt Tip Seçenekleri (her satıra bir tane)<textarea data-f="sub" rows="4">${esc(T.sub.join('\n'))}</textarea></label>
           <div class="g2"><label class="f">Ad alanı (boş = yok, ör. Bridge Name)<input data-f="nameField" value="${esc(T.nameField)}"></label><label class="f">Açıklık alanı (boş = yok, ör. Spans)<input data-f="spansField" value="${esc(T.spansField)}"></label></div>
-          <label class="f">Hazır cümleler / remarks (her satıra bir cümle)<textarea data-f="phrases" rows="8">${esc(T.phrases.join('\n'))}</textarea></label>
+          <label class="f">Hazır Remark Cümleleri (her satıra bir cümle)<textarea data-f="phrases" rows="8">${esc(T.phrases.join('\n'))}</textarea></label>
         </div></div>`;
     const lookPane = `<div class="pane" style="max-width:720px;gap:14px"><div class="sec">Tema</div>
-        <div class="g3">${[['light', 'Açık tema'], ['dark', 'Koyu tema'], ['auto', 'Cihaza göre']].map(([k, l]) => `<button class="chip ${theme() === k ? 'on' : ''}" data-theme="${k}" style="border-radius:12px;min-height:64px">${l}</button>`).join('')}</div>
-        <span class="hint">Seçim bu cihazda hatırlanır. Raporlar ve PDF her zaman beyaz zeminle çıkar.</span>
+        <div class="g3">${[['light', 'Açık tema'], ['dark', 'Koyu tema'], ['auto', 'Sistem ayarına göre']].map(([k, l]) => `<button class="chip ${theme() === k ? 'on' : ''}" data-theme="${k}" style="border-radius:12px;min-height:64px">${l}</button>`).join('')}</div>
+        <span class="hint">Seçim bu cihazda saklanır. Raporlar ve PDF her zaman beyaz zeminle oluşturulur.</span>
 </div>`;
-    const mapsPane = `<div class="pane" style="max-width:860px;gap:14px"><div class="sec">Rapordaki uydu ve güzergah görüntüleri</div>
-        ${[['google', 'Google Maps (API anahtarı gerekir)'], ['esri', 'Esri uydu (anahtarsız)']].map(([v, l]) => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:12px;background:var(--card2)"><input type="radio" name="mprov" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:20px;height:20px">${l}</label>`).join('')}
-        <label class="f">Google Maps API anahtarı (Maps Static API açık olmalı)<input id="mkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label>
-        <div class="g2"><label class="f">Engel yakın görüntüsü yakınlığı<select id="mzoom">${[16, 17, 18, 19, 20].map(z => `<option value="${z}" ${+mp.zoom === z ? 'selected' : ''}>${z}${z === 18 ? ' (önerilen)' : ''}</option>`).join('')}</select></label>
-          <label class="f">Güzergah haritası<select id="mrt"><option value="roadmap" ${mp.routeType !== 'satellite' ? 'selected' : ''}>Yol haritası (örnekteki gibi)</option><option value="satellite" ${mp.routeType === 'satellite' ? 'selected' : ''}>Uydu</option></select></label></div>
-        <span class="hint">Güzergah haritası: ilk engelden son engele güzergah çizgisi, başlangıç S ve bitiş E işareti, diğer engeller küçük mavi, sayfadaki engel kırmızı O işaretiyle gösterilir. Google seçili olup anahtar girilmezse rapor açılmaz.</span></div>`;
+    const mapsPane = `<div class="pane" style="max-width:860px;gap:14px"><div class="sec">Rapordaki Uydu ve Güzergah Görüntüleri</div>
+        ${[['google', 'Google Haritalar (API anahtarı gerekir)'], ['esri', 'Esri uydu (API anahtarı gerekmez)']].map(([v, l]) => `<label class="row" style="border:${mp.provider === v ? '2px solid var(--navy)' : '1px solid var(--line2)'};border-radius:10px;padding:12px;background:var(--card2)"><input type="radio" name="mprov" value="${v}" ${mp.provider === v ? 'checked' : ''} style="width:20px;height:20px">${l}</label>`).join('')}
+        <label class="f">Google Maps API anahtarı (Maps Static API etkin olmalıdır)<input id="mkey" value="${esc(mp.key || '')}" placeholder="AIza…" autocomplete="off"></label>
+        <div class="g2"><label class="f">Engel uydu görüntüsü yakınlaştırma düzeyi<select id="mzoom">${[16, 17, 18, 19, 20].map(z => `<option value="${z}" ${+mp.zoom === z ? 'selected' : ''}>${z}${z === 18 ? ' (önerilen)' : ''}</option>`).join('')}</select></label>
+          <label class="f">Güzergah Haritası<select id="mrt"><option value="roadmap" ${mp.routeType !== 'satellite' ? 'selected' : ''}>Yol haritası</option><option value="satellite" ${mp.routeType === 'satellite' ? 'selected' : ''}>Uydu</option></select></label></div>
+        <span class="hint">Güzergah haritasında ilk engelden son engele güzergah çizgisi, başlangıç (S) ve bitiş (E) noktaları gösterilir; diğer engeller küçük mavi, ilgili paftadaki engel kırmızı "O" işaretiyle belirtilir. Google seçiliyken API anahtarı tanımlanmazsa rapor oluşturulamaz.</span></div>`;
     $app.innerHTML = `${bar('Ayarlar', '#/')}
       <div class="full" style="gap:12px"><div class="row" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="btn ${SET.tab === k ? 'pri' : ''}" data-stab="${k}">${l}</button>`).join('')}</div>
       ${SET.tab === 'general' ? gen : SET.tab === 'layout' ? layoutPane : SET.tab === 'look' ? lookPane : mapsPane}</div>
@@ -1978,7 +1978,7 @@
       const pf = t.closest('[data-pf]'); if (pf) { PREF[pf.dataset.pf] = pf.dataset.pf === 'zoom' ? +pf.dataset.v : pf.dataset.v; savePref(); if (pf.dataset.pf === 'zoom') applyZoom(); return V.settings(); }
       if (t.closest('#dsave')) { await DB.setSetting('defaults', Object.assign({}, DEF, { preparedBy: document.getElementById('dprep').value.split('\n').map(x => x.trim()).filter(Boolean), company: document.getElementById('dcomp').value.trim(), companyShort: document.getElementById('dcs').value.trim() })); return toast('Kaydedildi'); }
       if (t.closest('#gbk')) return backupDialog();
-      if (t.closest('#gcc')) { const n = await DB.clearCaches(); urls.forEach((u, k) => { if (/^(th|md):/.test(k)) { URL.revokeObjectURL(u); urls.delete(k); } }); toast(`${n} önbellek dosyası silindi`); return V.settings(); }
+      if (t.closest('#gcc')) { const n = await DB.clearCaches(); urls.forEach((u, k) => { if (/^(th|md):/.test(k)) { URL.revokeObjectURL(u); urls.delete(k); } }); toast(`${n} önbellek dosyası silindi.`); return V.settings(); }
       if (t.closest('#gupd')) { try { const r = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (r) await r.update(); } catch (er) {} toast('Denetleniyor…'); return setTimeout(() => location.reload(), 900); }
       const th = t.closest('[data-theme]'); if (th) { setTheme(th.dataset.theme); return V.settings(); }
       const tk = t.closest('[data-tk]'); if (tk) { SET.key = tk.dataset.tk; return V.settings(); }
@@ -1989,8 +1989,8 @@
         D.types.push({ key, label: key, builtin: false, hidden: false, quick: true, heights: false, widths: false, subLabel: 'Type', sub: [], nameField: '', spansField: '', phrases: ['No action required.'] });
         SET.key = key; persist(); return V.settings();
       }
-      if (t.closest('#tdel')) { const b = t.closest('#tdel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Sil'; return; } D.types.splice(ti, 1); SET.key = null; persist(); return V.settings(); }
-      if (t.closest('#lreset')) { const b = t.closest('#lreset'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin? Tüm değişiklikler silinir'; return; } SET.draft = Catalog.defaults(); SET.key = null; await Catalog.save(SET.draft); applyLayout(); toast('Standart düzene dönüldü'); return V.settings(); }
+      if (t.closest('#tdel')) { const b = t.closest('#tdel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Silmeyi onayla'; return; } D.types.splice(ti, 1); SET.key = null; persist(); return V.settings(); }
+      if (t.closest('#lreset')) { const b = t.closest('#lreset'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Onaylıyor musunuz? Tüm şablon değişiklikleri silinecek'; return; } SET.draft = Catalog.defaults(); SET.key = null; await Catalog.save(SET.draft); applyLayout(); toast('Standart şablona dönüldü.'); return V.settings(); }
       if (t.closest('#lexp')) { await Catalog.save(D); applyLayout(); return saveText(`Etüt düzeni - ${(D.name || 'düzen').replace(/[\\/:*?"<>|]+/g, '-')}.txt`, Catalog.toText(D)); }
     };
     $app.oninput = e => {
@@ -2008,7 +2008,7 @@
     $app.onchange = async e => {
       const t = e.target;
       if (t.id === 'limp' && t.files[0]) {
-        try { const L = Catalog.fromText(await t.files[0].text()); SET.draft = JSON.parse(JSON.stringify(L)); SET.key = null; await Catalog.save(L); applyLayout(); toast(`"${L.name}" düzeni yüklendi`); }
+        try { const L = Catalog.fromText(await t.files[0].text()); SET.draft = JSON.parse(JSON.stringify(L)); SET.key = null; await Catalog.save(L); applyLayout(); toast(`"${L.name}" şablonu yüklendi.`); }
         catch (er) { toast(er.message); }
         return V.settings();
       }
@@ -2016,7 +2016,7 @@
         if (t.name === 'mprov') mp.provider = t.value; if (t.id === 'mzoom') mp.zoom = +t.value; if (t.id === 'mrt') mp.routeType = t.value;
         await DB.setSetting('maps', mp); return V.settings();
       }
-      if (t.id === 'mkey') { mp.key = t.value.trim(); if (mp.key && mp.provider !== 'google') mp.provider = 'google'; await DB.setSetting('maps', mp); toast('Anahtar kaydedildi'); return V.settings(); }
+      if (t.id === 'mkey') { mp.key = t.value.trim(); if (mp.key && mp.provider !== 'google') mp.provider = 'google'; await DB.setSetting('maps', mp); toast('API anahtarı kaydedildi.'); return V.settings(); }
     };
   };
 

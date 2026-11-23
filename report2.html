@@ -21,17 +21,17 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
 </style>
 </head>
 <body>
-<div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor hazırlanıyor…</span><button id="prn" hidden>Yazdır</button><button id="pr" disabled>PDF al / Yazdır</button></div>
+<div id="tb"><a id="bk" href="index.html">← Geri</a><span id="msg">Rapor oluşturuluyor…</span><button id="prn" hidden>Yazdır</button><button id="pr" disabled>PDF Olarak Al / Yazdır</button></div>
 <main id="report"></main>
-<script src="auth.js?v=64"></script>
-<script>if (!Auth.pageGuard()) throw new Error("giriş gerekli");</script>
-<script src="db.js?v=64"></script>
-<script src="rules.js?v=64"></script>
-<script src="catalog.js?v=64"></script>
-<script src="pdfcap.js?v=64"></script>
-<script src="drawing.js?v=64"></script>
-<script src="vendor/html-to-image.js?v=64"></script>
-<script src="deskpdf.js?v=64"></script>
+<script src="auth.js?v=65"></script>
+<script>if (!Auth.pageGuard()) throw new Error("Giriş yapılması gerekiyor");</script>
+<script src="db.js?v=65"></script>
+<script src="rules.js?v=65"></script>
+<script src="catalog.js?v=65"></script>
+<script src="pdfcap.js?v=65"></script>
+<script src="drawing.js?v=65"></script>
+<script src="vendor/html-to-image.js?v=65"></script>
+<script src="deskpdf.js?v=65"></script>
 <script>
 /* Report with the new draft (Nov 2026):
    portrait cover, contents, introduction (old letterhead, logos as set in the app)
@@ -53,7 +53,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
 
   /* route on the maps and the KM follow the roads (db.js roadRoute); without internet the straight-line ones stay */
   let ROADKM = false;
-  { const road = await roadRoute(sv, recs, () => { msg.textContent = 'Yol güzergahı ve KM hesaplanıyor…'; });
+  { const road = await roadRoute(sv, recs, () => { msg.textContent = 'Güzergah ve KM değerleri hesaplanıyor…'; });
     if (road && road.line.length > 1) { routeLine = road.line; applyRoadKm(recs, road.cum); ROADKM = true; } }
   /* "Seçilenleri dışa aktar": only the obstacles picked in the list (and their INFO/BYPASS); numbers and KM stay those of the full route */
   if (new URLSearchParams(location.search).get('sel') === '1') {
@@ -77,9 +77,9 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     fade(0, 0, f, 0, 0, 0, f, H); fade(W, 0, W - f, 0, W - f, 0, f, H); fade(0, 0, 0, f, 0, 0, W, f); fade(0, H, 0, H - f, 0, H - f, W, f);
     return new Promise(res => c.toBlob(b => res(URL.createObjectURL(b)), 'image/jpeg', 0.74));
   }
-  msg.textContent = 'Fotoğraflar hazırlanıyor…';
+  msg.textContent = 'Fotoğraflar işleniyor…';
   let done = 0;
-  for (const r of recs) { r.photo = await reportPhoto(r.photoId); r.crop = null; done++; if (done % 10 === 0) msg.textContent = `Fotoğraflar hazırlanıyor… ${done} / ${recs.length}`; }
+  for (const r of recs) { r.photo = await reportPhoto(r.photoId); r.crop = null; done++; if (done % 10 === 0) msg.textContent = `Fotoğraflar işleniyor… ${done} / ${recs.length}`; }
   window.SURVEY = { project: P, records: recs };
 
   // ---------- assets of the portrait pages (as in the old report) ----------
@@ -97,7 +97,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   if (A.drawing) {
     const db = await DB.getBlob(sv.logos.drawing);
     if (db && /pdf/.test(db.type)) {   // transport drawing as PDF: every page into the report
-      try { A.drawings = await drawingPages(db, (i, n) => { msg.textContent = `Taşıma çizimi hazırlanıyor… ${i} / ${n}`; }); } catch (e) { console.error(e); A.drawings = []; }
+      try { A.drawings = await drawingPages(db, (i, n) => { msg.textContent = `Taşıma çizimi işleniyor… ${i} / ${n}`; }); } catch (e) { console.error(e); A.drawings = []; }
       A.drawing = null;
     } else { const i = await load(A.drawing); A.drawingLandscape = i && i.naturalWidth > i.naturalHeight; }
   }
@@ -138,7 +138,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   const step = Math.max(1, Math.ceil(routeLine.length / 800)); A.routeLine = routeLine.filter((_, i) => i % step === 0 || i === routeLine.length - 1);
   { const W = 1186, H = 884; A.routeGeo = { aspect: W / H, a: { x: 0, y: 0, lat: 1, lon: 0 }, b: { x: 1, y: 1, lat: 0, lon: 1 } };
     if (A.routeLine.length >= 2) {
-      msg.textContent = 'Harita hazırlanıyor…';
+      msg.textContent = 'Harita oluşturuluyor…';
       const las = A.routeLine.map(p => p[0]), los = A.routeLine.map(p => p[1]), b = [Math.min(...las), Math.max(...las), Math.min(...los), Math.max(...los)];
       let z = 16, n; for (; z > 2; z--) { n = 256 * 2 ** z; if ((wx(b[3], n) - wx(b[2], n)) <= W * 0.62 && (wy(b[0], n) - wy(b[1], n)) <= H * 0.62) break; }
       n = 256 * 2 ** z;
@@ -227,23 +227,23 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     const g = c.getContext('2d'), k = Math.max(W / bmp.width, H / bmp.height); g.drawImage(bmp, (W - bmp.width * k) / 2, (H - bmp.height * k) / 2, bmp.width * k, bmp.height * k);
     return toUrl(c);
   }
-  msg.textContent = 'Haritalar hazırlanıyor…';
+  msg.textContent = 'Haritalar oluşturuluyor…';
   /* Google: try one picture first; with a wrong key or no billing account Google sends an error instead of a map,
      then this report uses Esri / OpenStreetMap and says so */
   let MAPNOTE = '';
   if (mp.provider === 'google') {
     const at = ALL.find(r => r.latDec != null);
     const okG = !mp.key ? false : !at ? true : await new Promise(res => { const i = new Image(); i.onload = () => res(i.naturalWidth > 100); i.onerror = () => res(false); i.src = `https://maps.googleapis.com/maps/api/staticmap?center=${at.latDec},${at.lonDec}&zoom=17&size=200x150&maptype=satellite&key=${encodeURIComponent(mp.key)}`; setTimeout(() => res(false), 15000); });
-    if (!okG) { mp.provider = 'esri'; MAPNOTE = mp.key ? ' Google haritası alınamadı (API anahtarı geçersiz ya da Google Cloud fatura hesabı etkin değil); Esri / OpenStreetMap kullanıldı.' : ' Google API anahtarı girilmemiş; Esri / OpenStreetMap kullanıldı.'; }
+    if (!okG) { mp.provider = 'esri'; MAPNOTE = mp.key ? ' Google haritası alınamadı (API anahtarı geçersiz veya Google Cloud faturalandırma hesabı etkin değil); Esri / OpenStreetMap kullanıldı.' : ' Google API anahtarı girilmediği için Esri / OpenStreetMap kullanıldı.'; }
   }
   const noLoc = recs.filter(r => r.latDec == null).length;
-  if (noLoc) MAPNOTE += ` ${noLoc} kayıtta konum yok; onların uydu görüntüsü çıkmaz.`;
+  if (noLoc) MAPNOTE += ` ${noLoc} kayıtta konum bilgisi yok; bu kayıtların uydu görüntüsü oluşturulamaz.`;
   await makeRouteBase();
   done = 0;
   for (const r of recs) {
     r.sat = r.latDec != null ? await satellite(r.latDec, r.lonDec) : null;
     r.ins = {}; for (const [k, b] of Object.entries(r.insets || {})) if (b) r.ins[k] = await insetPhoto(b);
-    done++; if (done % 5 === 0) msg.textContent = `Uydu görüntüleri… ${done} / ${recs.length}`;
+    done++; if (done % 5 === 0) msg.textContent = `Uydu görüntüleri alınıyor… ${done} / ${recs.length}`;
   }
 
   // ---------- page parts ----------
@@ -265,7 +265,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     ...(r.heights || []).filter(h => h.remark && String(h.remark).trim()).map((h, i) => `${h.label || 'H' + (i + 1)}: ${String(h.remark).trim()}`)].filter(Boolean).join('\n');
   const settings = { general: !!P.general, minHeight: P.minHeight, refLV: P.refLV, refMV: P.refMV, refHV: P.refHV };
   const COL = { red: '#FF0000', yellow: '#FFFF00', magenta: '#FF00FF', purple: '#7030A0', blue: '#4F81BD', green: '#92D050' };
-  const H = P.header || {}, route = (!H.route || H.route === `${P.start.name} - ${P.end.name} Arası Yol Etüdü` ? `${P.start.name} - ${P.end.name}` : H.route), project = H.project || P.projectName || P.client || route;
+  const H = P.header || {}, route = (!H.route || H.route === `${P.start.name} - ${P.end.name} Arası Güzergah Etüdü` ? `${P.start.name} - ${P.end.name}` : H.route), project = H.project || P.projectName || P.client || route;
   const SE = `${P.start.name} - ${P.end.name}`;
   const TITLE = `${SE} ROUTE SURVEY REPORT`;
   // logos: top left = Çaba Misnak alone or with CJ ICM; bottom left (landscape) = one or two customer logos (all chosen in the app)
@@ -287,7 +287,7 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
         <tr><td class="l">Müşteri / Client</td><td>${esc(H.client)}</td><td class="l">Tarih / Date</td><td>${esc(H.date)}</td></tr>
         <tr><td class="l">Proje / Project</td><td>${esc(H.project)}</td><td class="l">Doküman No / Doc. No</td><td>${esc(H.docNo)}</td></tr>
         <tr><td class="l">Güzergah / Route</td><td>${esc(route)}</td><td class="l">Revizyon No / Rev. No</td><td>${esc(H.rev)}</td></tr>
-        <tr><td class="l">Ülke / Country</td><td>${esc(H.country)}</td><td class="l">Revizyon Tarihi / Date</td><td>${esc(H.revDate)}</td></tr></table>
+        <tr><td class="l">Ülke / Country</td><td>${esc(H.country)}</td><td class="l">Revizyon Tarihi / Rev. Date</td><td>${esc(H.revDate)}</td></tr></table>
       <div class="a title">${esc(title)}</div>`;
   const footer = MODE === 'p'
     ? (custLogos.length
@@ -355,26 +355,26 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
   // ---------- build: portrait pages from report.js with the landscape ones in section 3 ----------
   await Promise.all([...A.logos.map(l => l.src), ...headLogos, ...custLogos, A.iconTurn, A.barGreen, A.barRed, A.compassK, A.compassN, A.coverPhoto].filter(Boolean).map(load));
   await Promise.all(['400 11pt Carlito', '700 11pt Carlito', 'italic 400 11pt Carlito', '400 10pt "DejaVu Sans"', '700 10pt "DejaVu Sans"'].map(f => document.fonts.load(f)));
-  msg.textContent = 'Sayfalar diziliyor…';
-  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=64'; s.onload = res; document.body.appendChild(s); });
+  msg.textContent = 'Paftalar düzenleniyor…';
+  await new Promise(res => { const s = document.createElement('script'); s.src = 'report.js?v=65'; s.onload = res; document.body.appendChild(s); });
   document.title = `Route Survey Report - ${route}`;
-  msg.textContent = 'Görseller yükleniyor…';
+  msg.textContent = 'Fotoğraflar yükleniyor…';
   await Promise.race([Promise.all([...document.images].map(i => i.complete ? null : new Promise(res => { i.onload = i.onerror = res; }))), new Promise(res => setTimeout(res, 30000))]);
   document.querySelectorAll('.lp .rmb, .lp .strip td.det').forEach(el => { let s = parseFloat(getComputedStyle(el).fontSize); while (el.scrollHeight > el.clientHeight + 1 && s > 5) { s -= 0.4; el.style.fontSize = s + 'px'; } });
   const fit = () => document.documentElement.style.setProperty('--z', Math.min(1, (document.documentElement.clientWidth - 16) / (MODE === 'p' ? 794 : 1123)));
   fit(); window.addEventListener('resize', fit);
-  if (!ROADKM && recs.some(r => r.latDec != null)) MAPNOTE += ' Yol güzergahı hesaplanamadı (internet?); KM ve güzergah düz çizgiyle.';
+  if (!ROADKM && recs.some(r => r.latDec != null)) MAPNOTE += ' Güzergah hesaplanamadı (internet bağlantısını kontrol edin); KM ve güzergah düz çizgi üzerinden hesaplandı.';
   const noSat = recs.filter(r => r.latDec != null && !r.sat).length;
-  if (noSat) MAPNOTE += ` ${noSat} engelin uydu görüntüsü indirilemedi (internet bağlantısını kontrol et).`;
+  if (noSat) MAPNOTE += ` ${noSat} engelin uydu görüntüsü indirilemedi (internet bağlantısını kontrol edin).`;
   const WINAPP = !!window.DesktopPdf;   // GoSurvey for Windows: Chromium prints the PDF itself (vector, page sizes from CSS)
   const DESK = !WINAPP && !window.AndroidPdf && !window.AndroidPrint && !!window.htmlToImage;   // computer: the app writes the PDF itself
-  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf || DESK || WINAPP ? '"PDF kaydet" ile PDF\'i kaydet.' : '"Yazdır / PDF" ile hedef olarak "PDF olarak kaydet" seç (Microsoft Print to PDF değil), kenar boşluğu "Yok".'}${MAPNOTE}`;
-  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf || DESK || WINAPP) pr.textContent = 'PDF kaydet';
+  msg.textContent = `${window.REPORT_STATS.pages} sayfa hazır. ${window.AndroidPdf || DESK || WINAPP ? 'Raporu kaydetmek için "PDF Olarak Kaydet" seçeneğini kullanın.' : '"Yazdır / PDF" penceresinde hedef olarak "PDF olarak kaydet"i seçin (Microsoft Print to PDF değil) ve kenar boşluklarını "Yok" yapın.'}${MAPNOTE}`;
+  const pr = document.getElementById('pr'); pr.disabled = false; if (window.AndroidPdf || DESK || WINAPP) pr.textContent = 'PDF Olarak Kaydet';
   const prn = document.getElementById('prn'); if (DESK || WINAPP) { prn.hidden = false; prn.onclick = () => printHelp(); }
   pr.onclick = async () => {
     if (window.AndroidPdf) {   // tablet: the app makes the PDF (each page in its own size), saves it to Belgeler/Etütler and opens the share menu
-      pr.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF hazırlanıyor…';
-      const r = await nativePdf(document.title, (i, n) => { msg.textContent = `PDF hazırlanıyor… ${i} / ${n} sayfa`; }); pr.disabled = false;
+      pr.disabled = true; const m0 = msg.textContent; msg.textContent = 'PDF oluşturuluyor…';
+      const r = await nativePdf(document.title, (i, n) => { msg.textContent = `PDF oluşturuluyor… ${i} / ${n} sayfa`; }); pr.disabled = false;
       msg.textContent = r.path ? `PDF kaydedildi: ${r.path.replace(/^.*\/(Documents|Download)\//, 'Belgeler/')}` : 'PDF oluşturulamadı: ' + (r.err || '') + ' · ' + m0;
       return;
     }
@@ -382,16 +382,16 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     if (WINAPP) {
       pr.disabled = prn.disabled = true; const m0 = msg.textContent;
       const ov = progressBox(); ov.querySelector('#pgc').hidden = true;
-      ov.querySelector('#pgt').textContent = `${window.REPORT_STATS.pages} sayfa`; ov.querySelector('#pgl').textContent = 'Kaydetme penceresinde yeri seç; sonra PDF yazılır (uzun raporda 1–2 dakika).';
+      ov.querySelector('#pgt').textContent = `${window.REPORT_STATS.pages} sayfa`; ov.querySelector('#pgl').textContent = 'Kaydetme penceresinde konumu seçin; ardından PDF oluşturulur (uzun raporlarda 1–2 dakika sürebilir).';
       ov.querySelector('#pgb').style.cssText += ';width:35%;animation:pgw 1.2s ease-in-out infinite alternate';
       const r = await window.DesktopPdf.save(document.title);
       pr.disabled = prn.disabled = false;
       if (r.cancelled || r.err) { ov.remove(); msg.textContent = r.err ? 'PDF oluşturulamadı: ' + r.err : m0; return; }
       msg.textContent = `PDF kaydedildi: ${r.path}`;
       ov.querySelector('#pgb').style.cssText = 'height:100%;width:100%;background:#1E8E5A';
-      ov.querySelector('#pgt').textContent = '✓ PDF kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${(r.size / 1048576).toFixed(1)} MB`;
+      ov.querySelector('#pgt').textContent = '✓ Rapor PDF olarak kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${(r.size / 1048576).toFixed(1)} MB`;
       const c = ov.querySelector('#pgc'); c.hidden = false; c.textContent = 'Kapat'; c.onclick = () => ov.remove();
-      const o = document.createElement('button'); o.textContent = 'PDF\'i aç'; o.style.cssText = c.style.cssText + ';margin-left:8px;background:#0D2E4F;color:#fff;border:0'; o.onclick = () => { window.DesktopPdf.open(r.path); ov.remove(); }; c.after(o);
+      const o = document.createElement('button'); o.textContent = 'PDF\'i Görüntüle'; o.style.cssText = c.style.cssText + ';margin-left:8px;background:#0D2E4F;color:#fff;border:0'; o.onclick = () => { window.DesktopPdf.open(r.path); ov.remove(); }; c.after(o);
       return;
     }
     if (DESK) {   // no print dialog: each page drawn and written into the PDF file chosen in the save window
@@ -403,14 +403,14 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
         msg.textContent = `PDF hazırlanıyor… ${i} / ${n} sayfa`;
         ov.querySelector('#pgb').style.width = pc + '%';
         ov.querySelector('#pgt').textContent = `${i} / ${n} sayfa · %${pc}`;
-        ov.querySelector('#pgl').textContent = i < n ? `Kalan süre yaklaşık ${left >= 60 ? Math.floor(left / 60) + ' dk ' : ''}${left % 60} sn` : 'Dosya kapatılıyor…';
+        ov.querySelector('#pgl').textContent = i < n ? `Kalan süre yaklaşık ${left >= 60 ? Math.floor(left / 60) + ' dk ' : ''}${left % 60} sn` : 'Dosya kaydediliyor…';
       });
       pr.disabled = prn.disabled = false;
-      const txt = r.cancelled || r.err === 'İptal edildi' ? m0 : r.err ? 'PDF oluşturulamadı: ' + r.err + ' · "Yazdır" ile de alınabilir.' : `PDF kaydedildi: ${r.path} (${r.pages} sayfa)`;
+      const txt = r.cancelled || r.err === 'İptal edildi.' ? m0 : r.err ? 'PDF oluşturulamadı: ' + r.err + ' · "Yazdır" seçeneğiyle de alınabilir.' : `PDF kaydedildi: ${r.path} (${r.pages} sayfa)`;
       msg.textContent = txt;
       if (ov) {
         if (r.err || r.cancelled) ov.remove();
-        else { ov.querySelector('#pgb').style.width = '100%'; ov.querySelector('#pgt').textContent = '✓ PDF kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${r.pages} sayfa. Dosyayı seçtiğin klasörde açabilirsin.`; const c = ov.querySelector('#pgc'); c.textContent = 'Tamam'; c.onclick = () => ov.remove(); }
+        else { ov.querySelector('#pgb').style.width = '100%'; ov.querySelector('#pgt').textContent = '✓ PDF kaydedildi'; ov.querySelector('#pgl').textContent = `${r.path} · ${r.pages} sayfa. Dosyayı seçtiğiniz klasörde açabilirsiniz.`; const c = ov.querySelector('#pgc'); c.textContent = 'Tamam'; c.onclick = () => ov.remove(); }
       }
       return;
     }
@@ -423,10 +423,10 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     const d = document.createElement('div'); d.className = 'np';
     d.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML = `<div style="background:#fff;color:#111;border-radius:14px;max-width:480px;width:100%;padding:22px 24px;font:15px/1.5 system-ui,Segoe UI,Arial;box-shadow:0 10px 40px rgba(0,0,0,.3)">
-      <b style="font-size:18px">PDF hazırlanıyor</b>
+      <b style="font-size:18px">PDF Oluşturuluyor</b>
       <div style="height:14px;border-radius:7px;background:#E5E7EB;overflow:hidden;margin:14px 0 8px"><div id="pgb" style="height:100%;width:0;background:#1E8E5A;transition:width .2s"></div></div>
-      <div id="pgt" style="font-weight:700">0 sayfa</div><div id="pgl" style="color:#555;font-size:14px">Başlıyor…</div>
-      <div style="color:#777;font-size:13px;margin-top:10px">Dosya bitene kadar klasörde <b>0 bayt</b> görünür; bu normal. Bu sekmeyi kapatma.</div>
+      <div id="pgt" style="font-weight:700">0 sayfa</div><div id="pgl" style="color:#555;font-size:14px">Başlatılıyor…</div>
+      <div style="color:#777;font-size:13px;margin-top:10px">İşlem bitene kadar dosya klasörde <b>0 bayt</b> olarak görünür; bu normaldir. Lütfen bu sekmeyi kapatmayın.</div>
       <div style="display:flex;justify-content:flex-end;margin-top:14px"><button id="pgc" style="padding:10px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;cursor:pointer">İptal</button></div></div>`;
     document.body.appendChild(d);
     d.querySelector('#pgc').onclick = () => { window.__pdfCancel = true; d.querySelector('#pgl').textContent = 'İptal ediliyor…'; };
@@ -438,15 +438,15 @@ html.cap1 body,html.cap1 #report{margin:0!important;padding:0!important}
     const d = document.createElement('div'); d.className = 'np';
     d.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML = `<div style="background:#fff;color:#111;border-radius:14px;max-width:520px;width:100%;padding:22px 24px;font:15px/1.5 system-ui,Segoe UI,Arial;box-shadow:0 10px 40px rgba(0,0,0,.3)">
-      <b style="font-size:18px">PDF olarak kaydetmeden önce</b>
+      <b style="font-size:18px">PDF Olarak Kaydetmeden Önce</b>
       <ol style="margin:12px 0 14px;padding-left:20px">
-        <li><b>Hedef / Yazıcı:</b> <b>“PDF olarak kaydet”</b> seçin. <span style="color:#B42318">“Microsoft Print to PDF”, “Adobe PDF” gibi yazıcıları seçmeyin</span> — sayfaları tek yöne çevirir, yatay paftalar dikey sayfaya sıkışır.</li>
-        <li><b>Düzen (Dikey/Yatay):</b> pencerede çıkarsa <b>değiştirmeyin</b>; her pafta kendi yönünde çıkar.</li>
+        <li><b>Hedef / Yazıcı:</b> <b>“PDF olarak kaydet”</b> seçeneğini seçin. <span style="color:#B42318">“Microsoft Print to PDF” veya “Adobe PDF” gibi yazıcıları seçmeyin;</span> — bu yazıcılar tüm sayfaları tek yöne çevirir ve yatay paftalar dikey sayfaya sıkışır.</li>
+        <li><b>Düzen (Dikey/Yatay):</b> pencerede görünürse <b>değiştirmeyin;</b>; her pafta kendi yönünde çıkar.</li>
         <li><b>Diğer ayarlar → Kenar boşlukları:</b> <b>Yok</b>, <b>Ölçek:</b> Varsayılan.</li>
-        <li><b>Arka plan grafikleri</b> açık olsun (remark renkleri için; kapalı olsa da renkler artık basılır).</li>
+        <li><b>Arka plan grafikleri</b> açık olmalıdır (remark renkleri için; kapalı olsa da renkler artık yazdırılır).</li>
       </ol>
       <label style="display:flex;gap:8px;align-items:center;font-size:14px;color:#444;margin-bottom:14px"><input type="checkbox" id="phs"> Bir daha gösterme</label>
-      <div style="display:flex;gap:10px;justify-content:flex-end"><button id="phc" style="padding:10px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;cursor:pointer">Vazgeç</button><button id="pho" style="padding:10px 18px;border-radius:10px;border:0;background:#0D2E4F;color:#fff;font-size:15px;font-weight:700;cursor:pointer">Yazdır penceresini aç</button></div></div>`;
+      <div style="display:flex;gap:10px;justify-content:flex-end"><button id="phc" style="padding:10px 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-size:15px;cursor:pointer">İptal</button><button id="pho" style="padding:10px 18px;border-radius:10px;border:0;background:#0D2E4F;color:#fff;font-size:15px;font-weight:700;cursor:pointer">Yazdırma Penceresini Aç</button></div></div>`;
     document.body.appendChild(d);
     d.querySelector('#phc').onclick = () => d.remove();
     d.querySelector('#pho').onclick = () => { try { if (d.querySelector('#phs').checked) localStorage.setItem('rs-printhelp', '1'); } catch (e) {} d.remove(); setTimeout(() => window.print(), 50); };

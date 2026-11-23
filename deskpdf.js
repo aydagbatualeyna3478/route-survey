@@ -8,7 +8,7 @@
   const pad = n => String(n).padStart(10, '0');
 
   async function deskPdf(name, onStep) {
-    if (!window.htmlToImage) return { err: 'PDF aracı yüklenemedi; sayfayı yenile' };
+    if (!window.htmlToImage) return { err: 'PDF aracı yüklenemedi; lütfen sayfayı yenileyin.' };
     const safe = (name || 'Route Survey Report').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Route Survey Report';
     let w = null; const parts = [];
     if (window.showSaveFilePicker) {
@@ -49,7 +49,7 @@
       const xref = pos, n = offs.length;
       let x = `xref\n0 ${n + 1}\n0000000000 65535 f \n`; for (const o of offs) x += `${pad(o)} 00000 n \n`;
       await put(x + `trailer\n<< /Size ${n + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
-    } catch (e) { if (!e.cancel) console.error(e); err = (e && e.message) || 'PDF yazılamadı'; }
+    } catch (e) { if (!e.cancel) console.error(e); err = (e && e.message) || 'PDF yazılamadı.'; }
     window.__pdfCancel = false;
     root.classList.remove('cap'); root.style.setProperty('--z', z || '1'); window.dispatchEvent(new Event('resize'));
     if (w) { try { if (err) await w.abort(); else await w.close(); } catch (e) { err = err || e.message; } return { path: err ? null : safe + '.pdf', err, pages: pages.length }; }

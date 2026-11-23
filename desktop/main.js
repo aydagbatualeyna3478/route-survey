@@ -38,7 +38,7 @@ ipcMain.handle('pdf:save', async (e, name) => {
   const wc = e.sender, w = BrowserWindow.fromWebContents(wc);
   const safe = String(name || 'Route Survey Report').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Route Survey Report';
   const dir = path.join(app.getPath('documents'), 'Etütler'); try { fs.mkdirSync(dir, { recursive: true }); } catch (er) { /* Documents only */ }
-  const pick = await dialog.showSaveDialog(w, { title: 'PDF kaydet', defaultPath: path.join(fs.existsSync(dir) ? dir : app.getPath('documents'), safe + '.pdf'), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+  const pick = await dialog.showSaveDialog(w, { title: 'PDF Olarak Kaydet', defaultPath: path.join(fs.existsSync(dir) ? dir : app.getPath('documents'), safe + '.pdf'), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
   if (pick.canceled || !pick.filePath) return { cancelled: true };
   try {
     const data = await wc.printToPDF({ printBackground: true, preferCSSPageSize: true, margins: { marginType: 'none' }, displayHeaderFooter: false, generateTaggedPDF: false });
