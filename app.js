@@ -518,7 +518,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w69)';
+  const APP_VER = '2.0 (w70)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -1806,6 +1806,7 @@
     const sv = await DB.getSurvey(id); if (!sv) return go('#/'); CUR = sv;
     routeKm(sv);   // KMs from the final order
     const recs = orderedRecords(sv), c = sv.project.conclusion || (sv.project.conclusion = {});
+    const LK = lineKm(sv, recs); if (LK) applyRoadKm(recs, LK.cum);   // the team's route line (KMZ/KML/GPX) gives the KM
     const cnt = t => recs.filter(r => t.includes(r.obstacle)).length;
     const mp = Object.assign({ provider: 'esri', key: '' }, await DB.getSetting('maps'));
     const P = sv.project, last = (await DB.getSetting('headerDefaults')) || {};
@@ -1835,6 +1836,12 @@
           <div class="g2">${hf('project', 'Proje / Project', 'Örn. Mozambique Inhassoro Project')}${hf('docNo', 'Doküman No / Doc. No', 'Örn. RS-102026-MOZ-001-SB')}</div>
           <div class="g2">${hf('route', 'Güzergah / Route')}${hf('rev', 'Revizyon No / Rev. No')}</div>
           <div class="g2">${hf('country', 'Ülke / Country')}${hf('revDate', 'Revizyon Tarihi / Rev. Date', 'Örn. 13 November 2026')}</div></div>
+        <div class="card"><b>KM Hesabı · Güzergah Çizgisi</b>
+          <span class="hint">Engellerin KM değeri, başlangıçtan itibaren bu çizgi üzerindeki mesafedir. Google Earth'te başlangıçtan bitişe, tüm engellerden geçen bir yol (path) çizip KMZ / KML olarak kaydedin ve buraya yükleyin. Çizgi yüklenmezse KM yol ağı üzerinden otomatik hesaplanır.</span>
+          ${LK ? `<div class="note g"><b>Yüklü: ${esc(sv.routeLine.name || 'güzergah')}</b><br>Toplam uzunluk ${fmt(LK.len / 1000, 1)} km · ${sv.routeLine.pts.length} nokta${LK.far.length ? `<br><b style="color:var(--badtx)">${LK.far.length} engel çizgiye 400 m'den uzak</b> (${LK.far.slice(0, 8).map(r => esc(r.no || '')).filter(Boolean).join(', ')}${LK.far.length > 8 ? '…' : ''}); bunlara bir önceki KM verildi.` : '<br>Tüm engeller çizgi üzerinde.'}</div>` : ''}
+          <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn pri" id="rlLoad" style="min-width:0">${LK ? 'Çizgiyi Değiştir' : 'KMZ / KML / GPX Yükle'}</button>${LK ? '<button class="btn" id="rlDel" style="min-width:0">Çizgiyi Kaldır</button>' : ''}<button class="btn" id="rlKml" style="min-width:0">Engelleri KML Olarak Kaydet</button></div>
+          <span class="hint">"Engelleri KML Olarak Kaydet": engellerin numaralı konumlarını Google Earth'te açıp çizgiyi kolayca çizmeniz için.</span>
+          <input type="file" id="rlFile" accept=".kmz,.kml,.gpx,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml" hidden></div>
         <div class="card"><b>Kapak Firma Unvanı</b><span class="hint">Rapor kapağında yer alacak firma unvanı</span>
           ${ropt('coname', 'cj', 'CJ ICM', coKey)}${ropt('coname', 'caba', 'Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.', coKey)}${ropt('coname', 'both', 'CJ ICM / Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.', coKey)}
           ${coKey ? '' : `<span class="hint">Mevcut unvan: ${esc(P.company || '—')}</span>`}</div>
@@ -1899,6 +1906,24 @@
         await DB.putSurvey(sv); V.report(id);
       }
     };
+    const rlf = document.getElementById('rlFile');
+    document.getElementById('rlLoad').onclick = () => rlf.click();
+    rlf.onchange = async () => {
+      const f = rlf.files[0]; if (!f) return;
+      try { await save(); const pts = await readRouteFile(f); sv.routeLine = { name: f.name, pts, at: Date.now() }; await DB.putSurvey(sv); toast(`Güzergah çizgisi yüklendi: ${pts.length} nokta`); }
+      catch (er) { toast(er.message || 'Dosya okunamadı.'); }
+      V.report(id);
+    };
+    const rld = document.getElementById('rlDel'); if (rld) rld.onclick = async () => { await save(); delete sv.routeLine; await DB.putSurvey(sv); toast('Güzergah çizgisi kaldırıldı; KM yol ağından hesaplanacak.'); V.report(id); };
+    document.getElementById('rlKml').onclick = async () => {
+      const x = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+      const pts = recs.filter(r => r.latDec != null && r.flag !== 'INFO');
+      if (!pts.length) return toast('Konumu olan engel yok.');
+      const pm = pts.map(r => `<Placemark><name>${x(r.no || '')}</name><description>${x((window.OL ? OL(r.obstacle) : r.obstacle) + (r.flag ? ' · ' + r.flag : ''))}</description><Point><coordinates>${r.lonDec},${r.latDec},0</coordinates></Point></Placemark>`).join('\n');
+      const ln = `<Placemark><name>Engel sırası (düz çizgi)</name><Style><LineStyle><color>ff0000ff</color><width>2</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>${pts.map(r => `${r.lonDec},${r.latDec},0`).join(' ')}</coordinates></LineString></Placemark>`;
+      const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(P.start.name)} - ${x(P.end.name)} engeller</name>\n${pm}\n${ln}\n</Document></kml>`;
+      await saveText(`${Transfer.safe(`${P.start.name}-${P.end.name} engeller`)}.kml`, kml, { kml: true });
+    };
     document.getElementById('mk').onclick = async () => {
       await save();
       if (NEED.some(k => !String(H[k] || '').trim())) { toast('Lütfen önce antet bilgilerini tamamlayın.'); return V.report(id); }
@@ -1913,18 +1938,18 @@
 
 
   // ----- settings (only from the home screen): theme, maps, survey layout -----
-  async function saveText(name, text) {   // a text file: tablet → Belgeler/Etütler + share sheet; computer → save dialog / download
+  async function saveText(name, text, o = {}) {   // a text file: tablet → Belgeler/Etütler + share sheet; computer → save dialog / download
     if (window.Capacitor && Capacitor.nativePromise) {
       try {
         await Capacitor.nativePromise('Filesystem', 'writeFile', { path: 'Etütler/' + name, directory: 'DOCUMENTS', data: text, encoding: 'utf8', recursive: true });
         const u = await Capacitor.nativePromise('Filesystem', 'getUri', { path: 'Etütler/' + name, directory: 'DOCUMENTS' });
-        try { await Capacitor.nativePromise('Share', 'share', { title: name, files: [u.uri], dialogTitle: 'Etüt Şablonunu Paylaş' }); } catch (e) {}
+        try { await Capacitor.nativePromise('Share', 'share', { title: name, files: [u.uri], dialogTitle: o.kml ? 'KML Dosyasını Paylaş' : 'Etüt Şablonunu Paylaş' }); } catch (e) {}
         return toast('Kaydedildi: Belgeler/Etütler/' + name);
       } catch (e) { /* fall through to download */ }
     }
-    const blob = new Blob(['﻿' + text], { type: 'text/plain;charset=utf-8' });
+    const blob = o.kml ? new Blob([text], { type: 'application/vnd.google-earth.kml+xml' }) : new Blob(['﻿' + text], { type: 'text/plain;charset=utf-8' });
     if (window.showSaveFilePicker) {
-      try { const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Etüt şablonu', accept: { 'text/plain': ['.txt'] } }] }); const w = await h.createWritable(); await w.write(blob); await w.close(); return toast('Kaydedildi: ' + h.name); }
+      try { const h = await window.showSaveFilePicker({ suggestedName: name, types: [o.kml ? { description: 'Google Earth KML', accept: { 'application/vnd.google-earth.kml+xml': ['.kml'] } } : { description: 'Etüt şablonu', accept: { 'text/plain': ['.txt'] } }] }); const w = await h.createWritable(); await w.write(blob); await w.close(); return toast('Kaydedildi: ' + h.name); }
       catch (e) { if (e && e.name === 'AbortError') return; }
     }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);

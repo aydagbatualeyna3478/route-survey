@@ -187,6 +187,68 @@
     }
   }
   g.roadRoute = roadRoute; g.applyRoadKm = applyRoadKm;
+  /* KM along a route line the team drew (Google Earth KMZ/KML or GPX, kept as sv.routeLine.pts [[lat, lon]…]):
+     every obstacle is put on the nearest place of the line and its KM is the length of the line up to there,
+     counted from the line's start (the line is turned round when it was drawn from the end). A line that passes the
+     same place twice is handled by taking the first pass after the previous obstacle. Records more than 400 m from
+     the line keep the KM before them. Returns { line, cum: { recordId: metres }, len, far: [records too far] } or null. */
+  function lineKm(sv, recs) {
+    const L = sv.routeLine && sv.routeLine.pts; if (!L || L.length < 2) return null;
+    let pts = L.slice();
+    const pos = recs.filter(r => r.latDec != null && r.flag !== 'INFO');
+    if (pos.length) {   // the line runs from the first obstacle towards the last one
+      const a = [pos[0].latDec, pos[0].lonDec], b = [pos[pos.length - 1].latDec, pos[pos.length - 1].lonDec];
+      if (Geo.hav(pts[pts.length - 1], a) + Geo.hav(pts[0], b) < Geo.hav(pts[0], a) + Geo.hav(pts[pts.length - 1], b)) pts.reverse();
+    }
+    const cum = [0]; for (let i = 1; i < pts.length; i++) cum[i] = cum[i - 1] + Geo.hav(pts[i - 1], pts[i]);
+    const k = Math.cos(pts[0][0] * Math.PI / 180), M = 111320, LIM = 400;
+    const xy = pts.map(p => [p[1] * k * M, p[0] * M]);
+    const passes = (lat, lon) => {   // nearest place of each pass of the line near the point: [{ off, m }]
+      const px = lon * k * M, py = lat * M, out = []; let run = null;
+      for (let j = 0; j + 1 < pts.length; j++) {
+        const [ax, ay] = xy[j], [bx, by] = xy[j + 1], dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+        const off = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+        if (off <= LIM) { const m = cum[j] + t * (cum[j + 1] - cum[j]); if (!run || off < run.off) run = { off, m }; }
+        else if (run) { out.push(run); run = null; }
+      }
+      if (run) out.push(run);
+      return out;
+    };
+    const res = {}, far = []; let prev = 0;
+    for (const r of recs) {
+      if (r.latDec == null || r.flag === 'INFO') continue;
+      const ps = passes(r.latDec, r.lonDec);
+      if (!ps.length) { far.push(r); continue; }
+      const fwd = ps.filter(q => q.m >= prev - 300);
+      const best = fwd.length ? fwd[0] : ps.reduce((a, b) => (b.off < a.off ? b : a));
+      res[r.id] = best.m; prev = Math.max(prev, best.m);
+    }
+    return { line: pts, cum: res, len: cum[cum.length - 1], far };
+  }
+  /* a KMZ / KML / GPX file → [[lat, lon]…] of its route line (all its lines joined, in the file's order) */
+  async function readRouteFile(file) {
+    let text;
+    if (/\.kmz$/i.test(file.name)) {
+      const z = await Transfer.readZip(file), n = z.names.find(x => /\.kml$/i.test(x));
+      if (!n) throw new Error('KMZ dosyasının içinde KML bulunamadı.');
+      text = await (await z.get(n)).text();
+    } else text = await file.text();
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) throw new Error('Dosya okunamadı (KML/GPX biçiminde değil).');
+    const pts = [];
+    const add = (lat, lon) => { if (!isFinite(lat) || !isFinite(lon)) return; const q = pts[pts.length - 1]; if (!q || q[0] !== lat || q[1] !== lon) pts.push([lat, lon]); };
+    for (const ls of doc.getElementsByTagName('LineString')) {
+      const c = ls.getElementsByTagName('coordinates')[0]; if (!c) continue;
+      for (const t of c.textContent.trim().split(/\s+/)) { const [lo, la] = t.split(',').map(Number); add(la, lo); }
+    }
+    if (!pts.length) for (const tr of doc.getElementsByTagNameNS('*', 'Track')) for (const c of tr.getElementsByTagNameNS('*', 'coord')) { const [lo, la] = c.textContent.trim().split(/\s+/).map(Number); add(la, lo); }
+    if (!pts.length) for (const tag of ['trkpt', 'rtept']) for (const e of doc.getElementsByTagName(tag)) add(+e.getAttribute('lat'), +e.getAttribute('lon'));
+    if (pts.length < 2) throw new Error('Dosyada güzergah çizgisi (yol / path) bulunamadı. Google Earth\'te "Yol Ekle" ile çizilmiş bir çizgi olmalı.');
+    return pts;
+  }
+  g.lineKm = lineKm; g.readRouteFile = readRouteFile;
+
   /* Every record carrying a height ('heights') or width ('widths'), lowest first, with where it lies on the route:
      'route'    an obstacle on the main route
      'bypass'   a record on a bypass
