@@ -33,6 +33,7 @@ function create() {
   win.loadURL(SITE);
 }
 
+
 /* report PDF: Chromium's own PDF printer, page sizes from the report's CSS */
 ipcMain.handle('pdf:save', async (e, name) => {
   const wc = e.sender, w = BrowserWindow.fromWebContents(wc);
@@ -49,6 +50,34 @@ ipcMain.handle('pdf:save', async (e, name) => {
 ipcMain.handle('pdf:open', (e, p) => shell.openPath(p));
 ipcMain.handle('pdf:show', (e, p) => shell.showItemInFolder(p));
 ipcMain.handle('app:version', () => app.getVersion());
+
+/* backup folder: chosen once with Windows' folder dialog, kept in the app's settings; every path stays inside it */
+const CFG = () => path.join(app.getPath('userData'), 'backup.json');
+const base = () => { try { const b = JSON.parse(fs.readFileSync(CFG(), 'utf8')).dir; return b && fs.existsSync(b) ? b : null; } catch (e) { return null; } };
+const inside = rel => {
+  const b = base(); if (!b) throw new Error('Yedekleme klasörü seçilmedi');
+  const full = path.resolve(b, String(rel || '').replace(/^[\\/]+/, ''));
+  if (full !== path.resolve(b) && !full.startsWith(path.resolve(b) + path.sep)) throw new Error('Geçersiz yol');
+  return full;
+};
+const res = f => async (...a) => { try { return { ok: true, v: await f(...a) } } catch (er) { return { ok: false, err: er.message || String(er) }; } };
+ipcMain.handle('fs:pick', async e => {
+  const w = BrowserWindow.fromWebContents(e.sender), docs = app.getPath('documents');
+  const r = await dialog.showOpenDialog(w, { title: 'Yedekleme Konumunu Seçin', defaultPath: base() || docs, properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const dir = r.filePaths[0];
+  try { const t = path.join(dir, '.gosurvey-yazma-testi'); fs.writeFileSync(t, 'ok'); fs.unlinkSync(t); } catch (er) { return { err: 'Bu klasöre yazılamıyor: ' + er.message }; }
+  fs.mkdirSync(path.dirname(CFG()), { recursive: true }); fs.writeFileSync(CFG(), JSON.stringify({ dir }));
+  return { path: dir, name: path.basename(dir) || dir };
+});
+ipcMain.handle('fs:current', () => { const b = base(); return b ? { path: b, name: path.basename(b) || b } : null; });
+ipcMain.handle('fs:clear', () => { try { fs.unlinkSync(CFG()); } catch (e) {} return true; });
+ipcMain.handle('fs:write', res(async (rel, data) => { const f = inside(rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, typeof data === 'string' ? data : Buffer.from(data)); }));
+ipcMain.handle('fs:move', res(async (a, b) => { const f = inside(a), t = inside(b); if (fs.existsSync(t)) throw new Error('Hedef dolu'); fs.mkdirSync(path.dirname(t), { recursive: true }); fs.renameSync(f, t); }));
+ipcMain.handle('fs:remove', res(async rel => { fs.rmSync(inside(rel), { recursive: true, force: true }); }));
+ipcMain.handle('fs:list', res(async rel => { const d = inside(rel); return fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).map(x => ({ name: x.name, dir: x.isDirectory() })) : []; }));
+ipcMain.handle('fs:read', res(async rel => new Uint8Array(fs.readFileSync(inside(rel)))));
+ipcMain.handle('fs:open', () => { const b = base(); return b ? shell.openPath(b) : ''; });
 
 app.whenReady().then(create);
 app.on('window-all-closed', () => app.quit());

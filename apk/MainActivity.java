@@ -276,7 +276,10 @@ public class MainActivity extends BridgeActivity {
                         if (made == null) return "ERR:Dosya oluşturulamadı: " + path;
                         id = DocumentsContract.getDocumentId(made); ids.put(path, id);
                     }
-                    try (OutputStream o = getContentResolver().openOutputStream(docUri(id), "wt")) { o.write(Base64.decode(b64, Base64.DEFAULT)); }
+                    byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+                    OutputStream os; try { os = getContentResolver().openOutputStream(docUri(id), "wt"); } catch (Exception m) { os = getContentResolver().openOutputStream(docUri(id), "w"); }   // some folders (cloud) do not know "wt"
+                    if (os == null) return "ERR:Dosya açılamadı: " + path;
+                    try (OutputStream o = os) { o.write(bytes); }
                     return "";
                 } catch (Exception e) { forget(path); return err(e); }
             }

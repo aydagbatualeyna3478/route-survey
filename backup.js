@@ -62,15 +62,29 @@
     async list(path) { try { return JSON.parse(afCall('list', path.replace(/\/$/, ''))); } catch (e) { return []; } },
     async read(path) { const bin = atob(afCall('read', path)); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u]); },
   };
+  // Windows app (GoSurvey exe): a normal Windows folder written by the app itself (window.DesktopFs in desktop/preload.js)
+  const DF = () => window.DesktopFs;
+  let WINF = null;   // { path, name }
+  const dfCall = async (m, ...a) => { const r = await DF()[m](...a); if (r && r.ok === false) throw new Error(r.err); return r && r.v; };
+  const winfs = {
+    kind: 'winfs', get label() { return WINF ? 'Klasör · ' + WINF.path : 'Yedekleme konumu tanımlanmadı'; },
+    async ready() { return !!WINF; },
+    async write(path, data) { await dfCall('write', path, data); },
+    async move(from, to) { await dfCall('move', from, to); },
+    async remove(path) { try { await dfCall('remove', path); } catch (e) {} },
+    async removeDir(path) { try { await dfCall('remove', path.replace(/\/$/, '')); } catch (e) {} },
+    async list(path) { try { return (await dfCall('list', path.replace(/\/$/, ''))) || []; } catch (e) { return []; } },
+    async read(path) { return new Blob([await dfCall('read', path)]); },
+  };
   const readSaf = () => { try { const c = AF() && AF().current(); SAF = c ? JSON.parse(c) : null; } catch (e) { SAF = null; } };
-  const target = () => (T() && T().native() ? (SAF ? saf : android) : desktop);
-  const supported = () => (T() && T().native()) || typeof window.showDirectoryPicker === 'function';
+  const target = () => (T() && T().native() ? (SAF ? saf : android) : DF() ? winfs : desktop);
+  const supported = () => (T() && T().native()) || !!DF() || typeof window.showDirectoryPicker === 'function';
 
   // ---------- state ----------
   const ST = { busy: false, last: null, error: '', listeners: new Set() };
   const emit = () => ST.listeners.forEach(f => { try { f(status()); } catch (e) {} });
   /* has: a place to write is known (tablet: always, Belgeler/Etütler by default; computer: once a folder is chosen) */
-  const status = () => ({ supported: supported(), canPick: !T().native() || !!AF(), kind: target().kind, label: target().label, has: target().kind !== 'desktop' || !!HANDLE, on: true, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: !!ST.needsPermission });
+  const status = () => ({ supported: supported(), canPick: !T().native() || !!AF(), kind: target().kind, label: target().label, has: target().kind === 'desktop' ? !!HANDLE : target().kind === 'winfs' ? !!WINF : true, on: true, busy: ST.busy, last: ST.last, error: ST.error, needsPermission: !!ST.needsPermission });
   const mkey = id => `bk:${target().kind}:${id}`;
 
   async function init() {
@@ -78,6 +92,7 @@
     const cfg = (await DB.getSetting('backup')) || {};
     if (T().native()) readSaf();
     if (target().kind === 'saf' && !SAF.ok) ST.needsPermission = true;
+    if (DF()) { try { WINF = await DF().current(); } catch (e) { WINF = null; } }
     if (target().kind === 'desktop') HANDLE = (await DB.getSetting('backupDir')) || null;
     ST.last = cfg.last || null;
     emit();
@@ -88,6 +103,7 @@
     if (ST.busy) throw new Error('Yedekleme işlemi zaten devam ediyor.');
     const t = target();
     if (t.kind === 'desktop' && !(await desktop.ready(true))) { ST.needsPermission = true; emit(); throw new Error(HANDLE ? 'Klasöre yazma izni verilmedi.' : 'Lütfen önce yedekleme konumunu tanımlayın.'); }
+    if (t.kind === 'winfs' && !WINF) throw new Error('Lütfen önce yedekleme konumunu tanımlayın.');
     if (t.kind === 'saf' && !(await saf.ready())) { ST.needsPermission = true; emit(); throw new Error('Yedekleme klasörüne yazılamıyor; lütfen konumu yeniden tanımlayın.'); }
     if (t.kind === 'android') { try { await T().call('Filesystem', 'requestPermissions'); } catch (e) { /* Android 11+: not needed */ } }
     ST.busy = true; ST.needsPermission = false; ST.error = ''; emit();
@@ -121,6 +137,8 @@
     return name;
   }
 
+  // a failed write says which file and why (shown in the backup window)
+  const wr = async (t, path, data) => { try { await t.write(path, data); } catch (e) { const m = (e && (e.message || e.name)) || 'bilinmeyen hata'; throw Object.assign(new Error(`${path.split('/').slice(-2).join('/')} yazılamadı: ${m}`), { cause: e, name: e && e.name === 'NotAllowedError' ? 'NotAllowedError' : 'Error' }); } };
   async function syncSurvey(sv, step) {
     const t = target(), root = (await rootFor(sv)) + '/';
     const P = T().plan(sv);
@@ -151,7 +169,7 @@
       tick();
       const b = await DB.getBlob(e.blob); if (!b) { T().dropPath(P, e); delete next[e.path]; continue; }
       const pth = T().fixExt(e.path, b); if (pth !== e.path) { delete next[e.path]; T().renamePath(P, e, pth); }
-      await t.write(root + e.path, new Uint8Array(await b.arrayBuffer()));
+      await wr(t, root + e.path, new Uint8Array(await b.arrayBuffer()));
       next[e.path] = 'b:' + e.blob;
     }
     // 2) texts
@@ -160,10 +178,10 @@
     for (const [pth, txt] of texts) {
       tick();
       const sig = 't:' + hash(txt.replace(/Son yedek: [^\r\n]*/, ''));
-      if (old[pth] !== sig) await t.write(root + pth, enc.encode(txt));
+      if (old[pth] !== sig) await wr(t, root + pth, enc.encode(txt));
       next[pth] = sig;
     }
-    const json = P.json(); await t.write(root + 'etut.json', enc.encode(json)); next['etut.json'] = 't:' + hash(json);
+    const json = P.json(); await wr(t, root + 'etut.json', enc.encode(json)); next['etut.json'] = 't:' + hash(json);
     // 3) remove what is no longer there: old files, then folders that are now empty
     for (const p of Object.keys(old)) if (!(p in next)) await t.remove(root + p);
     const keep = dirsOf(Object.keys(next));
@@ -188,6 +206,13 @@
   // ---------- where the backup goes ----------
   async function chooseFolder() {   // must run from a click; only sets the place, the backup runs with backupSurveys
     if (T().native()) return pickTablet();
+    if (DF()) {
+      const r = await DF().pick(); if (!r) return false;
+      if (r.err) throw new Error(r.err);
+      const changed = !WINF || WINF.path !== r.path; WINF = r;
+      if (changed) await resetManifests();
+      ST.needsPermission = false; ST.error = ''; emit(); return true;
+    }
     const h = await window.showDirectoryPicker({ id: 'rs-backup', mode: 'readwrite', startIn: 'documents' });
     if ((await h.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Klasöre yazma izni verilmedi');
     const changed = !HANDLE || !(await HANDLE.isSameEntry(h));

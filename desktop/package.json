@@ -1,7 +1,7 @@
 {
   "name": "gosurvey",
   "productName": "GoSurvey",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "GoSurvey – güzergah etüdü (masaüstü)",
   "author": "Çaba Misnak",
   "main": "main.js",

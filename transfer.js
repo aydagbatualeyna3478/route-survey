@@ -11,7 +11,7 @@
 (function (g) {
   const FORMAT = 'route-survey-etut', VERSION = 1;
   const enc = new TextEncoder();
-  const safe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Engel';
+  const safe = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80).replace(/[. ]+$/, '') || 'Engel';
   const rootName = sv => safe(`${sv.project.start.name}-${sv.project.end.name} Arası Etüt Raporu`);
   const fileNameOf = sv => `${rootName(sv)} ${new Date().toISOString().slice(0, 10)}.zip`;
   const lab = k => (g.OL ? g.OL(k) : k) || '';   // obstacle name as set in the survey layout

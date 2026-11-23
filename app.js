@@ -335,6 +335,11 @@
     })();
     return P;
   }
+  function dropImport() {
+    const P = IMPORT && IMPORT.prep; IMPORT = null;
+    if (P) { P.stop = true; P.promise.then(() => { for (const it of P.items) if (it.blobId && !it.used) DB.delBlob(it.blobId); }); }
+    const pb = document.getElementById('prepbar'); if (pb) pb.remove();
+  }
   async function importInto(sv, items) {   // one main obstacle per photo, in capture order; KM like in the field
     const ov = document.createElement('div'); ov.className = 'toast'; ov.style.bottom = '50%'; document.body.appendChild(ov);
     const P = IMPORT && IMPORT.prep;
@@ -400,7 +405,7 @@
       };
       document.getElementById('ifiles').onchange = e => take(e.target.files);
       const d = document.getElementById('idir'); if (d) d.onchange = e => take(e.target.files);
-      const n = document.getElementById('inext'); if (n) n.onclick = () => go('#/new');
+      const n = document.getElementById('inext'); if (n) n.onclick = () => { IMPORT.next = true; go('#/new'); };
     };
     draw();
   };
@@ -426,10 +431,12 @@
         <div style="overflow:auto;border:1px solid var(--line);border-radius:10px;max-height:46vh">${all.map(sv => `<label class="row" style="padding:10px 12px;border-bottom:1px solid var(--line);gap:10px;cursor:pointer"><input type="checkbox" data-sv="${sv.id}" ${chosen.has(sv.id) ? 'checked' : ''} style="width:22px;height:22px">
           <span style="flex:1;min-width:0"><b style="font-size:15px;margin:0">${esc(sv.project.start.name)} – ${esc(sv.project.end.name)}</b><br><span class="hint">${sv.records.length} kayıt${info[sv.id].at ? ' · son yedekleme ' + tf(info[sv.id].at) : ' · hiç yedeklenmedi'}</span></span>
           <span class="bkic" title="${info[sv.id].k === 'ok' ? 'Yedeklendi' : 'Yedeklenmemiş değişiklik var'}">${BKICON[info[sv.id].k]}</span></label>`).join('') || '<div class="empty">Kayıtlı etüt bulunmuyor.</div>'}</div>
+        ${err ? `<div class="note w" style="color:var(--badtx);background:var(--badbg);border-color:var(--badtx)"><b style="font-size:14px">Yedekleme tamamlanamadı</b><br>${esc(err)}</div>` : ''}
         <div class="hint" id="bkprog" style="min-height:18px"></div>
         <button class="btn pri" data-b="go" ${chosen.size && st.has ? '' : 'disabled'}>Yedekle</button>
         <button class="btn dash" data-x="1">Kapat</button></div>`;
     };
+    let err = '';
     draw(); document.body.appendChild(d);
     let busy = false;
     d.addEventListener('change', e => { const c = e.target.closest('[data-sv]'); if (!c) return; c.checked ? chosen.add(c.dataset.sv) : chosen.delete(c.dataset.sv); draw(); });
@@ -440,16 +447,25 @@
       const k = b.dataset.b;
       try {
         if (k === 'all') { if (chosen.size === all.length) chosen.clear(); else all.forEach(x => chosen.add(x.id)); return draw(); }
-        if (k === 'pick') { await Backup.chooseFolder(); return draw(); }
+        if (k === 'pick') { err = ''; await Backup.chooseFolder(); return draw(); }
         if (k === 'def') { await Backup.useDefault(); return draw(); }
         if (k === 'go') {
-          busy = true; b.disabled = true; b.textContent = 'Yedekleniyor…';
+          err = ''; busy = true; b.disabled = true; b.textContent = 'Yedekleniyor…';
           const pr = d.querySelector('#bkprog');
           const n = await Backup.backupSurveys([...chosen], txt => { pr.textContent = txt; });
           busy = false; d.remove(); toast(`${n} etüt yedeklendi → ${bkWhere(Backup.status())}`);
           if (location.hash.startsWith('#/s/')) V.survey(location.hash.split('/')[2].split('?')[0]); else if (location.hash === '#/etutler') V.home(); else if (!location.hash || location.hash === '#/') V.start();
         }
-      } catch (er) { busy = false; if (er && er.name !== 'AbortError') toast(er.message || 'Yedekleme tamamlanamadı.'); draw(); }
+      } catch (er) {
+        busy = false;
+        if (er && er.name === 'AbortError') return draw();   // folder dialog closed
+        console.error('backup', er);
+        const m = (er && (er.message || er.name)) || 'Bilinmeyen hata';
+        err = /izin|permission|NotAllowed|denied/i.test(m + (er && er.name))
+          ? `${m} — Klasör erişim izni yenilenmelidir: "Konumu Değiştir" ile yedekleme klasörünü yeniden seçip tekrar deneyin.`
+          : m;
+        draw();
+      }
     });
   }
 
@@ -502,7 +518,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w65)';
+  const APP_VER = '2.0 (w66)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -562,7 +578,6 @@
         <div class="card" style="gap:12px"><div class="sec" style="margin:0">Hesap Bilgileri</div>
           <label class="f">İsim Soyisim<div class="row" style="gap:8px"><input id="pname" value="${esc(u.name || '')}" placeholder="Ad Soyad" style="flex:1"><button class="btn pri sm" id="pnsave">Kaydet</button></div></label>
           ${row('key', 'Şifre', 'Hesabının şifresini değiştir', '<button class="btn sm" id="ppw">Şifreyi Güncelle</button>')}
-          ${row('shield', 'Oturum Açma Yöntemi', u.role === 'admin' ? 'E-posta ve şifre · yönetici hesabı: cihaz yetkilendirmesi gerekmez' : 'E-posta ve şifre · her yeni cihaz bir kez yönetici tarafından yetkilendirilir', '')}
         </div>
         <div class="card" style="gap:12px"><div class="sec" style="margin:0">Bu Cihaz</div>
           <label class="f">Cihaz İsmi<div class="row" style="gap:8px"><input id="pdev" value="${esc(dev.label || '')}" placeholder="${esc(dev.platform)}" style="flex:1"><button class="btn sm" id="pdsave">Kaydet</button></div></label>
@@ -1655,11 +1670,20 @@
         : `<span class="hint">${x.k === 'NA' ? 'Hat tipi tanımlanmadı' : KN[x.k]}${gen ? ' · genel etüt: yalnızca yükseklik esas alınır' : ''}</span>`;
       return item(x, top, extra, x.margin != null && x.margin < 0 && x.counted);
     }).join('') || '<div class="empty">Yükseklik ölçüsü girilmiş enerji hattı bulunmuyor</div>';
+    // counts: every list's records and how many of them are critical (do not clear the cargo / the safety distance)
+    const LH = Number(cg.height) || null, LW = Number(cg.width) || null;
+    const kH = LH ? hs.filter(x => x.counted && x.value < LH).length : null, kW = LW ? ws.filter(x => x.counted && x.value < LW).length : null;
+    const kC = gen ? (LH ? cab.filter(x => x.counted && x.value < LH).length : null) : cab.filter(x => x.counted && x.margin != null && x.margin < 0).length;
+    const nAll = orderedRecords(sv).length, kSum = [kH, kW, kC].filter(v => v != null).reduce((a, b) => a + b, 0);
+    const kTxt = v => v == null ? '<span class="hint">yük ölçüsü girilmedi</span>' : `<b style="color:${v ? 'var(--badtx)' : 'var(--oktx)'}">${v}</b>`;
+    const cnt = (n, k) => `<div class="ccnt"><span>Toplam <b>${n}</b></span><span>Kritik ${kTxt(k)}</span></div>`;
     $app.innerHTML = `${bar('Kritik Engel Analizi', `#/s/${sv.id}`, minHBox(sv) + cargoBox(P))}
+      <div class="ccnt top"><span>Toplam engel <b>${nAll}</b></span><span>Toplam kritik engel <b style="color:${kSum ? 'var(--badtx)' : 'var(--oktx)'}">${kSum}</b></span>
+        <span>Kritik H ${kTxt(kH)} / ${hs.length}</span><span>Kritik W ${kTxt(kW)} / ${ws.length}</span><span>Kablo ${kTxt(kC)} / ${cab.length}</span></div>
       <div class="crit3">
-        <div class="pane box"><div class="ch"><b>1 · Kritik H</b><span class="hint">Enerji hatları hariç · en düşük açıklıktan en yükseğe · bypass edilen engeller gri</span></div>${col(hs, Number(cg.height) || null)}</div>
-        <div class="pane box"><div class="ch"><b>2 · Kritik W</b><span class="hint">Tüm engeller · en dar geçişten en genişe</span></div>${col(ws, Number(cg.width) || null)}</div>
-        <div class="pane box"><div class="ch"><b>3 · Kablolar</b><span class="hint">${gen ? 'Genel etüt: en alçaktan en yükseğe' : `Atlama referansına göre en kritikten rahata (AG ${fmt(ref.LV)} · OG ${fmt(ref.MV)} · YG ${fmt(ref.HV)} m)`}</span>
+        <div class="pane box"><div class="ch"><b>1 · Kritik H</b>${cnt(hs.length, kH)}<span class="hint">Enerji hatları hariç · en düşük açıklıktan en yükseğe · bypass edilen engeller gri</span></div>${col(hs, Number(cg.height) || null)}</div>
+        <div class="pane box"><div class="ch"><b>2 · Kritik W</b>${cnt(ws.length, kW)}<span class="hint">Tüm engeller · en dar geçişten en genişe</span></div>${col(ws, Number(cg.width) || null)}</div>
+        <div class="pane box"><div class="ch"><b>3 · Kablolar</b>${cnt(cab.length, kC)}<span class="hint">${gen ? 'Genel etüt: en alçaktan en yükseğe' : `Atlama referansına göre en kritikten rahata (AG ${fmt(ref.LV)} · OG ${fmt(ref.MV)} · YG ${fmt(ref.HV)} m)`}</span>
           <div class="chips">${kinds.map(k => `<button class="chip ${CRITF === k ? 'on' : ''}" data-cf="${k}">${KN[k]} · ${k === 'all' ? cab.length : cab.filter(x => x.k === k).length}</button>`).join('')}</div></div>${cabHtml}</div>
       </div>`;
     $app.onclick = e => { const c = e.target.closest('[data-cf]'); if (c) { CRITF = c.dataset.cf; V.crit(id); } };
@@ -1788,6 +1812,11 @@
     const H = P.header = Object.assign({ client: P.client || '', project: '', route: `${P.start.name} - ${P.end.name}`, country: '', date: longDate(new Date()), docNo: last.docNo || '', rev: P.rev || '00', revDate: last.revDate || '' }, P.header || {});
     if (H.route === `${P.start.name} - ${P.end.name} Güzergah Etüdü`) H.route = `${P.start.name} - ${P.end.name}`;   // older default
     const R2 = sv.r2 = Object.assign({ head: 'caba', foot: 1 }, sv.r2 || {});
+    if (!R2.slots) R2.slots = { t1: R2.head === 'cj_caba' ? 'partner' : 'company', t2: R2.head === 'caba_cj' ? 'partner' : R2.head === 'cj_caba' ? 'company' : '', b1: R2.foot >= 1 ? 'client1' : '', b2: R2.foot >= 2 ? 'client2' : '' };
+    const SLOPT = [['', 'Logo yok'], ['company', 'Çaba Misnak'], ['partner', 'CJ ICM'], ['client1', 'Müşteri 1'], ['client2', 'Müşteri 2']];
+    const sslot = (k, t) => `<label class="f">${t}<select data-r2slot="${k}">${SLOPT.map(([v, n]) => `<option value="${v}" ${R2.slots[k] === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
+    const CONAME = { cj: 'CJ ICM', caba: 'Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.', both: 'CJ ICM / Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.' };
+    const coKey = Object.keys(CONAME).find(k => CONAME[k] === String(P.company || '').trim()) || '';
     const NEED = ['client', 'project', 'country', 'date', 'docNo', 'rev', 'revDate'], missing = NEED.filter(k => !String(H[k] || '').trim());
     const lg = { company: await blobUrl(await DB.getSetting('companyLogo')) || 'assets/logo_company.jpg', partner: await blobUrl(await DB.getSetting('partnerLogo')) || 'assets/logo_cjicm.jpg', client1: await blobUrl(sv.logos.client1), client2: await blobUrl(sv.logos.client2) };
     const hf = (k, t, ph) => `<label class="f">${t}<input data-h="${k}" value="${esc(H[k] || '')}" ${ph ? `placeholder="${ph}"` : ''} style="${NEED.includes(k) && !String(H[k] || '').trim() ? 'border:2px solid var(--red)' : ''}"></label>`;
@@ -1806,11 +1835,13 @@
           <div class="g2">${hf('project', 'Proje / Project', 'Örn. Mozambique Inhassoro Project')}${hf('docNo', 'Doküman No / Doc. No', 'Örn. RS-102026-MOZ-001-SB')}</div>
           <div class="g2">${hf('route', 'Güzergah / Route')}${hf('rev', 'Revizyon No / Rev. No')}</div>
           <div class="g2">${hf('country', 'Ülke / Country')}${hf('revDate', 'Revizyon Tarihi / Rev. Date', 'Örn. 13 November 2026')}</div></div>
+        <div class="card"><b>Kapak Firma Unvanı</b><span class="hint">Rapor kapağında yer alacak firma unvanı</span>
+          ${ropt('coname', 'cj', 'CJ ICM', coKey)}${ropt('coname', 'caba', 'Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.', coKey)}${ropt('coname', 'both', 'CJ ICM / Çaba Misnak Project Logistics Heavy Lifting and Engineering Inc.', coKey)}
+          ${coKey ? '' : `<span class="hint">Mevcut unvan: ${esc(P.company || '—')}</span>`}</div>
         <div class="card"><b>Engel Paftası Logoları</b>
-          <span class="sec">Sol Üst</span>
-          ${ropt('r2head', 'caba', 'Yalnızca Çaba Misnak', R2.head)}${ropt('r2head', 'caba_cj', 'Çaba Misnak + CJ ICM', R2.head)}${ropt('r2head', 'cj_caba', 'CJ ICM + Çaba Misnak', R2.head)}
-          <span class="sec">Sol Alt (Müşteri)</span>
-          ${ropt('r2foot', '0', 'Logo kullanılmasın', String(R2.foot))}${ropt('r2foot', '1', 'Tek müşteri logosu', String(R2.foot))}${ropt('r2foot', '2', 'İki müşteri logosu', String(R2.foot))}
+          <span class="hint">Her konum için kullanılacak logoyu seçin. Üst konumlar antet tablosunun solunda, alt konumlar sayfa altında yer alır.</span>
+          <div class="g2">${sslot('t1', 'Üst-1')}${sslot('t2', 'Üst-2')}</div>
+          <div class="g2">${sslot('b1', 'Alt-1')}${sslot('b2', 'Alt-2')}</div>
           <div class="g4">${lslot('company', 'Çaba Misnak')}${lslot('partner', 'CJ ICM')}${lslot('client1', 'Müşteri 1')}${lslot('client2', 'Müşteri 2')}</div>
           <span class="hint">Kapak ve dikey sayfa logoları, "Etüt Bilgileri" bölümündeki logo ve kapak düzeni ayarlarından alınır.</span></div>
         <div class="card"><b>1.5 Brief Information <span class="tag ok">Otomatik</span></b>
@@ -1833,7 +1864,7 @@
           <label class="f" style="${c.road === 'custom' ? '' : 'display:none'}">Metin (İngilizce)<textarea id="rt" rows="4">${esc(c.roadText || '')}</textarea></label></div>
       </div>
     </div>
-    <div class="foot"><button class="btn" id="mkold" style="min-width:0">Önceki Format (dikey, sayfada 3 engel)</button><button class="btn pri" id="mk">Raporu Oluştur ve PDF Olarak Al</button></div>`;
+    <div class="foot"><button class="btn pri" id="mk">Raporu Oluştur ve PDF Olarak Al</button></div>`;
     const save = async () => {
       const b = document.getElementById('bt'), r2 = document.getElementById('rt'); c.bridgeText = b.value.trim(); c.roadText = r2.value.trim();
       mp.key = document.getElementById('gkey').value.trim(); await DB.setSetting('maps', mp);
@@ -1858,7 +1889,8 @@
       V.report(id);
     }));
     $app.onchange = async e => {
-      if (e.target.name === 'r2head' || e.target.name === 'r2foot') { await save(); R2[e.target.name === 'r2head' ? 'head' : 'foot'] = e.target.name === 'r2foot' ? +e.target.value : e.target.value; await DB.putSurvey(sv); return V.report(id); }
+      if (e.target.dataset.r2slot) { await save(); R2.slots[e.target.dataset.r2slot] = e.target.value; await DB.putSurvey(sv); return V.report(id); }
+      if (e.target.name === 'coname') { await save(); P.company = CONAME[e.target.value]; await DB.putSurvey(sv); return V.report(id); }
       if (e.target.name === 'mapProvider') { await save(); mp.provider = e.target.value; await DB.setSetting('maps', mp); return V.report(id); }
       if (e.target.type === 'radio') {
         await save(); const k = e.target.name, was = c[k]; c[k] = e.target.value;
@@ -1877,7 +1909,6 @@
         { label: 'Yatay Pafta (A4 yatay, her engel ayrı paftada)', cls: 'pri', run: () => { location.href = `report2.html?o=l#${id}`; } },
       ]);
     };
-    document.getElementById('mkold').onclick = async () => { await save(); location.href = `report.html#${id}`; };
   };
 
 
@@ -2025,6 +2056,8 @@
   async function route() {
     LATE.onfix = null; $app.onclick = null; $app.onchange = null; window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach(t => t.remove());
     const [path, qs] = (location.hash.slice(1) || '/').split('?'), p = path.split('/').filter(Boolean), q = Object.fromEntries(new URLSearchParams(qs || ''));
+    // a photo import that was not continued ("Devam") is dropped: its photos never reach the next new survey
+    if (IMPORT && !(p[0] === 'import' || (p[0] === 'new' && IMPORT.next))) dropImport();
     try {
       if (!p.length) await V.start();
       else if (p[0] === 'etutler') await V.home();
