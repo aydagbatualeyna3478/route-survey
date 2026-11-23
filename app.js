@@ -518,7 +518,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w66)';
+  const APP_VER = '2.0 (w67)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -554,12 +554,12 @@
   V.start = async () => {
     const u = Auth.user() || {}, all = (await DB.listSurveys()).sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
     const act = all.filter(x => x.status === 'active'), last = act[0] || all[0];
-    const tile = (id, icon, t, sub) => `<button class="ltile" id="${id}"><span class="lic">${ico(IC[icon], 44, 1.7)}</span><b>${t}</b><span>${sub}</span></button>`;
+    const tile = (id, icon, t, sub) => `<button class="ltile" id="${id}"><span class="lic">${ico(IC[icon], 44, 1.7)}</span><b>${t}</b>${sub ? `<span>${sub}</span>` : ''}</button>`;
     $app.innerHTML = `<div class="launch">
       <div class="ltop"><button class="lchip" data-go="#/profile" aria-label="Profil"><span class="lav">${esc(initials(u.name || u.email))}</span><span class="lname"><b>Profil</b><small>${esc(u.name || u.email || '')}</small></span></button>
         <button class="lchip" data-go="#/settings" aria-label="Ayarlar">${ico(IC.gear, 24)}<span class="lname"><b>Ayarlar</b></span></button></div>
       <div class="lmid"><div class="llogo"><img src="assets/gosurvey-logo.png" alt="" onerror="this.remove()"><span class="lfall">${ico(IC.route, 64, 1.6)}</span></div><h1>GOSURVEY</h1><p>Güzergah Etüdü ve Raporlama</p></div>
-      <div class="ltiles">${tile('lmine', 'folder', 'Etütlerim', `${all.length} etüt`)}${tile('lnew', 'plus', 'Etüt Oluştur', 'Sahada ya da fotoğraflardan')}${tile('lopen', 'open', 'Dosya Aç', FIELD ? 'ZIP ya da yedekten' : 'ZIP, klasör ya da yedekten')}</div>
+      <div class="ltiles">${tile('lmine', 'folder', 'Etütlerim')}${tile('lnew', 'plus', 'Etüt Oluştur')}${tile('lopen', 'open', 'Dosya Aç')}</div>
       <div class="lfoot"><span id="lbk"></span><span>GoSurvey ${APP_VER}${Auth.isAdmin() ? ' · Yönetici' : ''}</span></div></div>`;
     document.getElementById('lmine').onclick = () => go('#/etutler');
     document.getElementById('lnew').onclick = newSurveySheet;
