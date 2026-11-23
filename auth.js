@@ -98,60 +98,7 @@
     };
   }
 
-  async function mfaStep(done) {
-    const u = await api('/auth/v1/user');
-    const fs = (u.factors || []).filter(f => f.factor_type === 'totp');
-    const ok = fs.find(f => f.status === 'verified');
-    for (const f of fs.filter(f => f.status !== 'verified')) { try { await api('/auth/v1/factors/' + f.id, { method: 'DELETE' }); } catch (e) {} }
-    if (ok) return codeView(ok.id, done, false);
-    const en = await api('/auth/v1/factors', { method: 'POST', body: { factor_type: 'totp', friendly_name: 'Route Survey ' + new Date().toISOString().slice(0, 16) } });
-    $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Authenticator'ı bağla (bir kez)</b>
-      <div class="hint">Telefonuna Google Authenticator ya da Microsoft Authenticator kur. Uygulamada "+" → "QR kodu tara" ile aşağıdaki kodu okut.</div>
-      <div id="qrbox" role="img" aria-label="QR kodu" style="width:214px;height:214px;align-self:center;background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)">${qrHtml(en.totp, S && S.email)}</div>
-      <div class="hint">QR okutamıyorsan anahtarı elle gir: <b style="user-select:all;word-break:break-all;color:var(--ink)">${esc(en.totp.secret)}</b></div>
-      <form id="cf" style="display:flex;flex-direction:column;gap:12px"><label class="f">Authenticator'daki 6 haneli kod<input id="cc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
-      ${errBox('cerr')}<button class="btn pri" id="cb">Doğrula</button></form>
-      <button class="btn dash" id="cx">Vazgeç</button>`);
-    wireCode(en.id, done);
-  }
-  /* Supabase returns the QR as "data:image/svg+xml;utf-8,<svg …>" with the SVG unencoded: a "#" in it cuts the data URL,
-     so the picture never shows. Turn it into a proper blob URL. */
-  function qrSrc(q) {
-    q = String(q || '');
-    const m = /^data:image\/svg\+xml(;[^,]*)?,/.exec(q);
-    let svg = q;
-    if (m) { const body = q.slice(m[0].length); svg = /;base64/.test(m[1] || '') ? atob(body) : (/%3C/i.test(body.slice(0, 6)) ? decodeURIComponent(body) : body); }
-    if (!/^\s*<svg/i.test(svg)) return q;
-    return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-  }
-  /* the QR is drawn here from the secret (qr.js), inline SVG: no image URL, works the same in the APK and every browser */
-  function qrHtml(t, email) {
-    const uri = `otpauth://totp/${encodeURIComponent('Route Survey')}:${encodeURIComponent(email || 'hesap')}?secret=${encodeURIComponent(t.secret)}&issuer=${encodeURIComponent('Route Survey')}&algorithm=SHA1&digits=6&period=30`;
-    try { if (window.QRSvg) return QRSvg(uri).replace('<svg ', '<svg width="196" height="196" '); } catch (e) { console.error(e); }
-    return `<img alt="" src="${esc(qrSrc(t.qr_code))}" style="width:196px;height:196px">`;
-  }
-  function codeView(fid, done) {
-    $app().innerHTML = shell('İki adımlı doğrulama', `<b style="font-size:18px">Doğrulama kodu</b>
-      <div class="hint">Telefonundaki Authenticator uygulamasında "Route Survey" için görünen 6 haneli kodu gir.</div>
-      <form id="cf" style="display:flex;flex-direction:column;gap:12px"><label class="f">Kod<input id="cc" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required autofocus></label>
-      ${errBox('cerr')}<button class="btn pri" id="cb">Devam</button></form>
-      <div class="hint">Telefonunu kaybettiysen bir admin authenticator bağlantını sıfırlayabilir.</div>
-      <button class="btn dash" id="cx">Farklı hesapla gir</button>`);
-    wireCode(fid, done);
-  }
-  function wireCode(fid, done) {
-    document.getElementById('cx').onclick = () => { signOutLocal(); loginView(done); };
-    document.getElementById('cf').onsubmit = async e => {
-      e.preventDefault(); const b = document.getElementById('cb'); showErr('cerr', ''); busy(b, true, 'Doğrulanıyor…');
-      try {
-        const ch = await api(`/auth/v1/factors/${fid}/challenge`, { method: 'POST', body: {} });
-        const j = await api(`/auth/v1/factors/${fid}/verify`, { method: 'POST', body: { challenge_id: ch.id, code: document.getElementById('cc').value.trim() } });
-        setTokens(j);
-        await afterAal2(done, 'login');
-      } catch (err) { busy(b, false); showErr('cerr', err.message); }
-    };
-  }
-
+  // (authenticator / QR screens removed 23.11.2026: sign-in is e-mail + password, new devices wait once for an admin)
   async function afterAal2(done, event) {
     const r = await checkIn(event);
     if (r.ok) return done();
