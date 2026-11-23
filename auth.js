@@ -75,13 +75,13 @@
   // ---------- screens ----------
   const $app = () => document.getElementById('app');
   const shell = (title, inner) => `<div class="bar"><h1>${esc(title)}</h1></div><div class="full" style="align-items:center;justify-content:center">
-    <div class="card" style="width:min(460px,100%);gap:14px">${inner}</div></div>`;
+    <div class="card" style="width:min(460px,100%);gap:14px"><div class="brand sm"><img class="bmark" src="assets/gosurvey-mark.svg" alt=""><div class="btext"><b class="bword"><span>Go</span>Survey</b><span class="btag"><i></i>Güzergah Etüdü · Route Survey</span></div></div>${inner}</div></div>`;
   const errBox = id => `<div class="note w" id="${id}" hidden></div>`;
   const showErr = (id, m) => { const e = document.getElementById(id); if (e) { e.textContent = m; e.hidden = !m; } };
   const busy = (b, on, label) => { if (!b) return; if (on) { b.dataset.l = b.textContent; b.textContent = label || 'Lütfen bekleyin…'; b.disabled = true; } else { b.textContent = b.dataset.l || b.textContent; b.disabled = false; } };
 
   function loginView(done, msg) {
-    $app().innerHTML = shell('GO Survey', `<b style="font-size:18px">Lütfen Giriş Yapın</b>
+    $app().innerHTML = shell('GoSurvey', `<b style="font-size:18px">Lütfen Giriş Yapın</b>
       <div class="hint">Hesabınız yönetici tarafından oluşturulur. Eğer bir hesaba sahip değilseniz lütfen yönetici ile görüşünüz.</div>
       ${msg ? `<div class="note w">${esc(msg)}</div>` : ''}
       <form id="lf" style="display:flex;flex-direction:column;gap:12px">

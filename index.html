@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1E3A5F">
 <title>GoSurvey</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" href="assets/gosurvey-mark.svg" type="image/svg+xml"><link rel="alternate icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <script>
 /* Screens are laid out for a 1280×720 landscape canvas and zoomed to the device: phones in landscape keep the
@@ -130,6 +130,23 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .lname{display:flex;flex-direction:column;min-width:0}.lname b{font-size:15px}.lname small{font-size:12px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
 .lav{width:38px;height:38px;border-radius:50%;background:#E8EEF5;color:#132B47;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:0 0 auto}
 .lav.big{width:64px;height:64px;font-size:24px;background:var(--navy);color:#fff}
+@font-face{font-family:'Sora';font-style:normal;font-weight:700;font-display:swap;src:url(vendor/sora-latin-700.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Sora';font-style:normal;font-weight:700;font-display:swap;src:url(vendor/sora-latin-ext-700.woff2) format('woff2');unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+.brand{display:flex;align-items:center;gap:clamp(14px,2.4vw,26px);text-align:left}
+.brand .bmark{width:clamp(72px,11vw,128px);height:auto;border-radius:24%;box-shadow:0 0 0 1px rgba(255,255,255,.22),0 10px 30px rgba(0,0,0,.3)}
+.brand .btext{display:flex;flex-direction:column;gap:10px;min-width:0}
+.brand .bword{margin:0;font-family:Sora,'Segoe UI',system-ui,sans-serif;font-weight:700;font-size:clamp(44px,7vw,84px);letter-spacing:-.035em;line-height:.95;color:#fff}
+.brand .bword span{color:#FF4A52}
+.brand .btag{margin:0;display:flex;align-items:center;gap:12px;font-size:clamp(11px,1.3vw,15px);font-weight:500;letter-spacing:.26em;text-transform:uppercase;color:rgba(255,255,255,.78);opacity:1}
+.brand .btag i{width:28px;height:3px;border-radius:2px;background:#FF4A52;flex:none}
+.brand.sm{gap:14px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.brand.sm .bmark{width:56px;box-shadow:none}
+.brand.sm .btext{gap:6px}
+.brand.sm .bword{font-size:30px;color:var(--navy)}
+.brand.sm .bword span{color:var(--red)}
+.brand.sm .btag{font-size:10px;letter-spacing:.2em;color:var(--mut)}
+.brand.sm .btag i{width:18px;background:var(--red)}
+html.dark .brand.sm .bword{color:var(--ink)}
 .lmid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;min-height:0}
 .llogo{width:min(300px,70vw);height:110px;border-radius:18px;background:rgba(255,255,255,.07);border:1px dashed rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
 .llogo img{max-width:100%;max-height:100%;object-fit:contain;position:relative;z-index:1;background:transparent}
@@ -148,7 +165,7 @@ label.f input,label.f textarea,label.f select{font-size:16px;color:var(--ink);pa
 .ltile b{font-size:clamp(17px,2vw,21px)}.ltile span:last-child{font-size:13px;color:#5B6B7D}
 .lfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;opacity:.85}
 .lbkb{display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
-@media (max-height:760px){.launch{gap:10px}.llogo{height:clamp(56px,13vh,110px)}.lmid h1{font-size:clamp(24px,5vh,40px);margin-top:2px}.lmid p{font-size:13px}.ltile{min-height:clamp(110px,22vh,170px);padding:12px}.ltile .lic{width:58px;height:58px}.ltile .lic svg{width:34px;height:34px}}
+@media (max-height:760px){.launch{gap:10px}.brand .bmark{width:clamp(56px,12vh,110px)}.brand .bword{font-size:clamp(34px,7vh,72px)}.ltile{min-height:clamp(110px,22vh,170px);padding:12px}.ltile .lic{width:58px;height:58px}.ltile .lic svg{width:34px;height:34px}}
 @media (max-width:640px){.ltiles{grid-template-columns:1fr}.ltile{min-height:96px;flex-direction:row;justify-content:flex-start;padding:14px 18px;gap:14px;text-align:left}.ltile .lic{width:58px;height:58px}.ltile b{flex:1}.ltile span:last-child{display:none}.lname small{display:none}}
 /* profile */
 .phead{flex-direction:row;align-items:center;gap:14px}
@@ -289,12 +306,12 @@ html.narrow .photo-stage .photo{height:auto;width:100%}
 </head>
 <body>
 <div id="app"></div>
-<script src="db.js?v=67"></script>
-<script src="transfer.js?v=67"></script>
-<script src="backup.js?v=67"></script>
-<script src="rules.js?v=67"></script>
-<script src="catalog.js?v=67"></script>
-<script src="auth.js?v=67"></script>
-<script src="app.js?v=67"></script>
+<script src="db.js?v=68"></script>
+<script src="transfer.js?v=68"></script>
+<script src="backup.js?v=68"></script>
+<script src="rules.js?v=68"></script>
+<script src="catalog.js?v=68"></script>
+<script src="auth.js?v=68"></script>
+<script src="app.js?v=68"></script>
 </body>
 </html>
