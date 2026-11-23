@@ -43,11 +43,10 @@ alter table public.profiles enable row level security;
 alter table public.devices enable row level security;
 alter table public.access_log enable row level security;
 
--- admin = active admin profile, signed in with the authenticator code (aal2)
+-- admin = active admin profile (authenticator step removed 23.11.2026, see 2026-11-23-no-authenticator.sql)
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
-     and exists (select 1 from profiles where id = auth.uid() and role = 'admin' and active);
+  select exists (select 1 from profiles where id = auth.uid() and role = 'admin' and active);
 $$;
 
 drop policy if exists profiles_read on public.profiles;
@@ -83,13 +82,12 @@ declare
 begin
   select * into p from profiles where id = auth.uid();
   if p.id is null then return json_build_object('ok', false, 'active', false, 'reason', 'no_profile'); end if;
-  if coalesce(auth.jwt() ->> 'aal', '') <> 'aal2' then return json_build_object('ok', false, 'active', p.active, 'reason', 'mfa'); end if;
   if length(coalesce(p_device, '')) < 16 then raise exception 'invalid device id'; end if;
   select * into d from devices where id = p_device and user_id = p.id;
   if d.id is null then
     is_new := true;
-    -- an admin's very first device is approved automatically (otherwise nobody could approve anything)
-    first_admin := p.role = 'admin' and not exists (select 1 from devices where user_id = p.id);
+    -- an admin's devices are approved automatically
+    first_admin := p.role = 'admin';
     insert into devices (id, user_id, label, platform, approved, approved_by, approved_at, last_seen)
     values (p_device, p.id, left(coalesce(p_label, ''), 80), left(coalesce(p_platform, ''), 40), first_admin,
             case when first_admin then p.id end, case when first_admin then now() end, now())

@@ -502,7 +502,7 @@
     road: { paved_ok: 'The road condition on this route is suitable for current transportation. The whole road is paved with asphalt and there is no critical narrow point.' },
   };
   /* ---------- start screen (after sign-in), profile, preferences ---------- */
-  const APP_VER = '2.0 (w61)';
+  const APP_VER = '2.0 (w62)';
   const ico = (d, sz = 22, sw = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const IC = {
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h8M8 16h5"/>',
@@ -562,7 +562,7 @@
         <div class="card" style="gap:12px"><div class="sec" style="margin:0">Hesap</div>
           <label class="f">Görünen ad (uygulamada ve yeni etütlerde "Hazırlayan" önerisi)<div class="row" style="gap:8px"><input id="pname" value="${esc(u.name || '')}" placeholder="Ad Soyad" style="flex:1"><button class="btn pri sm" id="pnsave">Kaydet</button></div></label>
           ${row('key', 'Şifre', 'Hesabının şifresini değiştir', '<button class="btn sm" id="ppw">Şifremi değiştir</button>')}
-          ${row('shield', 'Authenticator (iki adımlı giriş)', '<span id="pmfa">Açık · her girişte 6 haneli kod</span> · telefon değişirse bir admin sıfırlar', '')}
+          ${row('shield', 'Giriş yöntemi', u.role === 'admin' ? 'E-posta + şifre · yönetici hesabı: yeni cihazlar onay beklemez' : 'E-posta + şifre · her yeni cihaz bir kez yönetici onayından geçer', '')}
         </div>
         <div class="card" style="gap:12px"><div class="sec" style="margin:0">Bu cihaz</div>
           <label class="f">Cihaz adı (admin panelinde böyle görünür)<div class="row" style="gap:8px"><input id="pdev" value="${esc(dev.label || '')}" placeholder="${esc(dev.platform)}" style="flex:1"><button class="btn sm" id="pdsave">Kaydet</button></div></label>
@@ -575,7 +575,7 @@
     document.getElementById('pout').onclick = e => { const b = e.target; if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Emin misin?'; return; } Auth.signOut(); };
     document.getElementById('pnsave').onclick = async e => { const b = e.target; b.disabled = true; try { await Auth.setName(document.getElementById('pname').value); toast('Görünen ad kaydedildi'); V.profile(); } catch (er) { b.disabled = false; toast(er.message || 'Kaydedilemedi (internet gerekli)'); } };
     document.getElementById('pdsave').onclick = () => { Auth.setDeviceLabel(document.getElementById('pdev').value); toast('Cihaz adı kaydedildi; bir sonraki kontrolde admin paneline gider'); };
-    try { const m = await Auth.me(); if (!m.factors) document.getElementById('pmfa').textContent = 'Kurulmamış'; if (m.display && m.display !== u.name) { document.getElementById('pname').value = m.display; } } catch (e) { /* offline */ }
+    try { const m = await Auth.me(); if (m.display && m.display !== u.name) { document.getElementById('pname').value = m.display; } } catch (e) { /* offline */ }
     try {
       const L = await Auth.myDevices(), el = document.getElementById('pdevs'); if (!el) return;
       const tf = t => t ? new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';

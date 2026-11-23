@@ -1,5 +1,5 @@
 // Supabase Edge Function "admin-users": account actions that need the service key.
-// Only an active admin signed in with the authenticator code (aal2) may call it.
+// Only an active admin may call it (sign-in is e-mail + password; the authenticator step was removed on 23.11.2026).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const cors = {
@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     const { data: who, error: werr } = await sb.auth.getUser(token);
     if (werr || !who?.user) return json({ message: 'Oturum geçersiz, tekrar giriş yap.' }, 401);
     const { data: me } = await sb.from('profiles').select('*').eq('id', who.user.id).single();
-    if (!me || me.role !== 'admin' || !me.active || claims(token).aal !== 'aal2') return json({ message: 'Bu işlem için admin yetkisi gerekli.' }, 403);
+    if (!me || me.role !== 'admin' || !me.active) return json({ message: 'Bu işlem için admin yetkisi gerekli.' }, 403);
 
     const b = await req.json();
     const log = (user_id: string | null, email: string | null, event: string, detail = '') =>

@@ -81,7 +81,7 @@
   const busy = (b, on, label) => { if (!b) return; if (on) { b.dataset.l = b.textContent; b.textContent = label || 'Bekle…'; b.disabled = true; } else { b.textContent = b.dataset.l || b.textContent; b.disabled = false; } };
 
   function loginView(done, msg) {
-    $app().innerHTML = shell('Route Survey · Giriş', `<b style="font-size:18px">Şirket hesabınla gir</b>
+    $app().innerHTML = shell('GoSurvey · Giriş', `<b style="font-size:18px">Şirket hesabınla gir</b>
       <div class="hint">Hesapları adminler açar. Hesabın yoksa bir admin ile görüş.</div>
       ${msg ? `<div class="note w">${esc(msg)}</div>` : ''}
       <form id="lf" style="display:flex;flex-direction:column;gap:12px">
@@ -93,7 +93,7 @@
       try {
         const j = await api('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email: document.getElementById('le').value.trim().toLowerCase(), password: document.getElementById('lp').value } });
         S = { email: j.user && j.user.email }; setTokens(j);
-        await mfaStep(done);
+        await afterAal2(done, 'login');   // e-mail + password only (authenticator removed 23.11.2026)
       } catch (err) { busy(b, false); showErr('lerr', err.message); }
     };
   }
@@ -155,7 +155,6 @@
   async function afterAal2(done, event) {
     const r = await checkIn(event);
     if (r.ok) return done();
-    if (r.reason === 'mfa') return mfaStep(done);
     if (!r.active) { signOutLocal(); return loginView(done, 'Bu hesap kapatılmış. Bir admin ile görüş.'); }
     pendingView(done);
   }
@@ -198,7 +197,6 @@
     if (!S || !S.refresh) return loginView(go);
     try {
       await refresh();
-      if (S.aal !== 'aal2') return mfaStep(go);
       return afterAal2(go, 'open');
     } catch (err) {
       if (err.code === 'offline' || err.status === 0 || err.status >= 500) {
@@ -279,14 +277,14 @@
     const usrRow = u => { const n = devs.filter(d => d.user_id === u.id); return `<div class="card" style="gap:6px;${u.active ? '' : 'opacity:.65'}"><div class="row" style="justify-content:space-between"><b>${esc(u.full_name || u.email)}</b><span class="row" style="gap:6px">${u.role === 'admin' ? '<span class="tag sub">ADMİN</span>' : ''}${u.active ? '<span class="tag ok">Açık</span>' : '<span class="tag bad">Kapalı</span>'}</span></div>
       <div class="hint">${esc(u.email)} · ${n.filter(d => d.approved).length} onaylı cihaz${n.some(d => !d.approved) ? ', ' + n.filter(d => !d.approved).length + ' bekleyen' : ''} · açılış ${when(u.created_at)}</div>
       ${u.id === jwt(S.access).sub ? '<div class="hint">Bu sensin.</div>' : `<div class="row" style="flex-wrap:wrap">
-        <button class="btn sm grow" data-ua="password" data-u="${u.id}">Şifre belirle</button><button class="btn sm grow" data-ua="mfa_reset" data-u="${u.id}">Authenticator sıfırla</button>
+        <button class="btn sm grow" data-ua="password" data-u="${u.id}">Şifre belirle</button>
         <button class="btn sm grow" data-ua="${u.active ? 'disable' : 'enable'}" data-u="${u.id}">${u.active ? 'Kapat' : 'Aç'}</button>
         <button class="btn sm grow" data-ua="role" data-u="${u.id}">${u.role === 'admin' ? 'Admin yetkisini al' : 'Admin yap'}</button>
         <button class="btn sm grow" data-ua="delete" data-u="${u.id}" style="color:var(--badtx)">Sil</button></div>`}</div>`; };
     const body = ATAB === 'dev' ? (devs.length ? `<div class="tiles">${[...pend, ...devs.filter(d => d.approved)].map(devRow).join('')}</div>` : '<div class="empty">Henüz cihaz yok.</div>')
       : ATAB === 'usr' ? `<form class="card" id="nu"><b>Yeni kullanıcı</b><div class="g2"><label class="f">Ad Soyad<input id="nn" required maxlength="60"></label><label class="f">Mail<input id="ne" type="email" required></label></div>
           <div class="g2"><label class="f">İlk şifre (en az 8 karakter, kullanıcıya sen ilet)<input id="np" type="text" minlength="8" required autocomplete="off"></label><label class="f">Yetki<select id="nr"><option value="user">Kullanıcı</option><option value="admin">Admin</option></select></label></div>
-          ${errBox('nuerr')}<button class="btn pri" id="nub">Kullanıcıyı aç</button><div class="hint">Kullanıcı ilk girişte authenticator'ı bağlar; cihazı da senin onayını bekler. Şifresini sonra kendisi değiştirebilir.</div></form>
+          ${errBox('nuerr')}<button class="btn pri" id="nub">Kullanıcıyı aç</button><div class="hint">Kullanıcı e-posta ve şifreyle girer; her yeni cihazı bir kez yönetici onayı bekler (yöneticilerin cihazları onay beklemez). Şifresini sonra kendisi değiştirebilir.</div></form>
           <div class="tiles">${users.map(usrRow).join('')}</div>`
       : `<div class="card" style="padding:0;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg);text-align:left"><th style="padding:8px">Zaman</th><th style="padding:8px">Kişi</th><th style="padding:8px">Olay</th><th style="padding:8px">Cihaz</th><th style="padding:8px">Ayrıntı</th></tr></thead>
           <tbody>${logs.map(l => `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 8px;white-space:nowrap">${when(l.at)}</td><td style="padding:7px 8px">${esc(l.email || uname(l.user_id))}</td><td style="padding:7px 8px">${esc(EVT[l.event] || l.event)}</td><td style="padding:7px 8px">${esc(l.device_label || (l.device_id || '').slice(0, 8).toUpperCase())}</td><td style="padding:7px 8px">${esc(l.detail || '')}</td></tr>`).join('') || '<tr><td style="padding:10px" colspan="5">Kayıt yok.</td></tr>'}</tbody></table></div>`;
